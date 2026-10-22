@@ -1627,17 +1627,18 @@ button.skill-card:hover:not(:disabled) {
 
 /* ───────── 전투: 무대 ───────── */
 .battle-wrap {
+  position: relative;
   height: 100vh;
-  min-height: 640px;
-  display: flex;
-  flex-direction: column;
+  height: 100dvh;
+  min-height: 540px;
+  overflow: hidden;
   background: #08090b;
 }
 
+/* 무대는 화면 전체. UI는 모두 그 위에 뜬다. */
 .scene {
-  position: relative;
-  flex: 1;
-  min-height: 380px;
+  position: absolute;
+  inset: 0;
   overflow: hidden;
 }
 
@@ -2216,9 +2217,8 @@ button.skill-card:hover:not(:disabled) {
 /* 설명 패널 */
 .peek-slot {
   position: absolute;
-  left: 56%;
-  translate: -50% 0;
-  bottom: 14px;
+  left: 50%;
+  bottom: 240px;
   z-index: 11;
   pointer-events: none;
 }
@@ -2543,43 +2543,71 @@ button.skill-card:hover:not(:disabled) {
   color: var(--danger);
 }
 
-/* 하단 독: 체인 트랙 + 손패 + 시전 */
+/* 하단 오버레이: 손패·체인 트랙(가운데) + 시전 묶음(오른쪽). 무대 위에 바로 뜬다. */
 .dock-slot {
-  flex: none;
-  position: relative;
-  z-index: 2;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 14;
+  pointer-events: none;
 }
 
 .dock {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 20px;
+  padding: 64px 22px 18px;
+  background: linear-gradient(to top, rgba(6, 7, 10, 0.86) 0%, rgba(6, 7, 10, 0.62) 42%, rgba(6, 7, 10, 0) 100%);
+  pointer-events: none;
+}
+
+.dock-hand-area,
+.cast-cluster {
+  pointer-events: auto;
+}
+
+.dock-hand-area {
+  display: grid;
   gap: 10px;
-  padding: 10px 18px 14px;
-  background: linear-gradient(180deg, rgba(16, 17, 21, 0.97), #0b0c0f);
-  border-top: 1px solid var(--line);
+  justify-items: center;
+  min-width: 0;
 }
 
 .dock-top {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
+  justify-content: center;
+  max-width: 100%;
 }
 
-.dock-main {
-  display: flex;
-  align-items: stretch;
-  gap: 16px;
-  min-width: 0;
+.dock-top .chain-track {
+  flex: 0 1 auto;
+  padding: 5px 10px;
+  background: rgba(10, 11, 15, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
+}
+
+.dock-top .q-slot {
+  flex: 0 0 156px;
+}
+
+.dock-top .q-link {
+  width: 52px;
 }
 
 .hand {
-  flex: 1;
-  min-width: 0;
   display: flex;
+  justify-content: center;
   gap: 14px;
+  max-width: 100%;
   overflow-x: auto;
   padding-top: 8px;
   margin-top: -8px;
+  scrollbar-width: none;
 }
 
 .hand-group {
@@ -2600,6 +2628,7 @@ button.skill-card:hover:not(:disabled) {
   white-space: nowrap;
   padding-left: 6px;
   border-left: 2px solid var(--el);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
 }
 
 .hand-group.has-pick .hand-owner b {
@@ -2612,22 +2641,51 @@ button.skill-card:hover:not(:disabled) {
   flex: 1;
 }
 
+/* 무대 위에 뜨는 카드라 반투명 유리판으로 */
+.hand .skill-card {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--el) 16%, rgba(18, 19, 24, 0.9)), rgba(12, 13, 17, 0.9) 80%);
+  border-color: rgba(255, 255, 255, 0.14);
+  border-top-color: var(--el);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+.hand .skill-card.chosen {
+  background: linear-gradient(180deg, rgba(255, 198, 64, 0.24), rgba(12, 13, 17, 0.92) 80%);
+  border-color: var(--accent);
+}
+
 .hand-down {
   width: 270px;
+  min-height: 96px;
   display: grid;
   place-items: center;
-  border: 1px dashed var(--line);
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  background: rgba(10, 11, 15, 0.5);
   color: var(--dim);
   font-size: 13px;
 }
 
-.cast-zone {
-  flex: none;
+/* 시전 묶음: 성진 → 체인 수치 + 시전 버튼 → 초기화 */
+.cast-cluster {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+
+.cast-cluster .gauge {
+  padding: 5px 10px 5px 12px;
+  background: rgba(10, 11, 15, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.cast-row {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding-left: 16px;
-  border-left: 1px solid var(--line);
+  gap: 12px;
 }
 
 .chain-readout {
@@ -2636,18 +2694,19 @@ button.skill-card:hover:not(:disabled) {
   align-items: center;
   min-width: 64px;
   text-align: center;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
 }
 
 .chain-label {
   font-family: var(--font-num);
   font-size: 12px;
   letter-spacing: 0.3em;
-  color: var(--muted);
+  color: #c9cad0;
 }
 
 .chain-readout b {
   font-family: var(--font-num);
-  font-size: 48px;
+  font-size: 52px;
   line-height: 1;
 }
 
@@ -2661,14 +2720,9 @@ button.skill-card:hover:not(:disabled) {
   color: var(--accent);
 }
 
-.cast-col {
-  display: grid;
-  gap: 6px;
-}
-
 .cast-btn {
-  width: 132px;
-  height: 84px;
+  width: 148px;
+  height: 92px;
   border: none;
   cursor: pointer;
   font: inherit;
@@ -2677,14 +2731,16 @@ button.skill-card:hover:not(:disabled) {
   gap: 0;
   color: var(--accent-ink);
   background: var(--accent);
-  clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+  clip-path: polygon(16px 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%, 0 16px);
+  box-shadow: 0 0 0 1px rgba(255, 198, 64, 0.4);
   transition:
     background 0.15s,
-    opacity 0.15s;
+    opacity 0.15s,
+    transform 0.1s;
 }
 
 .cast-btn b {
-  font-size: 26px;
+  font-size: 28px;
   font-weight: 900;
   line-height: 1.1;
 }
@@ -2700,21 +2756,27 @@ button.skill-card:hover:not(:disabled) {
   background: #ffd36b;
 }
 
+.cast-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
 .cast-btn:disabled {
   opacity: 0.4;
   cursor: wait;
 }
 
-.btn-reset {
-  width: 100%;
+.cast-cluster .btn-reset {
+  min-width: 148px;
+  background: rgba(10, 11, 15, 0.72);
 }
 
 .busy .hand .skill-card {
   pointer-events: none;
 }
 
-.busy .dock-main {
-  opacity: 0.55;
+.busy .dock-hand-area,
+.busy .cast-cluster {
+  opacity: 0.5;
   transition: opacity 0.2s;
 }
 
@@ -2860,25 +2922,15 @@ button.skill-card:hover:not(:disabled) {
     padding: 0 18px;
   }
 
-  .battle-wrap {
-    height: auto;
-    min-height: 100vh;
-  }
-
-  .scene {
-    flex: none;
-    height: 56vh;
-    min-height: 340px;
-  }
-
   .dock {
-    padding: 8px 10px 0;
+    grid-template-columns: 1fr;
     gap: 8px;
+    padding: 44px 10px calc(10px + env(safe-area-inset-bottom));
+    background: linear-gradient(to top, rgba(6, 7, 10, 0.92) 0%, rgba(6, 7, 10, 0.75) 70%, rgba(6, 7, 10, 0) 100%);
   }
 
-  .dock-main {
-    flex-direction: column;
-    gap: 8px;
+  .dock-hand-area {
+    justify-items: stretch;
   }
 
   /* 손패는 2열 격자로 접고, 시전 버튼은 엄지가 닿는 화면 아래에 붙인다 */
@@ -2901,15 +2953,24 @@ button.skill-card:hover:not(:disabled) {
     min-height: 90px;
   }
 
-  .cast-zone {
-    position: sticky;
-    bottom: 0;
-    z-index: 5;
-    margin: 0 -10px;
-    padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
-    border-left: none;
-    border-top: 1px solid var(--line);
-    background: rgba(11, 12, 15, 0.96);
+  /* 시전 묶음은 한 줄: 성진 | 체인 | 시전 | 초기화 */
+  .cast-cluster {
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    justify-items: stretch;
+  }
+
+  .cast-cluster .gauge {
+    padding: 4px 8px;
+  }
+
+  .cast-row {
+    gap: 8px;
+  }
+
+  .cast-cluster .btn-reset {
+    min-width: 0;
+    height: 52px;
   }
 
   .chain-readout {
@@ -2923,30 +2984,18 @@ button.skill-card:hover:not(:disabled) {
     font-size: 34px;
   }
 
-  .cast-col {
+  .cast-row .cast-btn {
     flex: 1;
-    grid-template-columns: 1fr auto;
-    align-items: stretch;
-  }
-
-  .cast-btn {
-    width: 100%;
-    height: 58px;
+    width: auto;
+    height: 52px;
   }
 
   .cast-btn b {
     font-size: 22px;
   }
 
-  .btn-reset {
-    width: auto;
-  }
-
-  .peek-slot {
-    left: 8px;
-    right: 8px;
-    bottom: 8px;
-    translate: none;
+  .chain-label {
+    display: none;
   }
 
   .peek {
@@ -3036,10 +3085,6 @@ button.skill-card:hover:not(:disabled) {
     flex-wrap: wrap;
   }
 
-  .scene {
-    height: 50vh;
-  }
-
   .hud {
     padding: 8px;
     gap: 6px;
@@ -3085,6 +3130,18 @@ button.skill-card:hover:not(:disabled) {
   .plaque-sub {
     font-size: 10px;
     white-space: nowrap;
+  }
+
+  .dock-top .chain-track {
+    flex: 1;
+  }
+
+  .dock-top .q-slot {
+    flex: 1 1 0;
+  }
+
+  .dock-top .q-link {
+    width: 26px;
   }
 
   .q-slot {

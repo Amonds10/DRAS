@@ -94,10 +94,15 @@ export function battleScreen(app: App): HTMLElement {
     ...battle.enemies.map((e) => ({ uid: e.uid, side: 'enemy' as const, defId: e.defId, dead: !isAlive(e), boss: !!enemyById(e.defId).traits?.length })),
   ]);
 
+  // 손패 오버레이가 덮는 높이만큼 무대 화면을 위로 밀어 캐릭터가 가려지지 않게 한다.
+  const dockObserver = new ResizeObserver(() => stage.setSafeArea(Math.max(0, dockSlot.offsetHeight - 48)));
+  dockObserver.observe(dockSlot);
+
   // 이름표·예고·순서·피해 숫자 같은 DOM 오버레이를 매 프레임 액터 위치에 맞춘다.
   const off = stage.onFrame(() => {
     if (!root.isConnected) {
       off();
+      dockObserver.disconnect();
       return;
     }
     for (const [uid, el] of actorEls) {
@@ -332,7 +337,7 @@ export function battleScreen(app: App): HTMLElement {
                   const chosen = planIdx >= 0 && plan[planIdx].spellId === id;
                   const tooCostly = !chosen && sp.cost > remaining() + myCost;
                   hotkeys.push({ uid: a.uid, spellId: id });
-                  return spellCard(sp, {
+                  const card = spellCard(sp, {
                     element: unit.element,
                     chosen,
                     order: chosen ? planIdx : undefined,
@@ -342,6 +347,8 @@ export function battleScreen(app: App): HTMLElement {
                     onClick: () => pickSpell(a, id),
                     onPeek: () => showPeek(a.uid, id),
                   });
+                  card.dataset.peek = `${a.uid}:${id}`;
+                  return card;
                 })
               : h('div', { class: 'hand-down' }, '전투 불능'),
           ),
@@ -389,6 +396,30 @@ export function battleScreen(app: App): HTMLElement {
   function showPeek(uid: string, spellId: string) {
     peek = { uid, spellId };
     peekSlot.replaceChildren(...[peekView()].filter((x): x is HTMLElement => !!x));
+    placePeek();
+  }
+
+  /** 설명 패널을 가리킨 카드 바로 위에 띄운다(좁은 화면은 손패 영역 위 전체 폭) */
+  function placePeek() {
+    const panel = peekSlot.firstElementChild as HTMLElement | null;
+    if (!panel || !peek) return;
+    const box = root.getBoundingClientRect();
+    const dock = dockSlot.querySelector('.dock-hand-area')?.getBoundingClientRect();
+    if (window.matchMedia('(max-width: 980px)').matches || !dock) {
+      peekSlot.style.left = '8px';
+      peekSlot.style.right = '8px';
+      peekSlot.style.bottom = `${box.bottom - (dock?.top ?? box.bottom) + 6}px`;
+      return;
+    }
+    const card = dockSlot.querySelector(`[data-peek="${peek.uid}:${peek.spellId}"]`)?.getBoundingClientRect();
+    const w = panel.offsetWidth || 300;
+    const cx = card ? card.left + card.width / 2 - box.left : box.width / 2;
+
+    peekSlot.style.right = 'auto';
+    peekSlot.style.left = `${Math.max(12, Math.min(box.width - w - 12, cx - w / 2))}px`;
+    // 체인 트랙 위로(손패 영역 맨 위보다 높게) 띄워 겹치지 않게 한다
+    peekSlot.style.bottom = `${box.bottom - dock.top + 10}px`;
+    
   }
 
   const showToast = (text: string) => {
@@ -403,17 +434,18 @@ export function battleScreen(app: App): HTMLElement {
     const st = steps();
     const last = st[st.length - 1];
     const full = last?.chain === 4;
+    // 한 화면 구성: 무대 위에 손패와 체인 트랙(가운데), 시전 묶음(오른쪽 아래)을 띄운다
     return h(
       'section',
       { class: 'dock' },
-      h('div', { class: 'dock-top' }, queueEl, meter),
+      h('div', { class: 'dock-hand-area' }, h('div', { class: 'dock-top' }, queueEl), handView()),
       h(
         'div',
-        { class: 'dock-main' },
-        handView(),
+        { class: 'cast-cluster' },
+        meter,
         h(
           'div',
-          { class: 'cast-zone' },
+          { class: 'cast-row' },
           h(
             'div',
             { class: 'chain-readout' },
@@ -421,16 +453,12 @@ export function battleScreen(app: App): HTMLElement {
             h('b', { class: full ? 'full' : '' }, plan.length ? last.chain : 0),
             h('small', {}, full ? '성좌 완성' : plan.length ? `×${last.mult}` : '—'),
           ),
-          h(
-            'div',
-            { class: 'cast-col' },
-            h('button', { type: 'button', class: 'cast-btn', disabled: busy, onclick: () => void execute() }, h('b', {}, plan.length ? '시전' : '대기'), h('small', {}, plan.length ? 'SPACE' : '성진만 모으기')),
-            button('초기화', () => {
-              plan = [];
-              render();
-            }, { class: 'btn-sm btn-reset', disabled: busy || plan.length === 0, title: '초기화 (R)' }),
-          ),
+          h('button', { type: 'button', class: 'cast-btn', disabled: busy, onclick: () => void execute() }, h('b', {}, plan.length ? '시전' : '대기'), h('small', {}, plan.length ? 'SPACE' : '성진만 모으기')),
         ),
+        button('초기화', () => {
+          plan = [];
+          render();
+        }, { class: 'btn-sm btn-reset', disabled: busy || plan.length === 0, title: '초기화 (R)' }),
       ),
     );
   };
@@ -475,6 +503,7 @@ export function battleScreen(app: App): HTMLElement {
     );
     dockSlot.replaceChildren(dockView());
     peekSlot.replaceChildren(...[peekView()].filter((x): x is HTMLElement => !!x));
+    placePeek();
     drawPreview();
   }
 

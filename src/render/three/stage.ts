@@ -229,6 +229,8 @@ export class Stage {
   private size = new THREE.Vector2(1, 1);
   /** 세로 화면에서는 진영 간격을 좁혀 카메라를 당긴다 */
   private xScale = 1;
+  /** 무대 아래쪽을 덮는 UI 높이(px). 이 절반만큼 화면을 위로 민다. */
+  private safeBottom = 0;
   presetId: ScenePreset | null = null;
 
   constructor() {
@@ -309,6 +311,7 @@ export class Stage {
       this.ro.observe(container);
     }
     this.framing = framing;
+    if (framing === 'menu') this.safeBottom = 0;
     container.classList.toggle('no-webgl', !this.ok);
     this.resize();
   }
@@ -390,6 +393,11 @@ export class Stage {
       const horizon = this.camera.position.clone().add(new THREE.Vector3(0, 0, -500)).project(this.camera);
       this.grade.uniforms.uHorizon.value = THREE.MathUtils.clamp((horizon.y + 1) / 2, 0, 1);
     }
+  }
+
+  /** 아래쪽 UI가 덮는 높이를 알려 준다(전투 화면 손패 오버레이) */
+  setSafeArea(bottom: number): void {
+    this.safeBottom = bottom;
   }
 
   onFrame(cb: () => void): () => void {
@@ -609,6 +617,10 @@ export class Stage {
     }
     cam.position.copy(pos);
     cam.lookAt(look);
+    // 아래 UI에 가려지는 만큼 시야 창을 내려, 장면이 남은 영역의 가운데에 오게 한다.
+    const shift = this.framing === 'battle' ? Math.min(this.safeBottom * 0.5, this.size.y * 0.3) : 0;
+    if (shift > 0) cam.setViewOffset(this.size.x, this.size.y, 0, shift, this.size.x, this.size.y);
+    else cam.clearViewOffset();
     cam.updateProjectionMatrix();
   }
 
