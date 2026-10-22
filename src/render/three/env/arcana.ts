@@ -31,7 +31,7 @@ function buildCrystals(ctx: BuildCtx, rand: () => number): void {
     const x = side * (6 + rand() * 34) * (rand() < 0.2 ? 0.3 : 1);
     const z = -16 - rand() * 46;
     const y = ctx.heightAt(x, z) + 3 + rand() * 9;
-    const s = 0.5 + rand() * 1.3;
+    const s = 0.35 + rand() * 0.6;
     items.push({ x, y, z, s, ph: rand() * 6, spin: 0.2 + rand() * 0.5 });
     const glow = new THREE.Sprite(glowMat);
     glow.position.set(x, y, z);

@@ -4,6 +4,7 @@ import { ELEMENTS, STATUS_META, reactionById } from '../data/elements';
 import { TAG_NAMES } from '../data/spells';
 import { unitById } from '../data/units';
 import { h } from './dom';
+import { glyph } from './glyphs';
 
 export function elColor(el: Element | 'star'): string {
   return ELEMENTS[el].color;
@@ -156,61 +157,13 @@ export function modal(title: string, body: Node, onClose: () => void): HTMLEleme
 
 export const NUM = ['1', '2', '3', '4', '5', '6', '7'];
 
-export interface SpellCardOpts {
-  element: Element | 'star';
-  /** 작은 카드에 표시할 시전자 이름 */
-  owner?: string;
-  order?: number;
-  chosen?: boolean;
-  disabled?: boolean;
-  onClick?: () => void;
-  /** 마우스를 올리거나 포커스했을 때(설명 패널용) */
-  onPeek?: () => void;
-  /** 지금 순서에 넣으면 어떻게 이어지는지 */
-  link?: LinkHint;
-  /** 단축키 표시 */
-  hotkey?: string;
-  size?: 'hand' | 'mini';
-}
-
 /** 카드 위 링크 예고: 링크(배율), 반응, 끊김, 새 체인 */
 export interface LinkHint {
   kind: 'link' | 'reaction' | 'break' | 'start';
   text: string;
 }
 
+/** 스킬 유형 표시: 아이콘 + 이름(무채색) */
 export function tagLabel(spell: SpellDef): HTMLElement {
-  return h('span', { class: `skill-tag tag-${spell.tag}` }, TAG_NAMES[spell.tag]);
-}
-
-/** 스킬 카드: 비용, 유형, 성속 아이콘, 이름, 입출력 성속, 링크 예고. 긴 설명은 설명 패널에서 본다. */
-export function spellCard(spell: SpellDef, opts: SpellCardOpts): HTMLElement {
-  const meta = ELEMENTS[opts.element];
-  const tag = opts.onClick ? 'button' : 'div';
-  const mini = opts.size === 'mini';
-  return h(
-    tag as 'button',
-    {
-      type: opts.onClick ? 'button' : undefined,
-      class: `skill-card ${mini ? 'mini' : ''} ${opts.chosen ? 'chosen' : ''}`,
-      style: { '--el': meta.color },
-      disabled: opts.disabled,
-      'aria-label': `${spell.name}, ${TAG_NAMES[spell.tag]}, 성진 ${spell.cost}. ${spell.desc}${opts.link ? `. ${opts.link.text}` : ''}`,
-      onclick: opts.onClick,
-      onmouseenter: opts.onPeek,
-      onfocus: opts.onPeek,
-    },
-    h(
-      'span',
-      { class: 'sc-head' },
-      h('span', { class: 'sc-cost', 'aria-hidden': 'true' }, Array.from({ length: spell.cost }, () => h('i'))),
-      mini ? null : tagLabel(spell),
-    ),
-    h('span', { class: 'sc-row' }, h('span', { class: 'sc-icon' }, meta.glyph), h('span', { class: 'sc-name' }, spell.name)),
-    mini && opts.owner ? h('span', { class: 'sc-owner' }, opts.owner) : null,
-    h('span', { class: 'sc-flow' }, spellFlow(spell)),
-    opts.link ? h('span', { class: `sc-link ${opts.link.kind}` }, opts.link.text) : null,
-    opts.hotkey ? h('kbd', { class: 'sc-key', 'aria-hidden': 'true' }, opts.hotkey) : null,
-    opts.order !== undefined ? h('span', { class: 'sc-order' }, NUM[opts.order]) : null,
-  );
+  return h('span', { class: 'skill-tag' }, glyph(spell.tag, 'skill-tag-glyph'), TAG_NAMES[spell.tag]);
 }

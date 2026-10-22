@@ -187,3 +187,8 @@ export function characterSvg(id: string): string {
 export function characterAccent(id: string): string {
   return (LOOKS[id] ?? LOOKS.solea).accent;
 }
+
+/** 머리와 어깨만 보이게 자른 초상(편성 슬롯, 전투 하단 막대용) */
+export function characterBust(id: string): string {
+  return characterSvg(id).replace('viewBox="0 0 200 320" class="fig fig-ally"', 'viewBox="46 26 108 108" class="fig fig-bust" preserveAspectRatio="xMidYMin slice"');
+}

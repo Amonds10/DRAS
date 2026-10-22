@@ -17,7 +17,7 @@ function styleFor(ctx: BuildCtx): GrassStyle | null {
   const g = ctx.q.grass;
   switch (ctx.p.scenery) {
     case 'meadow':
-      return { count: g, base: 0x24401a, tip: 0x88a852, height: [0.2, 0.45], clump: 0, flowers: Math.round(g * 0.03) };
+      return { count: g, base: 0x18302e, tip: 0x6e8e72, height: [0.2, 0.45], clump: 0, flowers: Math.round(g * 0.03) };
     case 'dunes':
       return { count: Math.round(g * 0.07), base: 0x6a4a28, tip: 0xe0c890, height: [0.25, 0.55], clump: 0.62, flowers: 0 };
     case 'snowfield':
