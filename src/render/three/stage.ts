@@ -178,6 +178,13 @@ export class Stage {
       this.grade.uniforms.uTint.value.set(...g.tint);
       this.grade.uniforms.uContrast.value = g.contrast;
     }
+    this.renderer.toneMappingExposure = g.exposure;
+    // 낮 장면은 하늘 자체가 밝으니 번짐을 줄여 뿌옇게 뜨지 않게 한다.
+    if (this.bloom) {
+      const day = this.env.preset.light?.kind === 'sun';
+      this.bloom.strength = day ? 0.35 : 0.7;
+      this.bloom.threshold = day ? 0.92 : 0.82;
+    }
   }
 
   onFrame(cb: () => void): () => void {
