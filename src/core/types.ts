@@ -14,12 +14,15 @@ export type SpellOutput = Element | 'echo';
 
 export type Role = 'striker' | 'guardian' | 'support' | 'hexer';
 
-export type StatusId = 'stun' | 'weaken' | 'burn' | 'expose' | 'atkUp' | 'seal' | 'doom' | 'taunt' | 'counter';
+export type StatusId = 'stun' | 'weaken' | 'burn' | 'expose' | 'atkUp' | 'seal' | 'doom' | 'taunt' | 'counter' | 'kindle' | 'starmark';
 
 export interface Status {
   id: StatusId;
   turns: number;
-  /** burn: 턴당 피해, atkUp: 공격 증가량, doom: 라운드 끝 폭발 피해, counter: 반격 피해 */
+  /**
+   * burn: 턴당 피해(중첩), atkUp: 공격 증가량, doom: 라운드 끝 폭발 피해, counter: 반격 피해,
+   * kindle: 예열 중첩(아군, 마무리 일격이 소모), starmark: 별흔 중첩(적, 타격마다 고정 추가 피해)
+   */
   value?: number;
   /** seal: 봉인된 성속 */
   element?: Element;
@@ -43,6 +46,20 @@ export interface DamageEffect {
   vsDebuffed?: number;
   /** 준 피해의 일부만큼 시전자 회복 */
   lifesteal?: number;
+  /** 예열 소모: 시전자의 예열 1중첩당 배율 +값. 시전 뒤 예열을 모두 비운다. */
+  kindleMult?: number;
+  /** 타격마다 대상에게 별흔을 이만큼 새긴다 */
+  mark?: number;
+  /** 별흔 폭발: 대상의 별흔 1중첩당 위력 +값. 맞힌 뒤 별흔을 비운다. */
+  consumeMarks?: number;
+  /** 성속 공명: 이 성속의 각인 1중첩당 배율 +10% */
+  attune?: Element;
+  /** 공명 해방: 이 성속의 각인을 모두 소모하고 1중첩당 배율 +25% */
+  releaseAttune?: Element;
+  /** 남은 성진을 모두 쓰고 1당 위력 +값 */
+  fromStardust?: number;
+  /** 시전자 보호막의 이 비율만큼 피해 추가 */
+  fromShield?: number;
 }
 
 export type Effect =
@@ -56,10 +73,39 @@ export type Effect =
   /** 다음 마법의 체인 배율에 더해진다 */
   | { kind: 'boost'; amount: number }
   /** 집중 대상에 지연 폭발을 건다. 라운드가 끝날 때 터진다. */
-  | { kind: 'doom'; power: number };
+  | { kind: 'doom'; power: number }
+  /** 예열을 쌓는다(최대 6) */
+  | { kind: 'kindle'; amount: number; target: AllyTarget }
+  /** 별흔을 새긴다(최대 12) */
+  | { kind: 'mark'; amount: number; target: 'focus' | 'allEnemies' }
+  /** 성속 각인을 더 쌓는다 */
+  | { kind: 'attune'; element: Element; amount: number }
+  /** 걸려 있는 지연 폭발을 지금 모두 터뜨린다 */
+  | { kind: 'detonate' };
 
 /** 카드에 표시하는 스킬 유형(연출도 이 값을 따른다) */
-export type SkillTag = 'strike' | 'multi' | 'aoe' | 'pierce' | 'execute' | 'drain' | 'dot' | 'delayed' | 'debuff' | 'heal' | 'shield' | 'buff' | 'utility';
+export type SkillTag =
+  | 'strike'
+  | 'multi'
+  | 'aoe'
+  | 'pierce'
+  | 'execute'
+  | 'drain'
+  | 'dot'
+  | 'delayed'
+  | 'debuff'
+  | 'heal'
+  | 'shield'
+  | 'buff'
+  | 'utility'
+  /** 예열: 다음 일격을 위해 힘을 모은다 */
+  | 'charge'
+  /** 극딜: 모은 것을 한 번에 쏟는다 */
+  | 'finisher'
+  /** 별흔: 적에게 쌓아 평타를 키운다 */
+  | 'mark'
+  /** 공명: 같은 성속을 쌓을수록 강해진다 */
+  | 'resonance';
 
 export interface SpellDef {
   id: string;
@@ -85,8 +131,10 @@ export interface UnitDef {
   maxHp: number;
   atk: number;
   def: number;
-  /** 스킬 덱(매 라운드 2장씩 뽑는다) */
+  /** 기본 장착 주문 5개(매 라운드 이 중 2장을 뽑는다) */
   spells: string[];
+  /** 배울 수 있는 주문 전체(장착 후보). 기본 장착 5개를 포함한다. */
+  pool: string[];
 }
 
 export interface ReactionDef {
@@ -133,6 +181,8 @@ export interface Ally {
   def: number;
   shield: number;
   statuses: Status[];
+  /** 장착한 주문 5개. 없으면 술사 기본 장착을 쓴다. */
+  spells?: string[];
 }
 
 export interface Enemy {
@@ -173,6 +223,8 @@ export interface BattleState {
   hands: Record<string, string[]>;
   /** 이번 아군 턴 동안 봉인된 성속(성식) */
   seal: Element | null;
+  /** 성속 각인: 전투 내내 그 성속을 내보낸 시전 수(최대 10). 공명 주문이 이 값을 쓴다. */
+  attune: Record<Element, number>;
   outcome: BattleOutcome;
   rngState: number;
   mods: BattleMods;
@@ -191,6 +243,8 @@ export type BattleEvent =
   | { type: 'status'; targetUid: string; status: StatusId; turns: number }
   | { type: 'purge'; targetUid: string }
   | { type: 'stardust'; amount: number }
+  | { type: 'attune'; element: Element; total: number }
+  | { type: 'release'; element: Element; stacks: number }
   | { type: 'skip'; allyUid: string; reason: 'cost' | 'dead' | 'stun' }
   | { type: 'enemyAct'; enemyUid: string; intent: Intent }
   | { type: 'seal'; element: Element }

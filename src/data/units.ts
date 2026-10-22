@@ -1,6 +1,6 @@
 import type { Role, UnitDef } from '../core/types';
 
-/** 술사 6명. 성속마다 1명이고, 매 라운드 각자의 스킬 5개 중 2장을 뽑는다. */
+/** 술사 6명. 각자 주문 9개 중 5개를 장착하고, 매 라운드 장착한 5개 중 2장을 뽑는다. */
 const list: UnitDef[] = [
   {
     id: 'solea',
@@ -13,6 +13,7 @@ const list: UnitDef[] = [
     atk: 14,
     def: 5,
     spells: ['dawn_thrust', 'solar_cleave', 'flare_rush', 'noon_verdict', 'sun_oath'],
+    pool: ['dawn_thrust', 'solar_cleave', 'flare_rush', 'noon_verdict', 'sun_oath', 'sun_kindle', 'stellar_core', 'supernova_lance', 'corona_rite'],
   },
   {
     id: 'lune',
@@ -25,6 +26,7 @@ const list: UnitDef[] = [
     atk: 11,
     def: 4,
     spells: ['moon_veil', 'crescent_edge', 'tidal_song', 'fullmoon_ward', 'moon_brand'],
+    pool: ['moon_veil', 'crescent_edge', 'tidal_song', 'fullmoon_ward', 'moon_brand', 'moon_halo_mark', 'lunar_attune', 'eclipse_veil', 'crescent_finale'],
   },
   {
     id: 'nebia',
@@ -37,6 +39,7 @@ const list: UnitDef[] = [
     atk: 11,
     def: 4,
     spells: ['interstellar_echo', 'primal_light', 'nebula_mist', 'amplify', 'dust_storm'],
+    pool: ['interstellar_echo', 'primal_light', 'nebula_mist', 'amplify', 'dust_storm', 'star_tithe', 'dust_brand', 'overflow', 'sunwell'],
   },
   {
     id: 'vela',
@@ -49,6 +52,7 @@ const list: UnitDef[] = [
     atk: 15,
     def: 3,
     spells: ['meteor_snipe', 'tail_volley', 'orbital_strike', 'piercing_shot', 'scatter_meteor'],
+    pool: ['meteor_snipe', 'tail_volley', 'orbital_strike', 'piercing_shot', 'scatter_meteor', 'steady_aim', 'gatling_comet', 'final_star', 'sunfire_round'],
   },
   {
     id: 'nox',
@@ -61,6 +65,7 @@ const list: UnitDef[] = [
     atk: 12,
     def: 4,
     spells: ['void_touch', 'event_horizon', 'siphon', 'retrograde', 'collapse'],
+    pool: ['void_touch', 'event_horizon', 'siphon', 'retrograde', 'collapse', 'rot_seed', 'abyss_feast', 'doom_echo', 'void_resonance'],
   },
   {
     id: 'astra',
@@ -73,6 +78,7 @@ const list: UnitDef[] = [
     atk: 10,
     def: 7,
     spells: ['galaxy_ward', 'constellation_echo', 'taunt_star', 'counter_stance', 'star_judgement'],
+    pool: ['galaxy_ward', 'constellation_echo', 'taunt_star', 'counter_stance', 'star_judgement', 'bulwark_bash', 'star_aegis', 'guiding_star', 'constellation_mark'],
   },
 ];
 

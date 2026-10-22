@@ -21,13 +21,17 @@ export interface TeamSynergy {
   linkPairs: number;
 }
 
-function* sequences(unitIds: string[], prefix: SequenceStep[] = []): Generator<SequenceStep[]> {
+type Loadouts = Record<string, string[]>;
+
+const spellsOf = (id: string, loadouts: Loadouts) => loadouts[id] ?? unitById(id).spells;
+
+function* sequences(unitIds: string[], loadouts: Loadouts, prefix: SequenceStep[] = []): Generator<SequenceStep[]> {
   for (const id of unitIds) {
     if (prefix.some((p) => p.unitId === id)) continue;
-    for (const spellId of unitById(id).spells) {
+    for (const spellId of spellsOf(id, loadouts)) {
       const next = [...prefix, { unitId: id, spellId }];
       yield next;
-      yield* sequences(unitIds, next);
+      yield* sequences(unitIds, loadouts, next);
     }
   }
 }
@@ -38,13 +42,13 @@ function canFeed(from: SpellDef, to: SpellDef): boolean {
 }
 
 /** 편성 화면용: 팀이 가진 링크 궁합을 계산한다. 실제 전투와 같은 링크 규칙(previewChain)을 쓴다. */
-export function analyzeTeam(unitIds: string[]): TeamSynergy {
+export function analyzeTeam(unitIds: string[], loadouts: Loadouts = {}): TeamSynergy {
   const reactions = new Set<string>();
   let maxChain = 0;
   let bestReactions = -1;
   let bestSequence: SequenceStep[] = [];
 
-  for (const seq of sequences(unitIds)) {
+  for (const seq of sequences(unitIds, loadouts)) {
     const steps = previewChain(seq.map((s) => spellById(s.spellId)));
     const last = steps[steps.length - 1];
     let reactionCount = 0;
@@ -67,8 +71,8 @@ export function analyzeTeam(unitIds: string[]): TeamSynergy {
   for (const a of unitIds) {
     for (const b of unitIds) {
       if (a === b) continue;
-      for (const sa of unitById(a).spells) {
-        for (const sb of unitById(b).spells) {
+      for (const sa of spellsOf(a, loadouts)) {
+        for (const sb of spellsOf(b, loadouts)) {
           if (canFeed(spellById(sa), spellById(sb))) linkPairs++;
         }
       }

@@ -113,4 +113,6 @@ export const STATUS_META: Record<string, { name: string; glyph: string; debuff: 
   doom: { name: '폭격 예정', glyph: '◎', debuff: true },
   taunt: { name: '도발', glyph: '⛨', debuff: false },
   counter: { name: '반격', glyph: '⟲', debuff: false },
+  kindle: { name: '예열', glyph: '▲', debuff: false },
+  starmark: { name: '별흔', glyph: '✧', debuff: true },
 };

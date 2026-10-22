@@ -28,7 +28,15 @@ const EXPOSE_FACTOR = 1.3;
 const STAR_SHIELD_FACTOR = 0.5;
 const STAR_SHIELD_CHAIN = 3;
 const EXECUTE_THRESHOLD = 0.35;
-const DEBUFFS: StatusId[] = ['stun', 'weaken', 'burn', 'expose', 'doom'];
+const DEBUFFS: StatusId[] = ['stun', 'weaken', 'burn', 'expose', 'doom', 'starmark'];
+export const MAX_KINDLE = 6;
+export const MAX_MARKS = 10;
+export const MAX_ATTUNE = 10;
+export const MAX_BURN = 30;
+/** 별흔 1중첩당 타격마다 더해지는 고정 피해(방어 무시) */
+export const MARK_DAMAGE = 0.4;
+const ATTUNE_STEP = 0.12;
+const RELEASE_STEP = 0.25;
 
 export const DEFAULT_MODS: BattleMods = { stardustPerTurn: 3, startStardust: 4, fullChainBonus: 1 };
 
@@ -81,6 +89,7 @@ export function createBattle(allies: Ally[], enemyIds: string[], mods: BattleMod
     focusUid: enemies[0]?.uid ?? null,
     hands: {},
     seal: null,
+    attune: { sol: 0, luna: 0, nebula: 0, comet: 0, void: 0 },
     outcome: 'ongoing',
     rngState: rng.state,
     mods,
@@ -108,7 +117,7 @@ export function drawHands(state: BattleState): void {
     state.hands = {};
     for (const a of state.allies) {
       if (!isAlive(a)) continue;
-      state.hands[a.uid] = rng.shuffle(unitById(a.defId).spells).slice(0, HAND_SIZE);
+      state.hands[a.uid] = rng.shuffle(a.spells ?? unitById(a.defId).spells).slice(0, HAND_SIZE);
     }
   });
 }
@@ -164,9 +173,12 @@ function addStatus(u: Unit, id: StatusId, turns: number, value?: number): void {
   if (existing) {
     existing.turns = Math.max(existing.turns, turns);
     if (value !== undefined) {
-      // 적의 영구 강화와 지연 폭격은 누적, 나머지는 큰 값을 남긴다.
-      const stacks = (id === 'atkUp' && turns >= 99) || id === 'doom';
+      // 적의 영구 강화·지연 폭격·연소·예열·별흔은 누적, 나머지는 큰 값을 남긴다.
+      const stacks = (id === 'atkUp' && turns >= 99) || id === 'doom' || id === 'burn' || id === 'kindle' || id === 'starmark';
       existing.value = stacks ? (existing.value ?? 0) + value : Math.max(existing.value ?? 0, value);
+      if (id === 'burn') existing.value = Math.min(MAX_BURN, existing.value);
+      if (id === 'kindle') existing.value = Math.min(MAX_KINDLE, existing.value);
+      if (id === 'starmark') existing.value = Math.min(MAX_MARKS, existing.value);
     }
   } else {
     const s: Status = { id, turns };
@@ -198,17 +210,30 @@ interface CastContext {
   chain: number;
   damageMult: number;
   pierce: boolean;
+  /** 이번 시전에서 이미 정해진 추가 배율(예열 소모, 공명 해방)과 추가 위력(성진 소모) */
+  extraMult?: number;
+  extraPower?: number;
 }
 
-function allyHitAmount(ctx: CastContext, eff: DamageEffect, target: Enemy): number {
-  let raw = (eff.power * effectiveAtk(ctx.caster)) / 10;
-  raw *= ctx.mult * ctx.damageMult;
+export function statusStacks(u: Unit, id: StatusId): number {
+  return u.statuses.find((s) => s.id === id)?.value ?? 0;
+}
+
+function allyHitAmount(state: BattleState, ctx: CastContext, eff: DamageEffect, target: Enemy): number {
+  let raw = ((eff.power + (ctx.extraPower ?? 0) + (eff.consumeMarks ? eff.consumeMarks * statusStacks(target, 'starmark') : 0)) * effectiveAtk(ctx.caster)) / 10;
+  raw += eff.fromShield ? ctx.caster.shield * eff.fromShield : 0;
+  raw *= ctx.mult * ctx.damageMult * (ctx.extraMult ?? 1);
+  if (eff.attune) raw *= 1 + state.attune[eff.attune] * ATTUNE_STEP;
   if (eff.scaleWithChain) raw *= ctx.chain;
   if (eff.execute && target.hp / target.maxHp <= EXECUTE_THRESHOLD) raw *= eff.execute;
   if (eff.vsDebuffed && DEBUFFS.some((d) => hasStatus(target, d))) raw *= eff.vsDebuffed;
   if (!ctx.pierce && !eff.pierce) raw *= defFactor(target.def);
   if (hasStatus(target, 'expose')) raw *= EXPOSE_FACTOR;
-  if (enemyById(target.defId).traits?.includes('starShield') && ctx.chain < STAR_SHIELD_CHAIN) raw *= STAR_SHIELD_FACTOR;
+  // 성좌 방패: 체인 3 미만이면 절반. 예열·공명을 모아 쏘는 일격(배율 2배 이상)은 방패를 뚫는다.
+  const charged = (ctx.extraMult ?? 1) >= 2;
+  if (enemyById(target.defId).traits?.includes('starShield') && ctx.chain < STAR_SHIELD_CHAIN && !charged) raw *= STAR_SHIELD_FACTOR;
+  // 별흔은 마지막에 고정 피해로 더한다(방어와 성좌 방패를 무시)
+  raw += statusStacks(target, 'starmark') * MARK_DAMAGE;
   return Math.max(1, Math.round(raw));
 }
 
@@ -234,6 +259,27 @@ function applyEffects(state: BattleState, effects: Effect[], ctx: CastContext, r
       case 'damage': {
         const hits = eff.hits ?? 1;
         let dealt = 0;
+        const hctx: CastContext = { ...ctx };
+        // 예열 소모: 시전자의 예열 중첩만큼 배율을 올리고 비운다
+        if (eff.kindleMult) {
+          const k = statusStacks(ctx.caster, 'kindle');
+          hctx.extraMult = (hctx.extraMult ?? 1) * (1 + k * eff.kindleMult);
+          ctx.caster.statuses = ctx.caster.statuses.filter((s) => s.id !== 'kindle');
+        }
+        // 공명 해방: 그 성속 각인을 모두 소모
+        if (eff.releaseAttune) {
+          const n = state.attune[eff.releaseAttune];
+          hctx.extraMult = (hctx.extraMult ?? 1) * (1 + n * RELEASE_STEP);
+          state.attune[eff.releaseAttune] = 0;
+          events.push({ type: 'release', element: eff.releaseAttune, stacks: n });
+        }
+        // 성진 소모: 남은 성진을 모두 위력으로
+        if (eff.fromStardust) {
+          const spent = state.stardust;
+          state.stardust = 0;
+          hctx.extraPower = spent * eff.fromStardust;
+          if (spent) events.push({ type: 'stardust', amount: -spent });
+        }
         for (let i = 0; i < hits; i++) {
           let targets: Enemy[];
           if (eff.target === 'focus') targets = [getFocus(state)].filter((x): x is Enemy => !!x);
@@ -242,7 +288,14 @@ function applyEffects(state: BattleState, effects: Effect[], ctx: CastContext, r
             const living = state.enemies.filter(isAlive);
             targets = living.length ? [rng.pick(living)] : [];
           }
-          for (const t of targets) dealt += dealDamage(state, t, allyHitAmount(ctx, eff, t), 'ally', events);
+          for (const t of targets) {
+            dealt += dealDamage(state, t, allyHitAmount(state, hctx, eff, t), 'ally', events);
+            if (eff.consumeMarks) t.statuses = t.statuses.filter((s) => s.id !== 'starmark');
+            if (eff.mark && isAlive(t)) {
+              addStatus(t, 'starmark', 99, eff.mark);
+              events.push({ type: 'status', targetUid: t.uid, status: 'starmark', turns: 99 });
+            }
+          }
         }
         if (eff.lifesteal && dealt > 0 && isAlive(ctx.caster)) healAlly(ctx.caster, Math.round(dealt * eff.lifesteal), events);
         break;
@@ -290,6 +343,33 @@ function applyEffects(state: BattleState, effects: Effect[], ctx: CastContext, r
       }
       case 'boost':
         boost += eff.amount;
+        break;
+      case 'kindle':
+        for (const a of allyTargets(state, ctx.caster, eff.target)) {
+          addStatus(a, 'kindle', 99, eff.amount);
+          events.push({ type: 'status', targetUid: a.uid, status: 'kindle', turns: 99 });
+        }
+        break;
+      case 'mark': {
+        const targets = eff.target === 'focus' ? [getFocus(state)].filter((x): x is Enemy => !!x) : state.enemies.filter(isAlive);
+        for (const t of targets) {
+          addStatus(t, 'starmark', 99, eff.amount);
+          events.push({ type: 'status', targetUid: t.uid, status: 'starmark', turns: 99 });
+        }
+        break;
+      }
+      case 'attune':
+        state.attune[eff.element] = Math.min(MAX_ATTUNE, state.attune[eff.element] + eff.amount);
+        events.push({ type: 'attune', element: eff.element, total: state.attune[eff.element] });
+        break;
+      case 'detonate':
+        for (const e of state.enemies) {
+          const doom = e.statuses.find((s) => s.id === 'doom');
+          if (doom && isAlive(e)) {
+            e.statuses = e.statuses.filter((s) => s !== doom);
+            dealDamage(state, e, doom.value ?? 0, 'doom', events);
+          }
+        }
         break;
       case 'doom': {
         const t = getFocus(state);
@@ -344,6 +424,11 @@ function runPlayerPhase(state: BattleState, plan: PlannedCast[], rng: Rng, event
     if (reaction && reaction.effects.length) applyEffects(state, reaction.effects, { ...ctx, damageMult: 1, pierce: false }, rng, events);
     if (reaction) state.stats.reactions++;
     state.stats.maxChain = Math.max(state.stats.maxChain, step.chain);
+    // 성속 각인: 내보낸 성속을 하나 쌓는다(별빛 계열은 이어받은 성속을 쌓는다)
+    if (step.outElement && state.attune[step.outElement] < MAX_ATTUNE) {
+      state.attune[step.outElement]++;
+      events.push({ type: 'attune', element: step.outElement, total: state.attune[step.outElement] });
+    }
 
     if (step.chain === FULL_CHAIN) {
       state.stats.fullChains++;

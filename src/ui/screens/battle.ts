@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { cloneBattle, executeRound, getFocus, isAlive, planCost, setFocus } from '../../core/battle';
+import { MAX_ATTUNE, cloneBattle, executeRound, getFocus, isAlive, planCost, setFocus } from '../../core/battle';
 import { previewChain } from '../../core/link';
 import { finishBattle } from '../../core/run';
 import type { Ally, BattleEvent, BattleState, Element, Enemy, PlannedCast, SkillTag } from '../../core/types';
@@ -54,6 +54,8 @@ function eventText(state: BattleState, ev: BattleEvent): string | null {
       return `${unitLabel(state, ev.allyUid)}: ${ev.reason === 'cost' ? '성진 부족' : '시전 불가'}`;
     case 'round':
       return `— ${ev.round} 라운드 —`;
+    case 'release':
+      return `공명 해방: ${ELEMENTS[ev.element].name} ${ev.stacks}중첩`;
     default:
       return null;
   }
@@ -510,6 +512,16 @@ export function battleScreen(app: App): HTMLElement {
     );
   };
 
+  /** 속성 공명: 이번 전투에서 각 속성으로 이어진 시전 수(공명 주문이 이 값을 쓴다) */
+  function attuneRow(): HTMLElement {
+    const els = (Object.keys(battle.attune) as Element[]).filter((e) => battle.attune[e] > 0);
+    return h(
+      'div',
+      { class: 'attune-row', title: '속성 공명: 시전마다 내보낸 속성이 1씩 쌓입니다. 공명 주문이 이 값만큼 강해지거나, 해방해 소모합니다.' },
+      els.map((e) => h('span', { class: `attune-chip ${battle.attune[e] >= MAX_ATTUNE ? 'max' : ''}`, 'data-el': e, style: { '--el': ELEMENTS[e].color } }, elBadge(e, 'sm'), h('b', {}, battle.attune[e]))),
+    );
+  }
+
   function render() {
     actorEls.clear();
     const focus = getFocus(battle);
@@ -529,6 +541,7 @@ export function battleScreen(app: App): HTMLElement {
             app.go('title');
           }, { class: 'btn-hud', title: '메인으로 (진행 상황은 저장됩니다)' }),
           h('div', { class: 'plaque' }, h('span', { class: 'plaque-sub' }, `${run.floor + 1}층 · ${place}`), h('b', {}, `ROUND ${battle.round}`)),
+          attuneRow(),
         ),
         h(
           'div',
@@ -667,6 +680,29 @@ export function battleScreen(app: App): HTMLElement {
         break;
       case 'utility':
         fx.motes(from, color);
+        break;
+      case 'charge':
+        // 예열: 발밑에 고리가 조여 들고 몸에 빛이 모인다
+        fx.ring(feet(caster), color, 2.4, 0.4, 0.7);
+        fx.flare(from, color, 1.1, 0.5);
+        break;
+      case 'finisher':
+        // 극딜: 하늘에서 별창이 내리꽂힌다
+        for (const t of uniq) {
+          const top = stage.actorPos(t, 'top');
+          fx.beam(top.clone().add(new THREE.Vector3(0, 9, 0)), chest(t), color);
+          fx.flare(chest(t), color, 2.2, 0.5);
+        }
+        fx.sweep(enemyCenter(), color, 3.5);
+        break;
+      case 'mark':
+        targets.forEach((t, i) => fx.projectile(from, chest(t), color, 0.18, 0.5, i * 0.07));
+        if (focusUid) fx.mark(stage.actorPos(focusUid, 'top'), color);
+        break;
+      case 'resonance':
+        fx.ring(feet(caster), color, 0.4, 4.5, 0.6);
+        if (uniq.length > 1) fx.sweep(enemyCenter(), color, 6.5);
+        else uniq.forEach((t) => fx.projectile(from, chest(t), color));
         break;
     }
   };
@@ -844,6 +880,18 @@ export function battleScreen(app: App): HTMLElement {
           stage.lightning();
           showCallout(h('div', { class: 'banner phase-banner' }, h('small', {}, 'OCCULTATION'), h('b', {}, `성식 — ${ELEMENTS[ev.element].name} 봉인`)), 'enemy');
           await wait(720);
+          break;
+        case 'attune': {
+          const chip = hudSlot.querySelector(`.attune-chip[data-el="${ev.element}"] b`);
+          if (chip) chip.textContent = String(ev.total);
+          else hudSlot.querySelector('.attune-row')?.replaceWith(attuneRow());
+          break;
+        }
+        case 'release':
+          showCallout(h('div', { class: 'banner release-banner', style: { '--el': ELEMENTS[ev.element].color } }, h('small', {}, 'RESONANCE RELEASE'), h('b', {}, `${ELEMENTS[ev.element].name} 공명 해방 ×${ev.stacks}`)));
+          await wait(520);
+          clearCallout();
+          hudSlot.querySelector('.attune-row')?.replaceWith(attuneRow());
           break;
         case 'round':
         case 'outcome':
