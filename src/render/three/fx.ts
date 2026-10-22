@@ -140,8 +140,17 @@ export class FxSystem {
   // ───────── 조합 효과 ─────────
 
   flare(pos: THREE.Vector3, color: THREE.ColorRepresentation, size = 1.6, life = 0.35): void {
-    this.sprite({ tex: 'soft', color, pos, size: size * 0.4, to: size, life, curve: 'flash' });
-    this.sprite({ tex: 'star_04', color: 0xffffff, pos, size: size * 0.5, to: size * 1.2, life: life * 0.8, curve: 'flash', rot: Math.random() * 3 });
+    this.sprite({ tex: 'soft', color, pos, size: size * 0.4, to: size, life: life * 1.2, curve: 'flash', alpha: 0.7 });
+    this.sprite({ tex: 'light_01', color, pos, size: size * 0.6, to: size * 1.8, life: life * 1.3, curve: 'flash', alpha: 0.6, rot: Math.random() * 3 });
+    this.sprite({ tex: 'star_04', color: 0xffffff, pos, size: size * 0.4, to: size * 1.1, life: life * 0.9, curve: 'flash', rot: Math.random() * 3, spin: 1.5, alpha: 0.7 });
+  }
+
+  /** 타격 뒤에 천천히 떠도는 별가루(여운) */
+  linger(pos: THREE.Vector3, color: THREE.ColorRepresentation, n = 10, spread = 1.2): void {
+    for (let i = 0; i < n; i++) {
+      const p = pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * spread, (Math.random() - 0.5) * spread, 0.2));
+      this.sprite({ tex: i % 2 ? 'star_05' : 'star_01', color: i % 3 ? color : 0xffffff, pos: p, size: 0.12 + Math.random() * 0.14, to: 0.02, life: 1 + Math.random() * 0.8, delay: 0.05 + Math.random() * 0.25, vel: new THREE.Vector3((Math.random() - 0.5) * 0.6, 0.4 + Math.random() * 0.6, 0), drag: 0.8, curve: 'pulse' });
+    }
   }
 
   sparks(pos: THREE.Vector3, color: THREE.ColorRepresentation, n = 10, speed = 5, size = 0.18): void {
@@ -163,25 +172,39 @@ export class FxSystem {
 
   impact(pos: THREE.Vector3, color: THREE.ColorRepresentation, scale = 1): void {
     const scorch = (['scorch_01', 'scorch_02', 'scorch_03'] as const)[Math.floor(Math.random() * 3)];
-    this.sprite({ tex: scorch, color, pos, size: 0.6 * scale, to: 2.0 * scale, life: 0.32, rot: Math.random() * 6, curve: 'flash' });
-    this.sprite({ tex: 'circle_01', color, pos, size: 0.4 * scale, to: 2.6 * scale, life: 0.35, alpha: 0.8 });
-    this.flare(pos, color, 1.4 * scale, 0.25);
-    this.sparks(pos, color, 8, 5 * scale);
-    this.light(pos, color, 2 * scale, 0.35);
+    this.sprite({ tex: scorch, color, pos, size: 0.8 * scale, to: 2.8 * scale, life: 0.42, rot: Math.random() * 6, curve: 'flash' });
+    // 충격파 고리 두 겹과 방사광
+    this.sprite({ tex: 'circle_03', color, pos, size: 0.5 * scale, to: 3.8 * scale, life: 0.45, alpha: 0.9 });
+    this.sprite({ tex: 'circle_01', color: 0xffffff, pos, size: 0.3 * scale, to: 1.6 * scale, life: 0.25, alpha: 0.35 });
+    this.sprite({ tex: 'light_03', color, pos, size: 1 * scale, to: 3.4 * scale, life: 0.5, spin: 2, curve: 'flash', alpha: 0.8 });
+    this.flare(pos, color, 1.8 * scale, 0.3);
+    this.sparks(pos, color, 14, 6.5 * scale, 0.22);
+    // 빛줄기처럼 길게 튀는 불티
+    for (let i = 0; i < 6; i++) {
+      const a = Math.random() * Math.PI * 2;
+      this.sprite({ tex: 'spark_06', color: 0xffffff, pos, size: [0.08, 0.6 * scale], to: [0.02, 1.4 * scale], life: 0.28, rot: a - Math.PI / 2, vel: new THREE.Vector3(Math.cos(a), Math.sin(a), 0).multiplyScalar(5 * scale), drag: 4, curve: 'flash' });
+    }
+    this.linger(pos, color, Math.round(8 * scale), 1.2 * scale);
+    this.light(pos, color, 2.6 * scale, 0.5);
   }
 
   /** 시전자 → 대상 투사체. 도착 시점은 travel초 뒤. */
-  projectile(from: THREE.Vector3, to: THREE.Vector3, color: THREE.ColorRepresentation, travel = 0.28, arc = 0.6, delay = 0): void {
+  projectile(from: THREE.Vector3, to: THREE.Vector3, color: THREE.ColorRepresentation, travel = 0.34, arc = 0.6, delay = 0): void {
     const mid = from.clone().lerp(to, 0.5).add(new THREE.Vector3(0, arc, 0));
     const curve = new THREE.QuadraticBezierCurve3(from.clone(), mid, to.clone());
     const rot = this.screenAngle(from, to) - Math.PI / 2;
-    this.sprite({ tex: 'trace_02', color, pos: from, size: [0.35, 1.6], life: travel, delay, rot, curve: 'pulse', path: (k) => curve.getPoint(ease(k)) });
-    this.sprite({ tex: 'soft', color, pos: from, size: 0.9, life: travel, delay, curve: 'pulse', path: (k) => curve.getPoint(ease(k)) });
-    for (let i = 0; i < 6; i++) {
-      const k0 = i / 6;
-      this.sprite({ tex: 'star_05', color, pos: curve.getPoint(k0), size: 0.25, to: 0.05, life: 0.3, delay: delay + travel * k0 });
+    const path = (k: number) => curve.getPoint(ease(k));
+    // 빛 구슬: 흰 핵, 색 빛무리, 돌아가는 별빛 고리
+    this.sprite({ tex: 'trace_02', color, pos: from, size: [0.5, 2.4], life: travel, delay, rot, curve: 'pulse', path });
+    this.sprite({ tex: 'soft', color, pos: from, size: 1.2, life: travel, delay, curve: 'pulse', path, alpha: 0.75 });
+    this.sprite({ tex: 'soft', color: 0xffffff, pos: from, size: 0.4, life: travel, delay, curve: 'pulse', path, alpha: 0.6 });
+    this.sprite({ tex: 'star_04', color, pos: from, size: 1.1, life: travel, delay, spin: 9, curve: 'pulse', path });
+    // 꼬리: 지나간 자리에 오래 남는 별가루
+    for (let i = 0; i < 14; i++) {
+      const k0 = i / 14;
+      this.sprite({ tex: i % 3 ? 'star_05' : 'spark_05', color: i % 4 ? color : 0xffffff, pos: curve.getPoint(ease(k0)), size: 0.32, to: 0.04, life: 0.5 + Math.random() * 0.3, delay: delay + travel * k0, vel: new THREE.Vector3((Math.random() - 0.5) * 0.8, (Math.random() - 0.3) * 0.8, 0), drag: 1.2 });
     }
-    this.flare(from, color, 0.9, 0.2);
+    this.flare(from, color, 1.2, 0.25);
   }
 
   /** 관통: 화면을 가로지르는 광선 */
@@ -191,18 +214,28 @@ export class FxSystem {
     const center = from.clone().lerp(far, 0.5);
     const len = from.distanceTo(far);
     const rot = this.screenAngle(from, far) - Math.PI / 2;
-    this.sprite({ tex: 'trace_06', color, pos: center, size: [0.2, len], to: [0.9, len], life: 0.35, rot, curve: 'flash' });
-    this.sprite({ tex: 'trace_06', color: 0xffffff, pos: center, size: [0.08, len], to: [0.3, len], life: 0.25, rot, curve: 'flash' });
-    this.flare(from, color, 1.3, 0.3);
-    this.light(to, color, 3, 0.4);
+    this.sprite({ tex: 'trace_06', color, pos: center, size: [0.3, len], to: [1.6, len], life: 0.5, rot, curve: 'flash' });
+    this.sprite({ tex: 'trace_06', color: 0xffffff, pos: center, size: [0.12, len], to: [0.5, len], life: 0.35, rot, curve: 'flash' });
+    this.sprite({ tex: 'trace_01', color, pos: center, size: [0.6, len], to: [2.4, len], life: 0.6, rot, curve: 'flash', alpha: 0.5 });
+    // 광선을 따라 흩어지는 빛 알갱이
+    for (let i = 0; i < 12; i++) {
+      const p = from.clone().lerp(far, Math.random());
+      this.sprite({ tex: 'star_05', color: i % 2 ? color : 0xffffff, pos: p, size: 0.3, to: 0.03, life: 0.6, delay: Math.random() * 0.15, vel: new THREE.Vector3((Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5, 0), drag: 1.5 });
+    }
+    this.flare(from, color, 1.8, 0.35);
+    this.light(to, color, 3.5, 0.5);
   }
 
   /** 광역 베기: 커다란 호가 적진을 휩쓴다 */
   sweep(center: THREE.Vector3, color: THREE.ColorRepresentation, width = 6): void {
-    this.sprite({ tex: 'slash_02', color, pos: center.clone().add(new THREE.Vector3(0, 0.6, 0)), size: width * 0.6, to: width, life: 0.4, rot: -0.3, curve: 'flash', spin: -2 });
-    this.sprite({ tex: 'slash_03', color: 0xffffff, pos: center.clone().add(new THREE.Vector3(0, 0.4, 0)), size: width * 0.5, to: width * 0.9, life: 0.3, rot: 1.2, curve: 'flash' });
-    this.ring(center, color, 1, width * 1.1, 0.6, 'circle_03');
-    this.light(center, color, 4, 0.5);
+    this.sprite({ tex: 'slash_02', color, pos: center.clone().add(new THREE.Vector3(0, 0.6, 0)), size: width * 0.6, to: width * 1.1, life: 0.5, rot: -0.3, curve: 'flash', spin: -2 });
+    this.sprite({ tex: 'slash_03', color: 0xffffff, pos: center.clone().add(new THREE.Vector3(0, 0.4, 0)), size: width * 0.5, to: width, life: 0.36, rot: 1.2, curve: 'flash' });
+    this.sprite({ tex: 'slash_01', color, pos: center.clone().add(new THREE.Vector3(0, 0.9, 0)), size: width * 0.4, to: width * 0.95, life: 0.45, rot: 2.6, delay: 0.08, curve: 'flash', spin: 2 });
+    this.sprite({ tex: 'light_03', color, pos: center.clone().add(new THREE.Vector3(0, 0.6, 0)), size: width * 0.3, to: width * 0.9, life: 0.6, spin: 1, curve: 'flash', alpha: 0.6 });
+    this.ring(center, color, 1, width * 1.3, 0.7, 'circle_03');
+    this.ring(center, color, 0.5, width * 0.8, 0.9, 'magic_02');
+    this.linger(center.clone().add(new THREE.Vector3(0, 0.8, 0)), color, 16, width * 0.6);
+    this.light(center, color, 5, 0.6);
   }
 
   /** 처단·적의 할퀴기 같은 날카로운 베기 */
@@ -282,6 +315,15 @@ export class FxSystem {
     this.sprite({ tex: 'magic_02', color, pos: back, size: size * 0.4, to: size, life: 0.9, spin: 2.4, curve: 'pulse', behind: true });
     this.sprite({ tex: 'magic_01', color: 0xffffff, pos: back, size: size * 0.3, to: size * 0.75, life: 0.8, spin: -3.2, curve: 'pulse', alpha: 0.55, behind: true });
     this.sprite({ tex: 'light_01', color, pos: back, size: size * 0.6, to: size * 1.3, life: 0.6, curve: 'flash', alpha: 0.5, behind: true });
+    // 발밑에서 솟는 빛기둥과 피어오르는 별
+    const feet = new THREE.Vector3(pos.x, 0, pos.z);
+    this.sprite({ tex: 'trace_06', color, pos: feet.clone().add(new THREE.Vector3(0, 2.2, -0.2)), size: [0.6, 4.6], to: [1.8, 5.2], life: 0.9, curve: 'pulse', alpha: 0.55, behind: true });
+    this.ring(feet, color, size * 0.4, size * 0.9, 1.0, 'magic_02');
+    for (let i = 0; i < 10; i++) {
+      const p = feet.clone().add(new THREE.Vector3((Math.random() - 0.5) * 1.6, Math.random() * 0.4, 0.1));
+      this.sprite({ tex: 'star_05', color, pos: p, size: 0.22, to: 0.04, life: 0.9, delay: i * 0.04, vel: new THREE.Vector3(0, 2.4 + Math.random() * 1.5, 0), drag: 0.6 });
+    }
+    this.light(feet, color, 2, 0.9);
   }
 
   /** 잔상: 인물 실루엣을 빛 색으로 남겨 빠르게 흩어지게 한다 */
@@ -302,6 +344,8 @@ export class FxSystem {
    * 태양: 햇살 방사 / 달: 초승달 베기 / 성운: 소용돌이 / 혜성: 꼬리 폭발 / 공허: 안으로 빨려 드는 붕괴 / 별: 별자리 선
    */
   signature(element: string, pos: THREE.Vector3, color: THREE.ColorRepresentation, scale = 1): void {
+    scale *= 1.35;
+    this.linger(pos, color, Math.round(6 * scale), 1.4 * scale);
     switch (element) {
       case 'sol':
         for (let i = 0; i < 8; i++) this.sprite({ tex: 'trace_06', color, pos, size: [0.25 * scale, 0.4], to: [0.12 * scale, 3.4 * scale], life: 0.35, rot: (i / 8) * Math.PI * 2, curve: 'flash' });

@@ -265,6 +265,21 @@ const GRADE_SHADER = {
     }`,
 };
 
+/** 임계 감쇠 스프링(유니티 SmoothDamp). 목표로 미끄러지듯 다가가며 넘치지 않는다. */
+function smoothDamp(cur: number, target: number, vel: number, time: number, dt: number): [number, number] {
+  if (dt <= 0) return [cur, vel];
+  const omega = 2 / time;
+  const x = omega * dt;
+  const exp = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
+  const change = cur - target;
+  const temp = (vel + omega * change) * dt;
+  return [target + (change + temp) * exp, (vel - omega * temp) * exp];
+}
+
+function smoothDampV(cur: THREE.Vector3, target: THREE.Vector3, vel: THREE.Vector3, time: number, dt: number): void {
+  for (const k of ['x', 'y', 'z'] as const) [cur[k], vel[k]] = smoothDamp(cur[k], target[k], vel[k], time, dt);
+}
+
 /**
  * 2.5D 무대. 3D 배경·조명·VFX 위에 2D 캐릭터 판을 세운다.
  * 캔버스 하나를 화면마다 옮겨 붙여 쓴다(메인 메뉴 배경, 전투 무대).
@@ -310,10 +325,25 @@ export class Stage {
   private timeScale = 1;
   private slowLeft = 0;
   private stopLeft = 0;
+  /** 멈춤·느림과 상관없이 흐르는 실제 시간(카메라 흔들림용) */
+  private rt = 0;
   private impact = 0;
   private focusPt = new THREE.Vector3();
+  private focusCur = new THREE.Vector3();
+  private focusVel = new THREE.Vector3();
   private focusK = 0;
+  private focusKV = 0;
   private focusGoal = 0;
+  private punchK = 0;
+  private punchKV = 0;
+  private camPos = new THREE.Vector3();
+  private camLook = new THREE.Vector3();
+  private camVel = new THREE.Vector3();
+  private lookVel = new THREE.Vector3();
+  private camInit = false;
+  private camFraming: Framing | null = null;
+  private bloomBase = 0.5;
+  private bloomBoost = 0;
   private size = new THREE.Vector2(1, 1);
   /** 세로 화면에서는 진영 간격을 좁혀 카메라를 당긴다 */
   private xScale = 1;
@@ -433,6 +463,7 @@ export class Stage {
     this.renderer.toneMappingExposure = g.exposure;
     if (this.bloom) {
       this.bloom.strength = g.bloom;
+      this.bloomBase = g.bloom;
       this.bloom.threshold = g.bloomThreshold;
     }
     if (this.outline) this.outline.uniforms.uLine.value.set(p.outline);
@@ -720,9 +751,16 @@ export class Stage {
   /** 연출 카메라를 이 지점으로(null이면 원래 자리로) */
   focus(point: THREE.Vector3 | null, strength = 1): void {
     if (point) {
+      // 처음 다가갈 때는 그 자리에서 시작해, 옆에서 미끄러져 들어오지 않게 한다
+      if (this.focusK < 0.05) this.focusCur.copy(point);
       this.focusPt.copy(point);
       this.focusGoal = strength;
     } else this.focusGoal = 0;
+  }
+
+  /** 잠깐 빛 번짐을 키운다(큰 타격의 화려함) */
+  glowPulse(amount = 0.6): void {
+    this.bloomBoost = Math.min(0.6, Math.max(this.bloomBoost, amount));
   }
 
   /** 역경직(초) */
@@ -810,24 +848,44 @@ export class Stage {
     pos.x += Math.sin(this.t * 0.17) * 0.35;
     pos.y += Math.sin(this.t * 0.11) * 0.12;
     // 연출 카메라: 시전자 → 대상 순서로 다가갔다가 돌아온다. 세로 화면에서는 약하게.
-    this.focusK += (this.focusGoal - this.focusK) * Math.min(1, dt * 5);
+    // 바라보는 점과 다가가는 정도 모두 스프링으로 따라가서, 대상이 바뀌어도 화면이 튀지 않는다.
+    if (this.focusGoal > 0) smoothDampV(this.focusCur, this.focusPt, this.focusVel, 0.5, dt);
+    [this.focusK, this.focusKV] = smoothDamp(this.focusK, this.focusGoal, this.focusKV, 0.55, dt);
     if (this.focusK > 0.002) {
       const k = this.focusK * (cam.aspect < 1 ? 0.45 : 1);
-      pos.lerp(this.focusPt.clone().add(new THREE.Vector3(0, 0.9, 9)), 0.32 * k);
-      look.lerp(this.focusPt, 0.4 * k);
+      pos.lerp(this.focusCur.clone().add(new THREE.Vector3(0, 0.9, 9)), 0.3 * k);
+      look.lerp(this.focusCur, 0.38 * k);
     }
-    if (this.punchAmt > 0) {
-      pos.lerp(this.punchTarget.clone().add(new THREE.Vector3(0, 1, 6)), 0.12 * this.punchAmt);
-      look.lerp(this.punchTarget, 0.25 * this.punchAmt);
-      this.punchAmt = Math.max(0, this.punchAmt - dt * 1.6);
+    // 반응·컷인의 짧은 당김도 스프링으로
+    [this.punchK, this.punchKV] = smoothDamp(this.punchK, this.punchAmt, this.punchKV, 0.22, dt);
+    this.punchAmt = Math.max(0, this.punchAmt - dt * 1.2);
+    if (this.punchK > 0.002) {
+      pos.lerp(this.punchTarget.clone().add(new THREE.Vector3(0, 1, 6)), 0.12 * this.punchK);
+      look.lerp(this.punchTarget, 0.22 * this.punchK);
     }
-    if (this.shakeAmt > 0) {
-      pos.x += (Math.random() - 0.5) * this.shakeAmt;
-      pos.y += (Math.random() - 0.5) * this.shakeAmt;
-      this.shakeAmt = Math.max(0, this.shakeAmt - dt * 1.4);
+    // 마지막으로 카메라 자체도 한 번 더 부드럽게 따라가게 한다(첫 화면이나 화면 전환 때는 바로 맞춘다)
+    if (!this.camInit || this.camFraming !== this.framing) {
+      this.camPos.copy(pos);
+      this.camLook.copy(look);
+      this.camVel.set(0, 0, 0);
+      this.lookVel.set(0, 0, 0);
+      this.camInit = true;
+      this.camFraming = this.framing;
+    } else {
+      smoothDampV(this.camPos, pos, this.camVel, 0.2, dt);
+      smoothDampV(this.camLook, look, this.lookVel, 0.2, dt);
     }
-    cam.position.copy(pos);
-    cam.lookAt(look);
+    // 흔들림: 프레임마다 무작위로 튀지 않게 겹친 사인파로 부드럽게 떤다
+    const sh = this.shakeAmt;
+    this.shakeAmt = Math.max(0, this.shakeAmt - dt * 1.3);
+    const st = this.rt * 31;
+    const shake = new THREE.Vector3(Math.sin(st) * 0.6 + Math.sin(st * 1.7 + 1.3) * 0.4, Math.sin(st * 1.3 + 0.7) * 0.6 + Math.sin(st * 2.3) * 0.4, 0).multiplyScalar(sh * 0.45);
+    cam.position.copy(this.camPos).add(shake);
+    cam.lookAt(this.camLook.clone().add(shake.multiplyScalar(0.4)));
+    if (this.bloom) {
+      this.bloomBoost = Math.max(0, this.bloomBoost - dt * 2.2);
+      this.bloom.strength = this.bloomBase + this.bloomBoost;
+    }
     // 배경 흐림은 무대(원점)까지 거리 기준: 무대 뒤쪽부터 흐려진다
     if (this.outline) {
       const d = pos.length();
@@ -991,6 +1049,7 @@ export class Stage {
       dt = 0;
     }
     this.t += dt;
+    this.rt += raw;
     this.impact = Math.max(0, this.impact - raw * 12);
     this.updateCamera(raw);
     this.updateActors(dt);

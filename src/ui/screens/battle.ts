@@ -842,14 +842,15 @@ export function battleScreen(app: App): HTMLElement {
           const nextCast = events.findIndex((x, j) => j > k && x.type === 'cast');
           const isFinisher = sp.tag === 'finisher' || (!!unleash && (nextCast < 0 || events.indexOf(unleash) < nextCast));
           if (isFinisher) await finisherCutIn(ev.allyUid, sp.name, unleash && (nextCast < 0 || events.indexOf(unleash) < nextCast) ? unleash : null, color, focusAt(events, k));
+          // 준비 동작을 먼저 보여 주고 휘두른다
+          stage.focus(chest(ev.allyUid), 0.7);
+          stage.fx?.castCircle(chest(ev.allyUid), color, sp.cost >= 2 ? 3.8 : 3);
+          stage.fx?.gather(chest(ev.allyUid).add(new THREE.Vector3(0.7, 0.1, 0)), color, sp.cost >= 2 ? 26 : 16, 0.42);
+          await wait(360);
           stage.anim(ev.allyUid, sp.tag === 'charge' ? 'charge' : SUPPORT_TAGS.has(sp.tag) ? 'channel' : 'cast');
           sound.cast(unit.element, ev.chain, characterMotion(unit.id));
           if (ev.linked) sound.link(ev.chain, prevOut ?? unit.element);
-          // 준비 동작: 카메라가 시전자에게 다가가고, 뒤에 마법진이 서고, 빛이 손끝으로 모인다
-          stage.focus(chest(ev.allyUid), 0.7);
-          stage.fx?.magicCircle(feet(ev.allyUid), color, 2.2, 0.9, 'magic_01');
-          stage.fx?.castCircle(chest(ev.allyUid), color, sp.cost >= 2 ? 3.6 : 2.8);
-          stage.fx?.gather(chest(ev.allyUid).add(new THREE.Vector3(0.7, 0.1, 0)), color, sp.cost >= 2 ? 22 : 14);
+          stage.fx?.magicCircle(feet(ev.allyUid), color, 2.6, 1.1, 'magic_01');
           if (ev.linked && prevCaster) stage.fx?.arc(chest(prevCaster), chest(ev.allyUid), prevOut ? elColor(prevOut) : color);
           showCallout(
             h(
@@ -870,7 +871,8 @@ export function battleScreen(app: App): HTMLElement {
           const tgt = lastTargets[0] ?? focusAt(events, k);
           if (tgt && !SUPPORT_TAGS.has(sp.tag)) stage.focus(lastTargets.length > 1 && new Set(lastTargets).size > 1 ? enemyCenter() : chest(tgt), 0.55);
           else stage.focus(null);
-          await wait(300);
+          stage.glowPulse(sp.cost >= 2 ? 0.22 : 0.12);
+          await wait(460);
           prevCaster = ev.allyUid;
           prevOut = ev.outElement;
           break;
@@ -883,8 +885,11 @@ export function battleScreen(app: App): HTMLElement {
           sound.reaction(r.from, r.to);
           stage.flashScreen(0.15);
           stage.punch(at, 0.7);
+          stage.glowPulse(0.4);
+          stage.fx?.signature(r.from, at, elColor(r.from), 1.3);
+          stage.fx?.signature(r.to, at, elColor(r.to), 1.1);
           showCallout(h('div', { class: 'banner reaction-banner', style: { '--from': elColor(r.from), '--to': elColor(r.to) } }, h('small', {}, `REACTION · ${r.en}`), h('b', {}, r.name), h('span', {}, r.desc)), 'reaction');
-          await wait(780);
+          await wait(1050);
           break;
         }
         case 'fullChain': {
@@ -897,8 +902,10 @@ export function battleScreen(app: App): HTMLElement {
           stage.flashScreen(0.3);
           stage.shake(0.35);
           stage.punch(c, 1);
+          stage.glowPulse(0.5);
+          speedLines('#ffd27a');
           showCallout(h('div', { class: 'banner complete-banner' }, h('small', {}, 'CONSTELLATION COMPLETE'), h('b', {}, '성좌 완성')), 'complete');
-          await wait(1050);
+          await wait(1400);
           break;
         }
         case 'damage': {
@@ -936,15 +943,16 @@ export function battleScreen(app: App): HTMLElement {
           if (crit && stage.fx) {
             stage.impactFrame(lastColor);
             speedLines(lastColor);
-            stage.fx.impact(p, '#ffffff', 2.2);
+            stage.fx.impact(p, lastColor, 2);
             stage.fx.ring(feet(ev.targetUid), lastColor, 1, 8, 0.8, 'circle_03');
             stage.shake(0.55);
-            stage.flashScreen(0.35);
+            stage.flashScreen(0.18);
           }
           const big = crit || ev.source === 'chain' || ev.source === 'doom' || lastTag === 'execute';
           sound.hit(crit ? 'crit' : ev.amount === 0 && ev.absorbed ? 'blocked' : ev.source === 'ally' ? (lastTag === 'execute' || lastCaster.length && characterMotion(battle.allies.find((a) => a.uid === lastCaster)?.defId ?? '') === 'slash' ? 'slash' : 'ally') : ev.source);
           floatText(ev.targetUid, ev.amount > 0 ? `${ev.amount}` : `⛨${ev.absorbed}`, ev.source === 'enemy' ? 'dmg-ally' : ev.source === 'burn' ? 'dmg-burn' : crit ? 'dmg-crit' : big ? 'dmg-big' : 'dmg');
-          await wait(lastTag === 'multi' ? 120 : 170);
+          if (big) stage.glowPulse(crit ? 0.55 : 0.25);
+          await wait(lastTag === 'multi' ? 150 : crit ? 520 : 260);
           break;
         }
         case 'heal': {
@@ -987,6 +995,7 @@ export function battleScreen(app: App): HTMLElement {
             stage.fx?.burn(chest(ev.targetUid).add(new THREE.Vector3(0, -0.6, 0)), c);
             if (ev.targetUid !== lastCaster) stage.anim(ev.targetUid, 'charge');
             floatText(ev.targetUid, n >= MAX_KINDLE ? `예열 MAX ▲${n}` : `예열 ▲${n}`, n >= 3 ? 'kindle ready' : 'kindle');
+            stage.glowPulse(0.1 + n * 0.04);
             const gauge = squadEls.get(ev.targetUid)?.querySelector('.sq-kindle');
             if (gauge) gauge.replaceWith(kindleGauge(ally!) ?? h('span'));
             else squadEls.get(ev.targetUid)?.querySelector('.sq-info')?.append(kindleGauge(ally!) ?? h('span'));
@@ -1032,10 +1041,11 @@ export function battleScreen(app: App): HTMLElement {
           }
           // 예고 동작: 적이 붉게 빛을 모았다가 덮친다
           stage.focus(chest(ev.enemyUid), 0.35);
-          stage.fx?.gather(chest(ev.enemyUid), '#ff5a4a', 12, 0.26);
+          stage.fx?.gather(chest(ev.enemyUid), '#ff5a4a', 16, 0.36);
+          await wait(320);
           stage.anim(ev.enemyUid, 'act');
           sound.enemyAct();
-          await wait(260);
+          await wait(360);
           stage.focus(null);
           break;
         }
