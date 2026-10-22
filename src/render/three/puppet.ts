@@ -85,8 +85,8 @@ function loadPart(id: string, bone: Bone, rim: string): Promise<PartData | null>
       t.globalCompositeOperation = 'source-in';
       t.fillStyle = rim;
       t.fillRect(0, 0, tint.width, tint.height);
-      o.globalAlpha = 0.6;
-      o.drawImage(tint, -1.5, -1.2);
+      o.globalAlpha = 0.9;
+      o.drawImage(tint, -2, -1);
       o.globalAlpha = 1;
       o.drawImage(c, -x0, -y0);
       return { canvas: out, x: x0 / RES, y: y0 / RES, w: out.width / RES, h: out.height / RES };
@@ -173,6 +173,7 @@ export function clipLength(anim: PuppetAnim, motion: Motion): number {
 export class Puppet {
   readonly root = new THREE.Group();
   readonly mats: THREE.MeshBasicMaterial[] = [];
+  private depthMats: THREE.MeshBasicMaterial[] = [];
   readonly bones = {} as Record<Bone, THREE.Object3D>;
   readonly glow: THREE.Mesh;
   readonly caster: THREE.Mesh;
@@ -215,7 +216,7 @@ export class Puppet {
     const glowCanvas = document.createElement('canvas');
     const glowTex = new THREE.CanvasTexture(glowCanvas);
     glowTex.colorSpace = THREE.SRGBColorSpace;
-    this.glow = new THREE.Mesh(plane, new THREE.MeshBasicMaterial({ map: glowTex, transparent: true, depthWrite: false, opacity: 0.32 }));
+    this.glow = new THREE.Mesh(plane, new THREE.MeshBasicMaterial({ map: glowTex, transparent: true, depthWrite: false, opacity: 0.55 }));
     this.glow.renderOrder = baseOrder - 1;
     this.glow.visible = false;
     this.root.add(this.glow);
@@ -231,7 +232,7 @@ export class Puppet {
 
     void loadFull(id).then((img) => {
       if (!img || this.disposed) return;
-      const glowPx = 12;
+      const glowPx = 18;
       const W = 200 * 2, H = 320 * 2, pad = glowPx * 2;
       glowCanvas.width = W + pad * 2;
       glowCanvas.height = H + pad * 2;
@@ -269,6 +270,14 @@ export class Puppet {
         mesh.position.set((part.x + part.w / 2 - pv[0]) * this.k, -(part.y + part.h / 2 - pv[1]) * this.k, order * 0.003);
         mesh.renderOrder = this.baseOrder + order;
         this.bones[bone].add(mesh);
+        // 깊이만 쓰는 판: 후처리 흐림·붓질이 인물을 배경으로 보고 뭉개지 않게
+        const depthMat = new THREE.MeshBasicMaterial({ map: tex, alphaTest: 0.5, colorWrite: false });
+        this.depthMats.push(depthMat);
+        const depth = new THREE.Mesh(plane, depthMat);
+        depth.position.copy(mesh.position);
+        depth.scale.copy(mesh.scale);
+        depth.renderOrder = this.baseOrder + order;
+        this.bones[bone].add(depth);
       });
     });
   }
@@ -324,12 +333,13 @@ export class Puppet {
       m.color.setScalar(c);
       m.opacity = opacity;
     }
-    (this.glow.material as THREE.MeshBasicMaterial).opacity = 0.32 * opacity;
+    (this.glow.material as THREE.MeshBasicMaterial).opacity = 0.55 * opacity;
   }
 
   dispose(): void {
     this.disposed = true;
     for (const m of this.mats) m.dispose();
+    for (const m of this.depthMats) m.dispose();
     for (const t of this.textures) t.dispose();
     (this.glow.material as THREE.Material).dispose();
     (this.caster.material as THREE.Material).dispose();

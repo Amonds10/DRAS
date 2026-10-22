@@ -134,12 +134,43 @@ const OUTLINE_SHADER = {
     uBlurNear: { value: 20 },
     uBlurFar: { value: 70 },
     uBlurMax: { value: 5 },
+    /** 유화 붓질(쿠와하라) 반경(px)과 적용 거리: 무대와 인물은 붓질 없이 또렷하게 */
+    uPaint: { value: 3 },
+    uPaintNear: { value: 20 },
+    uPaintFar: { value: 40 },
   },
   vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
   fragmentShader: /* glsl */ `
     #include <packing>
-    uniform sampler2D tDiffuse, tDepth; uniform vec2 uRes; uniform float uNear, uFar, uThick, uStrength, uBlurNear, uBlurFar, uBlurMax; uniform vec3 uLine;
+    uniform sampler2D tDiffuse, tDepth; uniform vec2 uRes; uniform float uNear, uFar, uThick, uStrength, uBlurNear, uBlurFar, uBlurMax, uPaint, uPaintNear, uPaintFar; uniform vec3 uLine;
     varying vec2 vUv;
+    /**
+     * 유화 필터(쿠와하라): 주변 네 구역 중 색이 가장 고른 구역의 평균을 고른다.
+     * 가장자리는 살리고 면은 붓질처럼 뭉개서, 먼 배경의 잔무늬를 그림 같은 색면으로 바꾼다.
+     */
+    vec3 kuwahara(vec2 uv, vec2 px) {
+      vec3 m[4]; vec3 s[4];
+      for (int k = 0; k < 4; k++) { m[k] = vec3(0.0); s[k] = vec3(0.0); }
+      for (int j = -3; j <= 3; j++) {
+        for (int i = -3; i <= 3; i++) {
+          vec3 c = texture2D(tDiffuse, uv + vec2(float(i), float(j)) * px).rgb;
+          vec3 c2 = c * c;
+          if (i <= 0 && j <= 0) { m[0] += c; s[0] += c2; }
+          if (i >= 0 && j <= 0) { m[1] += c; s[1] += c2; }
+          if (i <= 0 && j >= 0) { m[2] += c; s[2] += c2; }
+          if (i >= 0 && j >= 0) { m[3] += c; s[3] += c2; }
+        }
+      }
+      float best = 1e9;
+      vec3 col = texture2D(tDiffuse, uv).rgb;
+      for (int k = 0; k < 4; k++) {
+        vec3 mean = m[k] / 16.0;
+        vec3 v = abs(s[k] / 16.0 - mean * mean);
+        float sigma = v.r + v.g + v.b;
+        if (sigma < best) { best = sigma; col = mean; }
+      }
+      return col;
+    }
     float dist(vec2 uv) { return -perspectiveDepthToViewZ(texture2D(tDepth, uv).x, uNear, uFar); }
     float coc(float z) { return smoothstep(uBlurNear, uBlurFar, z); }
     void main() {
@@ -147,6 +178,8 @@ const OUTLINE_SHADER = {
       float zc = dist(vUv);
       float c0 = coc(zc);
       vec3 col = texture2D(tDiffuse, vUv).rgb;
+      float pk = smoothstep(uPaintNear, uPaintFar, zc);
+      if (pk > 0.01 && uPaint > 0.0) col = mix(col, kuwahara(vUv, pk * uPaint / (3.0 * uRes)), pk);
       if (c0 > 0.01 && uBlurMax > 0.0) {
         vec3 acc = col;
         float wsum = 1.0;
@@ -187,49 +220,6 @@ class OutlinePass extends ShaderPass {
   }
 }
 
-/**
- * 유화 필터(쿠와하라): 주변 네 구역 중 색이 가장 고른 구역의 평균을 고른다.
- * 가장자리는 살리고 면은 붓질처럼 뭉개서, 절차적 3D의 잔무늬(풀 노이즈 등)를 그림 같은 색면으로 바꾼다.
- */
-const PAINT_SHADER = {
-  uniforms: {
-    tDiffuse: { value: null },
-    uRes: { value: new THREE.Vector2(1, 1) },
-    uRadius: { value: 3 },
-  },
-  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
-  fragmentShader: /* glsl */ `
-    uniform sampler2D tDiffuse; uniform vec2 uRes; uniform float uRadius;
-    varying vec2 vUv;
-    #define R 3
-    void main() {
-      vec2 px = 1.0 / uRes * (uRadius / 3.0);
-      vec3 m[4]; vec3 s[4];
-      for (int k = 0; k < 4; k++) { m[k] = vec3(0.0); s[k] = vec3(0.0); }
-      // 구역: 왼위, 오른위, 왼아래, 오른아래
-      for (int j = -R; j <= R; j++) {
-        for (int i = -R; i <= R; i++) {
-          vec3 c = texture2D(tDiffuse, vUv + vec2(float(i), float(j)) * px).rgb;
-          vec3 c2 = c * c;
-          if (i <= 0 && j <= 0) { m[0] += c; s[0] += c2; }
-          if (i >= 0 && j <= 0) { m[1] += c; s[1] += c2; }
-          if (i <= 0 && j >= 0) { m[2] += c; s[2] += c2; }
-          if (i >= 0 && j >= 0) { m[3] += c; s[3] += c2; }
-        }
-      }
-      float n = float((R + 1) * (R + 1));
-      float best = 1e9;
-      vec3 col = texture2D(tDiffuse, vUv).rgb;
-      for (int k = 0; k < 4; k++) {
-        vec3 mean = m[k] / n;
-        vec3 v = abs(s[k] / n - mean * mean);
-        float sigma = v.r + v.g + v.b;
-        if (sigma < best) { best = sigma; col = mean; }
-      }
-      gl_FragColor = vec4(col, 1.0);
-    }`,
-};
-
 const GRADE_SHADER = {
   uniforms: {
     tDiffuse: { value: null },
@@ -252,7 +242,7 @@ const GRADE_SHADER = {
       float band = smoothstep(0.12, 0.0, abs(vUv.y - uHorizon));
       uv.x += sin(vUv.y * 260.0 + uTime * 4.0) * 0.0009 * uHaze * band;
       uv.y += sin(vUv.x * 180.0 + uTime * 3.0) * 0.0006 * uHaze * band;
-      vec2 off = (uv - 0.5) * 0.0022;
+      vec2 off = (uv - 0.5) * 0.0008;
       vec3 c = vec3(texture2D(tDiffuse, uv + off).r, texture2D(tDiffuse, uv).g, texture2D(tDiffuse, uv - off).b);
       c *= uTint;
       // 오래된 필름 같은 따뜻한 기운을 살짝
@@ -262,7 +252,7 @@ const GRADE_SHADER = {
       c = max(vec3(0.0), (c - 0.18) * uContrast + 0.18);
       float v = smoothstep(1.0, 0.3, length((vUv - 0.5) * vec2(1.1, 1.0)));
       c *= mix(0.45, 1.0, v);
-      c += (hash(vUv * uRes + uTime) - 0.5) * 0.03;
+      c += (hash(vUv * uRes + uTime) - 0.5) * 0.014;
       c += uFlash * vec3(1.0, 0.95, 0.85) * 0.25;
       gl_FragColor = vec4(c, 1.0);
     }`,
@@ -282,7 +272,6 @@ export class Stage {
   private grade: ShaderPass | null = null;
   private godRays: ShaderPass | null = null;
   private outline: OutlinePass | null = null;
-  private paint: ShaderPass | null = null;
   private scene = new THREE.Scene();
   private pref: GfxPref = loadPref();
   private quality: Quality = qualityFor('low');
@@ -356,11 +345,9 @@ export class Stage {
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     this.outline = new OutlinePass(this.camera);
     this.outline.uniforms.uThick.value = 1.1 * q.pixelRatio;
-    this.outline.uniforms.uBlurMax.value = (q.tier === 'high' ? 9 : 6) * q.pixelRatio;
+    this.outline.uniforms.uBlurMax.value = (q.tier === 'high' ? 4 : 3) * q.pixelRatio;
     this.composer.addPass(this.outline);
-    this.paint = new ShaderPass(PAINT_SHADER);
-    this.paint.uniforms.uRadius.value = q.tier === 'high' ? 3 * q.pixelRatio : 2;
-    this.composer.addPass(this.paint);
+    this.outline.uniforms.uPaint.value = q.tier === 'high' ? 3 * q.pixelRatio : 2;
     this.godRays = new ShaderPass(GODRAYS_SHADER);
     this.godRays.enabled = false;
     this.composer.addPass(this.godRays);
@@ -503,8 +490,8 @@ export class Stage {
       else {
         a.mat!.map?.dispose();
         a.mat!.dispose();
-        const caster = a.obj.getObjectByName('shadow-caster') as THREE.Mesh | undefined;
-        (caster?.material as THREE.Material | undefined)?.dispose();
+        // 그림자 판과 깊이 판
+        for (const c of a.obj.children) ((c as THREE.Mesh).material as THREE.Material).dispose();
       }
       (a.shadow.material as THREE.Material).dispose();
       this.dropAura(a);
@@ -531,7 +518,7 @@ export class Stage {
         float rim = clamp(aHere - 0.5 * (aToward + aFar), 0.0, 1.0) * step(0.5, aHere);
         // 발밑 그늘: 그림 아래쪽 12%를 조금 어둡게
         float foot = ${foot ? 'mix(0.72, 1.0, smoothstep(0.06, 0.2, vMapUv.y))' : '1.0'};
-        diffuseColor.rgb = (diffuseColor.rgb * uTint + uFill * ${foot ? 'smoothstep(0.3, 0.9, vMapUv.y)' : '0.12'}) * foot + uRimCol * rim * uRimK * ${foot ? '1.0' : '0.4'};`,
+        diffuseColor.rgb = (diffuseColor.rgb * uTint + uFill * ${foot ? 'smoothstep(0.3, 0.9, vMapUv.y)' : '0.12'}) * foot + uRimCol * rim * uRimK * ${foot ? '1.0' : '0.8'};`,
       );
     };
     return mat;
@@ -556,10 +543,7 @@ export class Stage {
       if (isAlly) {
         // 술사: 조각 인형(관절 애니메이션)
         puppet = new Puppet(spec.defId, height, characterAccent(spec.defId), (tex, w, h) => {
-          const m = this.actorMaterial(tex, w, h, false);
-          // 무대 앞에 선 인물은 안개에 덜 묻히게 한다(그림 색이 바래지 않도록)
-          m.fog = false;
-          return m;
+          return this.actorMaterial(tex, w, h, false);
         }, order, this.quality.shadows);
         obj = puppet.root;
       } else {
@@ -574,6 +558,10 @@ export class Stage {
         caster.castShadow = this.quality.shadows;
         caster.name = 'shadow-caster';
         mesh.add(caster);
+        // 깊이만 쓰는 판: 후처리(배경 흐림·붓질)가 인물을 배경으로 착각해 뭉개지 않게 한다
+        const depth = new THREE.Mesh(plane, new THREE.MeshBasicMaterial({ map: texture, alphaTest: 0.5, colorWrite: false }));
+        depth.renderOrder = order + 1;
+        mesh.add(depth);
         const sx = width * ((res[0] + pad * 2) / res[0]);
         const sy = height * ((res[1] + pad * 2) / res[1]);
         mesh.scale.set(sx, sy, 1);
@@ -752,7 +740,6 @@ export class Stage {
       this.composer.setSize(w, h);
       this.bloom?.setSize(w, h);
       this.grade!.uniforms.uRes.value.set(w, h);
-      this.paint?.uniforms.uRes.value.set(w * (this.quality.pixelRatio || 1), h * (this.quality.pixelRatio || 1));
     }
   }
 
@@ -794,8 +781,10 @@ export class Stage {
     // 배경 흐림은 무대(원점)까지 거리 기준: 무대 뒤쪽부터 흐려진다
     if (this.outline) {
       const d = pos.length();
-      this.outline.uniforms.uBlurNear.value = d + 6;
-      this.outline.uniforms.uBlurFar.value = d + 55;
+      this.outline.uniforms.uBlurNear.value = d + 16;
+      this.outline.uniforms.uBlurFar.value = d + 70;
+      this.outline.uniforms.uPaintNear.value = d + 8;
+      this.outline.uniforms.uPaintFar.value = d + 30;
     }
     // 아래 UI에 가려지는 만큼 시야 창을 내려, 장면이 남은 영역의 가운데에 오게 한다.
     const shift = this.framing === 'battle' ? Math.min(this.safeBottom * 0.5, this.size.y * 0.3) : 0;

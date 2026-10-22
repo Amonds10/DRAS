@@ -25,7 +25,7 @@ export function qualityFor(tier: Tier): Quality {
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
   return tier === 'high'
     ? { tier, pixelRatio: Math.min(dpr, 1.75), samples: 4, shadows: true, shadowSize: 2048, grass: 26000, trees: 1, reflect: 0.6, godRays: true, terrainSeg: 1, particles: 1, rockDetail: 3 }
-    : { tier, pixelRatio: Math.min(dpr, 1), samples: 0, shadows: false, shadowSize: 1024, grass: 5000, trees: 0.5, reflect: 0.35, godRays: false, terrainSeg: 0.5, particles: 0.5, rockDetail: 2 };
+    : { tier, pixelRatio: Math.min(dpr, 1.5), samples: 0, shadows: false, shadowSize: 1024, grass: 5000, trees: 0.5, reflect: 0.35, godRays: false, terrainSeg: 0.5, particles: 0.5, rockDetail: 2 };
 }
 
 const KEY = 'starweaver.gfx';
