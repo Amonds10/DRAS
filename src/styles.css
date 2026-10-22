@@ -727,6 +727,21 @@ button.skill-card:hover:not(:disabled) {
   color: var(--accent);
 }
 
+.menu-item-sub {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.menu-item-sub b {
+  font-size: 14px;
+  color: #c9cad0;
+}
+
+.menu-item-sub small {
+  font-family: var(--font-ui);
+  letter-spacing: 0;
+}
+
 .title-foot {
   font-family: var(--font-num);
   color: var(--dim);
@@ -2701,6 +2716,21 @@ button.skill-card:hover:not(:disabled) {
 .busy .dock-main {
   opacity: 0.55;
   transition: opacity 0.2s;
+}
+
+/* 짧은 알림 */
+.toast {
+  position: absolute;
+  left: 50%;
+  top: 64px;
+  translate: -50% 0;
+  z-index: 30;
+  padding: 6px 14px;
+  font-size: 13px;
+  background: rgba(12, 13, 16, 0.92);
+  border-left: 3px solid var(--accent);
+  animation: rise 0.2s ease both;
+  pointer-events: none;
 }
 
 /* 결과 오버레이 */

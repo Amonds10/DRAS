@@ -1,11 +1,23 @@
 import { FLOORS } from '../../data/encounters';
 import type { App } from '../app';
 import { h } from '../dom';
+import { cycleGraphics, graphicsLabel } from '../graphics';
 import { showHelp } from '../help';
 import { button, modal } from '../widgets';
 
 function menuItem(label: string, sub: string | null, onClick: () => void, primary = false): HTMLButtonElement {
   return h('button', { type: 'button', class: `menu-item ${primary ? 'primary' : ''}`, onclick: onClick }, h('b', {}, label), sub ? h('small', {}, sub) : null);
+}
+
+/** 그래픽 품질 토글: 누를 때마다 자동 → 높음 → 낮음 */
+function gfxItem(): HTMLButtonElement {
+  const sub = h('small', {}, graphicsLabel());
+  return h(
+    'button',
+    { type: 'button', class: 'menu-item menu-item-sub', title: '배경 그래픽 품질', onclick: () => (sub.textContent = cycleGraphics()) },
+    h('b', {}, '그래픽'),
+    sub,
+  );
 }
 
 export function titleScreen(app: App): HTMLElement {
@@ -49,6 +61,7 @@ export function titleScreen(app: App): HTMLElement {
       saved ? menuItem('이어하기', `${floorIdx + 1}층 · ${FLOORS[floorIdx].name}`, () => app.resume(saved), true) : null,
       menuItem('새 여정', 'NEW GAME', startNew, !saved),
       menuItem('플레이 방법', 'GUIDE', () => showHelp()),
+      gfxItem(),
     ),
     h('footer', { class: 'title-foot' }, 'PROTOTYPE v0.4'),
   );

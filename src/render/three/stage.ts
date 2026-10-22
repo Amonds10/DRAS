@@ -8,6 +8,7 @@ import { characterAccent, characterSvg } from '../characters';
 import { enemyFigure } from '../figures';
 import { Environment, type ScenePreset } from './environment';
 import { FxSystem } from './fx';
+import { guessTier, loadPref, qualityFor, savePref, type GfxPref, type Quality, type Tier } from './quality';
 import { fxTexture, svgTexture } from './textures';
 
 export type Framing = 'menu' | 'battle';
@@ -56,6 +57,60 @@ function enemySlots(specs: ActorSpec[]): [number, number][] {
   return specs.map((_, i) => [2.6 + i * 1.8, i % 2 ? 0.9 : -0.5]);
 }
 
+/**
+ * 빛줄기: 해(또는 일식 코로나)의 화면 위치로 밝은 픽셀을 끌어모으는 방사형 블러.
+ * 지형·나무·캐릭터에 가린 부분은 어두운 줄로 남아 빛줄기가 생긴다. 렌즈 고스트도 몇 개 얹는다.
+ */
+const GODRAYS_SHADER = {
+  uniforms: {
+    tDiffuse: { value: null },
+    uSun: { value: new THREE.Vector2(0.5, 0.5) },
+    uStrength: { value: 0 },
+    uVisible: { value: 0 },
+    uAspect: { value: 1 },
+    uTint: { value: new THREE.Color(1, 0.9, 0.75) },
+    uThreshold: { value: 2.0 },
+  },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse; uniform vec2 uSun; uniform float uStrength, uVisible, uAspect, uThreshold; uniform vec3 uTint;
+    varying vec2 vUv;
+    const int SAMPLES = 48;
+    void main() {
+      vec3 base = texture2D(tDiffuse, vUv).rgb;
+      if (uVisible <= 0.001) { gl_FragColor = vec4(base, 1.0); return; }
+      vec2 delta = (vUv - uSun) * (0.85 / float(SAMPLES));
+      vec2 uv = vUv;
+      float decay = 1.0;
+      vec3 acc = vec3(0.0);
+      for (int i = 0; i < SAMPLES; i++) {
+        uv -= delta;
+        vec3 s = texture2D(tDiffuse, clamp(uv, 0.001, 0.999)).rgb;
+        float l = dot(s, vec3(0.2126, 0.7152, 0.0722));
+        acc += s * smoothstep(uThreshold, uThreshold * 2.5, l) * decay;
+        decay *= 0.955;
+      }
+      acc /= float(SAMPLES);
+      // 해에서 멀어질수록 약하게
+      vec2 d = (vUv - uSun) * vec2(uAspect, 1.0);
+      float fall = exp(-dot(d, d) * 5.0);
+      vec3 rays = acc * uTint * uStrength * uVisible * fall * 1.4;
+      // 렌즈 고스트: 해와 화면 중심을 잇는 선 위의 옅은 원
+      vec3 sunCol = texture2D(tDiffuse, clamp(uSun, 0.001, 0.999)).rgb;
+      float sunL = clamp(dot(sunCol, vec3(0.333)) - uThreshold, 0.0, 2.0);
+      vec3 ghosts = vec3(0.0);
+      for (int k = 1; k <= 3; k++) {
+        float fk = float(k);
+        vec2 gp = uSun + (vec2(0.5) - uSun) * (0.55 * fk + 0.25);
+        vec2 gd = (vUv - gp) * vec2(uAspect, 1.0);
+        float r = 0.02 + 0.025 * fk;
+        float g = smoothstep(r, r * 0.6, length(gd)) * (0.12 / fk);
+        ghosts += g * mix(vec3(1.0, 0.6, 0.3), vec3(0.4, 0.7, 1.0), fk / 3.0);
+      }
+      gl_FragColor = vec4(base + rays + ghosts * sunL * uVisible * uStrength, 1.0);
+    }`,
+};
+
 const GRADE_SHADER = {
   uniforms: {
     tDiffuse: { value: null },
@@ -64,15 +119,22 @@ const GRADE_SHADER = {
     uTime: { value: 0 },
     uRes: { value: new THREE.Vector2(1, 1) },
     uFlash: { value: 0 },
+    uHaze: { value: 0 },
+    uHorizon: { value: 0.5 },
   },
   vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
   fragmentShader: /* glsl */ `
-    uniform sampler2D tDiffuse; uniform vec3 uTint; uniform float uContrast, uTime, uFlash; uniform vec2 uRes;
+    uniform sampler2D tDiffuse; uniform vec3 uTint; uniform float uContrast, uTime, uFlash, uHaze, uHorizon; uniform vec2 uRes;
     varying vec2 vUv;
     float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
     void main() {
-      vec2 off = (vUv - 0.5) * 0.0022;
-      vec3 c = vec3(texture2D(tDiffuse, vUv + off).r, texture2D(tDiffuse, vUv).g, texture2D(tDiffuse, vUv - off).b);
+      // 아지랑이: 지평선 근처만 일렁인다
+      vec2 uv = vUv;
+      float band = smoothstep(0.12, 0.0, abs(vUv.y - uHorizon));
+      uv.x += sin(vUv.y * 260.0 + uTime * 4.0) * 0.0009 * uHaze * band;
+      uv.y += sin(vUv.x * 180.0 + uTime * 3.0) * 0.0006 * uHaze * band;
+      vec2 off = (uv - 0.5) * 0.0022;
+      vec3 c = vec3(texture2D(tDiffuse, uv + off).r, texture2D(tDiffuse, uv).g, texture2D(tDiffuse, uv - off).b);
       c *= uTint;
       float l = dot(c, vec3(0.299, 0.587, 0.114));
       c = mix(vec3(l), c, 0.88);
@@ -97,7 +159,12 @@ export class Stage {
   private composer: EffectComposer | null = null;
   private bloom: UnrealBloomPass | null = null;
   private grade: ShaderPass | null = null;
+  private godRays: ShaderPass | null = null;
   private scene = new THREE.Scene();
+  private pref: GfxPref = loadPref();
+  private quality: Quality = qualityFor('low');
+  /** 자동 품질: 장면을 만든 뒤 프레임을 재서 느리면 한 단계 내린다 */
+  private probe: { start: number; frames: number } | null = null;
   private env: Environment | null = null;
   fx: FxSystem | null = null;
   private actors = new Map<string, Actor>();
@@ -130,19 +197,58 @@ export class Stage {
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.05;
       renderer.outputColorSpace = THREE.SRGBColorSpace;
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+      renderer.shadowMap.type = THREE.PCFShadowMap;
       this.renderer = renderer;
-      this.composer = new EffectComposer(renderer);
-      this.composer.addPass(new RenderPass(this.scene, this.camera));
-      this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.7, 0.5, 0.82);
-      this.composer.addPass(this.bloom);
-      this.grade = new ShaderPass(GRADE_SHADER);
-      this.composer.addPass(this.grade);
-      this.composer.addPass(new OutputPass());
+      this.quality = qualityFor(this.pref === 'auto' ? guessTier(renderer) : this.pref);
+      this.applyRendererQuality();
     }
     this.scene.add(this.actorGroup);
     this.loop = this.loop.bind(this);
     requestAnimationFrame(this.loop);
+  }
+
+  /** 현재 품질에 맞춰 픽셀 비율, 그림자, 후처리(MSAA 포함)를 다시 꾸린다 */
+  private applyRendererQuality(): void {
+    const renderer = this.renderer;
+    if (!renderer) return;
+    const q = this.quality;
+    renderer.setPixelRatio(q.pixelRatio);
+    renderer.shadowMap.enabled = q.shadows;
+    this.composer?.dispose();
+    const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: q.samples });
+    this.composer = new EffectComposer(renderer, rt);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    this.godRays = new ShaderPass(GODRAYS_SHADER);
+    this.godRays.enabled = false;
+    this.composer.addPass(this.godRays);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.7, 0.5, 0.82);
+    this.composer.addPass(this.bloom);
+    this.grade = new ShaderPass(GRADE_SHADER);
+    this.composer.addPass(this.grade);
+    this.composer.addPass(new OutputPass());
+    for (const a of this.actors.values()) {
+      const caster = a.mesh.getObjectByName('shadow-caster');
+      if (caster) caster.castShadow = q.shadows;
+    }
+    this.resize();
+  }
+
+  /** 그래픽 설정: 자동/높음/낮음 */
+  get graphics(): { pref: GfxPref; tier: Tier } {
+    return { pref: this.pref, tier: this.quality.tier };
+  }
+
+  setGraphics(pref: GfxPref): void {
+    this.pref = pref;
+    savePref(pref);
+    if (!this.renderer) return;
+    this.setTier(pref === 'auto' ? guessTier(this.renderer) : pref);
+  }
+
+  private setTier(tier: Tier): void {
+    this.quality = qualityFor(tier);
+    this.applyRendererQuality();
+    if (this.presetId) this.setScene(this.presetId, true);
   }
 
   mount(container: HTMLElement, framing: Framing): void {
@@ -157,8 +263,8 @@ export class Stage {
     this.resize();
   }
 
-  setScene(preset: ScenePreset): void {
-    if (this.presetId === preset && this.env) return;
+  setScene(preset: ScenePreset, force = false): void {
+    if (this.presetId === preset && this.env && !force) return;
     this.presetId = preset;
     if (this.env) {
       this.scene.remove(this.env.group);
@@ -169,21 +275,51 @@ export class Stage {
       this.fx.dispose();
     }
     if (!this.renderer) return;
-    this.env = new Environment(preset, this.renderer);
+    this.env = new Environment(preset, this.renderer, this.quality);
     this.scene.add(this.env.group);
+    this.scene.fog = this.env.fog;
+    this.scene.environment = this.env.envMap;
+    this.scene.environmentIntensity = this.env.preset.envIntensity;
     this.fx = new FxSystem(this.camera, this.env.lights, this.env.staticLightCount);
     this.scene.add(this.fx.group);
-    const g = this.env.preset.grade;
+    const p = this.env.preset;
+    const g = p.grade;
     if (this.grade) {
       this.grade.uniforms.uTint.value.set(...g.tint);
       this.grade.uniforms.uContrast.value = g.contrast;
+      this.grade.uniforms.uHaze.value = p.haze;
     }
     this.renderer.toneMappingExposure = g.exposure;
-    // 낮 장면은 하늘 자체가 밝으니 번짐을 줄여 뿌옇게 뜨지 않게 한다.
     if (this.bloom) {
-      const day = this.env.preset.light?.kind === 'sun';
-      this.bloom.strength = day ? 0.35 : 0.7;
-      this.bloom.threshold = day ? 0.92 : 0.82;
+      this.bloom.strength = g.bloom;
+      this.bloom.threshold = g.bloomThreshold;
+    }
+    if (this.godRays) {
+      this.godRays.enabled = this.quality.godRays && p.godRays > 0;
+      this.godRays.uniforms.uStrength.value = p.godRays;
+      this.godRays.uniforms.uTint.value.set(p.light?.color ?? 0xffffff);
+      this.godRays.uniforms.uThreshold.value = p.light?.kind === 'eclipse' ? 0.9 : 2.0;
+    }
+    // 셰이더 컴파일이 끝날 때쯤부터 잰다
+    this.probe = this.pref === 'auto' && this.quality.tier === 'high' ? { start: performance.now() + 800, frames: 0 } : null;
+  }
+
+  /** 해의 화면 위치를 빛줄기 패스에 넘긴다. 카메라 뒤에 있으면 끈다. */
+  private updateSun(): void {
+    if (!this.godRays?.enabled || !this.env) return;
+    const dir = this.env.sunDir;
+    const fwd = new THREE.Vector3();
+    this.camera.getWorldDirection(fwd);
+    const facing = fwd.dot(dir);
+    const p = this.camera.position.clone().addScaledVector(dir, 300).project(this.camera);
+    const u = this.godRays.uniforms;
+    u.uSun.value.set((p.x + 1) / 2, (p.y + 1) / 2);
+    const off = Math.max(Math.abs(p.x), Math.abs(p.y));
+    u.uVisible.value = facing > 0 ? THREE.MathUtils.clamp((1.6 - off) / 0.6, 0, 1) : 0;
+    u.uAspect.value = this.camera.aspect;
+    if (this.grade) {
+      const horizon = this.camera.position.clone().add(new THREE.Vector3(0, 0, -500)).project(this.camera);
+      this.grade.uniforms.uHorizon.value = THREE.MathUtils.clamp((horizon.y + 1) / 2, 0, 1);
     }
   }
 
@@ -198,6 +334,8 @@ export class Stage {
       a.mat.map?.dispose();
       a.mat.dispose();
       (a.shadow.material as THREE.Material).dispose();
+      const caster = a.mesh.getObjectByName('shadow-caster') as THREE.Mesh | undefined;
+      (caster?.material as THREE.Material | undefined)?.dispose();
     }
     this.actors.clear();
   }
@@ -222,6 +360,12 @@ export class Stage {
       const { texture } = svgTexture(svg, res[0], res[1], rim, glow);
       const mat = new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, toneMapped: true });
       const mesh = new THREE.Mesh(plane, mat);
+      // 그림자는 실루엣 모양 그대로: 화면에는 안 그리고 그림자만 드리우는 판을 겹친다.
+      // (그림자 패스는 본 재질의 alphaTest를 따르므로, 빛 번짐까지 그림자가 되지 않게 따로 둔다)
+      const caster = new THREE.Mesh(plane, new THREE.MeshBasicMaterial({ map: texture, alphaTest: 0.5, colorWrite: false, depthWrite: false }));
+      caster.castShadow = this.quality.shadows;
+      caster.name = 'shadow-caster';
+      mesh.add(caster);
       const sx = width * ((res[0] + pad * 2) / res[0]);
       const sy = height * ((res[1] + pad * 2) / res[1]);
       mesh.scale.set(sx, sy, 1);
@@ -414,7 +558,7 @@ export class Stage {
       a.mat.color.setScalar(tone + a.flash * 2.2);
       a.mat.opacity = a.alpha;
       a.shadow.position.set(a.base.x + a.offset.x, 0.02, a.base.z);
-      (a.shadow.material as THREE.MeshBasicMaterial).opacity = a.alpha * (a.hover > 0 ? 0.6 : 1);
+      (a.shadow.material as THREE.MeshBasicMaterial).opacity = a.alpha * (a.hover > 0 ? 0.6 : 1) * (this.quality.shadows && this.env?.preset.scenery !== 'neon' ? 0.6 : 1);
     }
   }
 
@@ -432,6 +576,16 @@ export class Stage {
     this.env?.update(this.t, dt);
     this.fx?.update(dt, this.t);
     this.screenFlash = Math.max(0, this.screenFlash - dt * 3);
+    if (this.probe && this.canvas.isConnected && now > this.probe.start) {
+      this.probe.frames++;
+      const elapsed = (now - this.probe.start) / 1000;
+      if (elapsed > 2.5) {
+        const fps = this.probe.frames / elapsed;
+        this.probe = null;
+        if (fps < 38) this.setTier('low');
+      }
+    }
+    this.updateSun();
     if (this.composer && this.container && this.canvas.isConnected) {
       this.grade!.uniforms.uTime.value = this.t;
       this.grade!.uniforms.uFlash.value = this.screenFlash;

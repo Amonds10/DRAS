@@ -18,7 +18,17 @@ WebGL이 필요합니다. 배경, 바닥 반사, 블룸, VFX는 three.js로 그�
 - `src/core/`: 전투 규칙(DOM 의존 없음). 링크·체인, 전투 상태머신, 손패 뽑기, 팀 궁합 분석, 런 진행과 저장
 - `src/data/`: 성속·반응, 스킬 30종, 술사 6명, 적, 층 구성, 보상
 - `src/render/three/`: 2.5D 무대
-  - `environment.ts`: 층별 배경. 노을 해안, 안개 초원, 네온 운하, 사구, 오로라 설원, 하늘섬. 하늘, 해·달·일식, 능선, 지형지물, 바닥, 날씨
+  - `environment.ts`: 층별 배경 조립. 노을 해안, 안개 초원, 네온 운하, 사구, 오로라 설원, 하늘섬
+  - `env/`: 배경 조각
+    - `sky.ts`: 낮은 Preetham 산란 하늘(Sky.js), 밤은 별·은하수·오로라·일식 셰이더
+    - `terrain.ts`: 높이맵 지형
+    - `props.ts`: 바위, 나무, 기둥, 떠 있는 섬
+    - `vegetation.ts`: 바람에 흔들리는 풀
+    - `water.ts`: 반사되는 바다, 구름 바다
+    - `city.ts`: 네온 운하
+    - `weather.ts`: 비, 안개, 입자
+    - `maps.ts`: 절차적 표면 질감
+  - `quality.ts`: 그래픽 품질(자동/높음/낮음). 높음은 그림자, MSAA, 빛줄기, 풀 약 4만 포기
   - `fx.ts`: 스킬 VFX
   - `stage.ts`: 카메라, 후처리, 캐릭터 판
 - `src/render/characters.ts`, `figures.ts`: 캐릭터와 적의 2D 일러스트(SVG)

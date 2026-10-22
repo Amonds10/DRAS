@@ -12,6 +12,7 @@ import { floorPreset } from '../../render/three/environment';
 import { getStage } from '../../render/three/stage';
 import type { App } from '../app';
 import { h, sleep } from '../dom';
+import { cycleGraphics, graphicsLabel } from '../graphics';
 import { showHelp } from '../help';
 import type { LinkHint } from '../widgets';
 import { NUM, allyName, button, elBadge, elColor, hpBar, intentView, modal, reactionChip, spellCard, spellFlow, statusRow, tagLabel, updateHpBar } from '../widgets';
@@ -390,6 +391,12 @@ export function battleScreen(app: App): HTMLElement {
     peekSlot.replaceChildren(...[peekView()].filter((x): x is HTMLElement => !!x));
   }
 
+  const showToast = (text: string) => {
+    const t = h('div', { class: 'toast', role: 'status' }, text);
+    scene.append(t);
+    setTimeout(() => t.remove(), 1800);
+  };
+
   const showLog = () => modal('전투 기록', h('ol', { class: 'log-list' }, log.slice(-60).reverse().map((l) => h('li', {}, l))), () => {});
 
   const dockView = () => {
@@ -456,6 +463,10 @@ export function battleScreen(app: App): HTMLElement {
             app.setSpeed(app.speed > 1 ? 1 : 2);
             render();
           }, { class: 'btn-hud', title: '연출 속도' }),
+          button('GFX', () => {
+            const label = cycleGraphics();
+            showToast(`그래픽: ${label}`);
+          }, { class: 'btn-hud', title: `그래픽 품질: ${graphicsLabel()}` }),
           button('LOG', showLog, { class: 'btn-hud', title: '전투 기록 (L)' }),
           button('?', () => showHelp(), { class: 'btn-hud', title: '플레이 방법' }),
         ),
