@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { BuildCtx } from './context';
-import { detailMaps } from './maps';
 import { fbm3, lcg, noise3, smoothstep } from './noise';
+import { toonMaterial } from './toon';
 
 // ───────── 형태 생성기 ─────────
 
@@ -233,32 +233,13 @@ function islandGeometry(seed: number, top: number, rock: number): THREE.BufferGe
 
 // ───────── 재질 ─────────
 
-/** 바람에 흔들리는 표준 재질(나무, 풀 덤불) */
-function windMaterial(ctx: BuildCtx, amp: number, extra: THREE.MeshStandardMaterialParameters = {}): THREE.MeshStandardMaterial {
-  const mat = ctx.track(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0, ...extra }));
-  const tick = ctx.shared();
-  mat.onBeforeCompile = (sh) => {
-    sh.uniforms.uTime = tick.uTime;
-    sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader.replace(
-      '#include <begin_vertex>',
-      `#include <begin_vertex>
-      #ifdef USE_INSTANCING
-        vec3 ip = instanceMatrix[3].xyz;
-      #else
-        vec3 ip = vec3(0.0);
-      #endif
-      float sway = max(position.y - 1.0, 0.0);
-      float gust = 0.6 + 0.4 * sin(uTime * 0.4 + ip.x * 0.05);
-      transformed.x += sin(uTime * 1.3 + ip.x * 0.35 + ip.z * 0.2) * ${amp.toFixed(3)} * sway * gust;
-      transformed.z += cos(uTime * 1.07 + ip.x * 0.21) * ${(amp * 0.5).toFixed(3)} * sway * gust;`,
-    );
-  };
-  return mat;
+/** 바람에 흔들리는 셀 셰이딩 재질(나무) */
+function windMaterial(ctx: BuildCtx, amp: number): THREE.MeshToonMaterial {
+  return toonMaterial(ctx, { wind: amp });
 }
 
-function rockMaterial(ctx: BuildCtx, extra: THREE.MeshStandardMaterialParameters = {}): THREE.MeshStandardMaterial {
-  const d = detailMaps('rock');
-  return ctx.track(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0, normalMap: d.normal, normalScale: new THREE.Vector2(1.2, 1.2), ...extra }));
+function rockMaterial(ctx: BuildCtx): THREE.MeshToonMaterial {
+  return toonMaterial(ctx);
 }
 
 interface Inst {
@@ -331,13 +312,14 @@ export function buildProps(ctx: BuildCtx): void {
     }
     case 'meadow': {
       // 활엽수 숲 띠: 앞줄은 듬성듬성, 뒤로 갈수록 빽빽
-      const n = Math.round(110 * ctx.q.trees);
+      const n = Math.round(80 * ctx.q.trees);
       const variants = [0, 1, 2].map(() => [] as Inst[]);
       for (let k = 0; k < n; k++) {
         const z = -r(22, 95);
         const x = r(-70, 70) * (1 + (-z - 22) / 80);
         if (!clearOfStage(x, z, 4)) continue;
-        if (Math.abs(x) < 9 && z > -40) continue;
+        // 가운데는 비워 하늘과 마법 장식이 보이게 한다
+        if (Math.abs(x) < 16 + (-z - 22) * 0.25) continue;
         const s = r(0.9, 1.5) * (1 + (-z - 22) / 160);
         const g = r(0.85, 1.1);
         variants[k % 3].push({ pos: [x, hAt(x, z) - 0.1, z], scale: [s, s * r(0.9, 1.2), s], rotY: r(0, 6.28), tint: new THREE.Color(g, g * r(0.95, 1.05), g * 0.95).getHex() });
@@ -364,7 +346,7 @@ export function buildProps(ctx: BuildCtx): void {
         mesas.push({ pos: [x, hAt(x, z) - 2, z], scale: [w, h, w * r(0.6, 0.8)], rotY: r(0, 6.28) });
       }
       const mesaGeo = columnGeometry({ radial: 30, rings: 28, seed: 21, rough: 0.35, taper: 0.22, strata: 7, colors: [0xb8784a, 0xd09a66, 0x9a5e3a, 0xc88a5a] });
-      instanced(ctx, mesaGeo, rockMaterial(ctx, { roughness: 0.95 }), mesas);
+      instanced(ctx, mesaGeo, rockMaterial(ctx), mesas);
       scatterRocks(22, { x: [-50, 50], z: [-50, -16] }, [0.5, 2.2], { base: 0x9a6a46, top: 0xd8b07c, topAmount: 0.5 }, 0.5);
       break;
     }
@@ -400,7 +382,7 @@ export function buildProps(ctx: BuildCtx): void {
         }
       }
       const pillarGeo = columnGeometry({ radial: 32, rings: 12, seed: 5, rough: 0.05, taper: 0.06, flutes: 18, topJag: 0.35, colors: [0x8a7a72, 0x7a6c66] });
-      const stoneMat = rockMaterial(ctx, { roughness: 0.75 });
+      const stoneMat = rockMaterial(ctx);
       instanced(ctx, pillarGeo, stoneMat, pillars);
       const plinthGeo = new THREE.BoxGeometry(1, 1, 1, 2, 2, 2).translate(0, 0.5, 0);
       paint(plinthGeo, (q, _n, c) => c.setRGB(0.24, 0.2, 0.19).multiplyScalar(0.8 + noise3(q.x * 4, q.y * 4, q.z * 4, 2) * 0.4));

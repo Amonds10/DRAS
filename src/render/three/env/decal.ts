@@ -17,7 +17,7 @@ export function buildStageDecal(ctx: BuildCtx): void {
       uniforms: {
         ...ctx.shared(),
         uRing: { value: new THREE.Color(p.ring) },
-        uDay: { value: p.physical ? 1 : 0 },
+        uDay: { value: p.light?.kind === 'sun' ? 1 : 0 },
         uLightPos: { value: ctx.lights.pos },
         uLightCol: { value: ctx.lights.col },
       },

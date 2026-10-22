@@ -20,7 +20,11 @@ WebGL이 필요합니다. 배경, 바닥 반사, 블룸, VFX는 three.js로 그�
 - `src/render/three/`: 2.5D 무대
   - `environment.ts`: 층별 배경 조립. 노을 해안, 안개 초원, 네온 운하, 사구, 오로라 설원, 하늘섬
   - `env/`: 배경 조각
-    - `sky.ts`: 낮은 Preetham 산란 하늘(Sky.js), 밤은 별·은하수·오로라·일식 셰이더
+    - `sky.ts`: 일러스트풍 하늘(세 색 그라데이션, 셀 구름, 별, 별의 강, 오로라, 해·달·일식)
+    - `celestial.ts`: 별자리, 하늘의 마법진·아스트롤라베, 빛기둥, 별똥별
+    - `arcana.ts`: 떠다니는 수정, 별가루, 땅의 룬 마법진
+    - `layers.ts`: 먼 능선 실루엣 층
+    - `toon.ts`, `magicCircle.ts`: 셀 셰이딩 재질, 셰이더 마법진
     - `terrain.ts`: 높이맵 지형
     - `props.ts`: 바위, 나무, 기둥, 떠 있는 섬
     - `vegetation.ts`: 바람에 흔들리는 풀
@@ -28,7 +32,7 @@ WebGL이 필요합니다. 배경, 바닥 반사, 블룸, VFX는 three.js로 그�
     - `city.ts`: 네온 운하
     - `weather.ts`: 비, 안개, 입자
     - `maps.ts`: 절차적 표면 질감
-  - `quality.ts`: 그래픽 품질(자동/높음/낮음). 높음은 그림자, MSAA, 빛줄기, 풀 약 4만 포기
+  - `quality.ts`: 그래픽 품질(자동/높음/낮음). 높음은 그림자, MSAA, 빛줄기, 풀이 더 많다
   - `fx.ts`: 스킬 VFX
   - `stage.ts`: 카메라, 후처리, 캐릭터 판
 - `src/render/characters.ts`, `figures.ts`: 캐릭터와 적의 2D 일러스트(SVG)

@@ -17,7 +17,7 @@ function styleFor(ctx: BuildCtx): GrassStyle | null {
   const g = ctx.q.grass;
   switch (ctx.p.scenery) {
     case 'meadow':
-      return { count: Math.round(g * 1.5), base: 0x1e3612, tip: 0x7c9c46, height: [0.28, 0.6], clump: 0, flowers: Math.round(g * 0.03) };
+      return { count: g, base: 0x24401a, tip: 0x88a852, height: [0.2, 0.45], clump: 0, flowers: Math.round(g * 0.03) };
     case 'dunes':
       return { count: Math.round(g * 0.07), base: 0x6a4a28, tip: 0xe0c890, height: [0.25, 0.55], clump: 0.62, flowers: 0 };
     case 'snowfield':
@@ -69,7 +69,7 @@ export function buildVegetation(ctx: BuildCtx): void {
     if (y < -0.5) continue;
     offsets.push(x, y - 0.02, z);
     // 카메라 바로 앞 풀은 낮게 깎아 무대를 가리지 않게 한다
-    const near = z > 3 ? Math.max(0.55, 1 - (z - 3) / 12) : 1;
+    const near = z > 1 ? Math.max(0.35, 1 - (z - 1) / 10) : 1;
     const hgt = (st.height[0] + rand() * (st.height[1] - st.height[0])) * trampled * near * (0.8 + fbm2(x * 0.05, z * 0.05, 2, 7) * 0.5);
     params.push(rand() * Math.PI * 2, hgt, 0.04 + rand() * 0.04, rand());
     placed++;
@@ -120,14 +120,14 @@ export function buildVegetation(ctx: BuildCtx): void {
           vec4 mv = viewMatrix * vec4(world, 1.0);
           gl_Position = projectionMatrix * mv;
 
+          // 셀 톤: 빛을 두 단계로 끊고, 뿌리→끝 색도 계단으로
           vec3 n = normalize(vec3(-s, 0.7, c));
           float ndl = abs(dot(n, uSunDir));
-          vec3 viewDir = normalize(cameraPosition - world);
-          float trans = pow(max(dot(-viewDir, uSunDir), 0.0), 5.0) * y;
-          vec3 albedo = mix(uBase, uTip, pow(y, 1.3)) * (0.78 + aParams.w * 0.4) * (0.85 + gust * 0.25);
-          vec3 amb = mix(uGround, uSky, 0.35 + 0.65 * y);
-          vCol = albedo * (amb + uSunCol * (0.25 + ndl * 0.75)) + uSunCol * albedo * trans * 2.2;
-          vCol *= mix(0.35, 1.0, smoothstep(0.0, 0.6, y));
+          float litStep = ndl > 0.45 ? 1.0 : 0.72;
+          float tipStep = y > 0.55 ? 1.0 : (y > 0.25 ? 0.6 : 0.25);
+          vec3 albedo = mix(uBase, uTip, tipStep) * (0.9 + aParams.w * 0.18);
+          vec3 amb = mix(uGround, uSky, 0.5);
+          vCol = albedo * (amb + uSunCol * litStep);
           float d = -mv.z;
           vFog = 1.0 - exp(-uFogDensity * uFogDensity * d * d);
         }`,

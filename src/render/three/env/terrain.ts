@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { BuildCtx } from './context';
 import { detailMaps, type DetailKind } from './maps';
 import { fbm2, ridged2, smoothstep } from './noise';
+import { toonMaterial } from './toon';
 import type { TerrainKind } from './presets';
 
 /** 지형 범위: 무대(원점) 뒤로 길게 뻗는다. 카메라 뒤쪽은 거의 보이지 않는다. */
@@ -105,31 +106,19 @@ export function buildTerrain(ctx: BuildCtx): (x: number, z: number) => number {
     c.lerp(steep, steepK);
     // 사구는 바람받이(햇빛 쪽) 경사를 살짝 밝게
     if (p.terrain === 'mountains' && y > 40) c.lerp(high, smoothstep(0.2, 0.0, slope) * 0.8);
-    c.multiplyScalar(0.88 + (fbm2(x * 0.21, z * 0.21, 2, 22) - 0.5) * 0.22 + (n - 0.5) * 0.16);
+    c.multiplyScalar(0.94 + (n - 0.5) * 0.18);
     cols.set([c.r, c.g, c.b], i * 3);
   }
   geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
 
   const d = detailMaps(DETAIL[p.ground.kind] ?? 'rock');
   const tile = p.ground.kind === 'stone' ? 3.2 : p.ground.kind === 'sand' ? 6 : 4.5;
+  // 일러스트풍: 노멀 맵은 쓰지 않고, 밝기 얼룩만 옅게 얹는다(돌바닥은 줄눈이 보이게 조금 진하게).
   const map = d.map.clone();
-  const normalMap = d.normal.clone();
-  for (const t of [map, normalMap]) {
-    t.repeat.set(W / tile, D / tile);
-    t.needsUpdate = true;
-    ctx.track(t);
-  }
-  const rough = { grass: 0.95, sand: 0.92, snow: 0.62, stone: 0.7, water: 0.9, asphalt: 0.6 }[p.ground.kind];
-  const mat = ctx.track(
-    new THREE.MeshStandardMaterial({
-      vertexColors: true,
-      map,
-      normalMap,
-      normalScale: new THREE.Vector2(1, 1).multiplyScalar(p.ground.kind === 'sand' ? 0.45 : p.ground.kind === 'snow' ? 0.5 : 1.0),
-      roughness: rough,
-      metalness: 0,
-    }),
-  );
+  map.repeat.set(W / tile, D / tile);
+  map.needsUpdate = true;
+  ctx.track(map);
+  const mat = toonMaterial(ctx, p.ground.kind === 'stone' || p.ground.kind === 'sand' ? { map } : {});
   const mesh = new THREE.Mesh(ctx.track(geo), mat);
   mesh.receiveShadow = ctx.q.shadows;
   ctx.group.add(mesh);

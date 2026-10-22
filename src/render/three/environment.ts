@@ -2,7 +2,10 @@ import * as THREE from 'three';
 import { fxTexture } from './textures';
 import type { Quality } from './quality';
 import { MAX_GROUND_LIGHTS, type BuildCtx, type GroundLights, type TickUniforms } from './env/context';
+import { buildArcana } from './env/arcana';
+import { buildCelestial } from './env/celestial';
 import { buildCity } from './env/city';
+import { buildLayers } from './env/layers';
 import { buildStageDecal } from './env/decal';
 import { PRESETS, type PresetDef, type ScenePreset } from './env/presets';
 import { buildProps } from './env/props';
@@ -25,8 +28,6 @@ export class Environment {
   readonly lights: GroundLights;
   readonly staticLightCount: number;
   readonly fog: THREE.FogExp2;
-  /** 하늘로 구운 환경광(PBR 반사) */
-  readonly envMap: THREE.Texture | null;
   /** 장면에서 해·달을 향하는 방향(빛줄기 위치 계산용) */
   readonly sunDir: THREE.Vector3;
   /** 그림자를 드리우는 직사광의 방향(지평선 근처 해는 고도를 올려 쓴다) */
@@ -73,7 +74,9 @@ export class Environment {
       heightAt: () => 0,
     };
 
-    const sky = buildSky(ctx);
+    buildSky(ctx);
+    buildCelestial(ctx);
+    buildLayers(ctx);
     ctx.heightAt = buildTerrain(ctx);
     if (p.ground.kind === 'water') buildSea(ctx);
     if (p.terrain === 'island') buildCloudSea(ctx);
@@ -84,11 +87,11 @@ export class Environment {
       buildProps(ctx);
       buildVegetation(ctx);
     }
+    buildArcana(ctx);
     buildFogBands(ctx);
     if (p.rain > 0) buildRain(ctx);
     if (p.particles.kind !== 'none') buildParticles(ctx);
     this.buildLights(ctx);
-    this.envMap = this.bakeEnvironment(renderer, sky.mesh, sky.setDisc);
   }
 
   /** 직사광(그림자)과 하늘·땅 반사광 */
@@ -121,25 +124,6 @@ export class Environment {
       s.radius = 3;
     }
     this.group.add(sun, sun.target);
-  }
-
-  /** 하늘만 담은 장면을 PMREM으로 구워 환경광으로 쓴다 */
-  private bakeEnvironment(renderer: THREE.WebGLRenderer, sky: THREE.Mesh, setDisc: (on: boolean) => void): THREE.Texture | null {
-    try {
-      const pmrem = new THREE.PMREMGenerator(renderer);
-      const tmp = new THREE.Scene();
-      const parent = sky.parent;
-      tmp.add(sky);
-      setDisc(false);
-      const rt = pmrem.fromScene(tmp, 0, 0.1, 1000);
-      setDisc(true);
-      parent?.add(sky);
-      pmrem.dispose();
-      this.disposables.push(rt);
-      return rt.texture;
-    } catch {
-      return null;
-    }
   }
 
   /** 번개: 하늘 섬광과 먼 번개 줄기 */

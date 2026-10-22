@@ -7,7 +7,7 @@ import { NOISE_GLSL } from './glsl';
 export function buildFogBands(ctx: BuildCtx): void {
   const p = ctx.p;
   const geo = ctx.track(new THREE.PlaneGeometry(1, 1));
-  const strength = { meadow: 0.9, coast: 0.9, dunes: 0.7, snowfield: 0.8, skyruins: 0.9, neon: 1 }[p.scenery];
+  const strength = { meadow: 0.45, coast: 0.6, dunes: 0.45, snowfield: 0.6, skyruins: 0.7, neon: 0.9 }[p.scenery];
   const layers: [number, number, number, number][] = [
     [-9, 1.6, 90, 0.26],
     [-18, 3, 140, 0.34],

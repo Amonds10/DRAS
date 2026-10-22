@@ -93,23 +93,60 @@ const GODRAYS_SHADER = {
       acc /= float(SAMPLES);
       // 해에서 멀어질수록 약하게
       vec2 d = (vUv - uSun) * vec2(uAspect, 1.0);
-      float fall = exp(-dot(d, d) * 5.0);
+      float fall = exp(-dot(d, d) * 14.0);
       vec3 rays = acc * uTint * uStrength * uVisible * fall * 1.4;
-      // 렌즈 고스트: 해와 화면 중심을 잇는 선 위의 옅은 원
-      vec3 sunCol = texture2D(tDiffuse, clamp(uSun, 0.001, 0.999)).rgb;
-      float sunL = clamp(dot(sunCol, vec3(0.333)) - uThreshold, 0.0, 2.0);
-      vec3 ghosts = vec3(0.0);
-      for (int k = 1; k <= 3; k++) {
-        float fk = float(k);
-        vec2 gp = uSun + (vec2(0.5) - uSun) * (0.55 * fk + 0.25);
-        vec2 gd = (vUv - gp) * vec2(uAspect, 1.0);
-        float r = 0.02 + 0.025 * fk;
-        float g = smoothstep(r, r * 0.6, length(gd)) * (0.12 / fk);
-        ghosts += g * mix(vec3(1.0, 0.6, 0.3), vec3(0.4, 0.7, 1.0), fk / 3.0);
-      }
-      gl_FragColor = vec4(base + rays + ghosts * sunL * uVisible * uStrength, 1.0);
+      gl_FragColor = vec4(base + rays, 1.0);
     }`,
 };
+
+/**
+ * 외곽선: 깊이가 크게 뛰는 곳(앞 물체의 실루엣)에 얇은 선을 긋는다. 일러스트처럼 형태를 또렷하게.
+ * 풀잎과 땅처럼 붙어 있는 차이는 거리 비례 문턱으로 걸러 낸다.
+ */
+const OUTLINE_SHADER = {
+  uniforms: {
+    tDiffuse: { value: null },
+    tDepth: { value: null },
+    uRes: { value: new THREE.Vector2(1, 1) },
+    uNear: { value: 0.1 },
+    uFar: { value: 1000 },
+    uThick: { value: 1.2 },
+    uLine: { value: new THREE.Color(0x101018) },
+    uStrength: { value: 0.85 },
+  },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+  fragmentShader: /* glsl */ `
+    #include <packing>
+    uniform sampler2D tDiffuse, tDepth; uniform vec2 uRes; uniform float uNear, uFar, uThick, uStrength; uniform vec3 uLine;
+    varying vec2 vUv;
+    float dist(vec2 uv) { return -perspectiveDepthToViewZ(texture2D(tDepth, uv).x, uNear, uFar); }
+    void main() {
+      vec3 col = texture2D(tDiffuse, vUv).rgb;
+      vec2 px = uThick / uRes;
+      float z = dist(vUv);
+      float zn = max(max(dist(vUv - vec2(px.x, 0.0)), dist(vUv + vec2(px.x, 0.0))), max(dist(vUv + vec2(0.0, px.y)), dist(vUv - vec2(0.0, px.y))));
+      float thr = 0.7 + z * 0.08;
+      float edge = smoothstep(thr, thr * 1.8, zn - z);
+      edge *= mix(0.35, 1.0, smoothstep(220.0, 60.0, z));
+      col = mix(col, uLine + col * 0.2, edge * uStrength);
+      gl_FragColor = vec4(col, 1.0);
+    }`,
+};
+
+/** 렌더 패스가 그린 깊이를 외곽선 셰이더에 넘기는 패스 */
+class OutlinePass extends ShaderPass {
+  constructor(private cam: THREE.PerspectiveCamera) {
+    super(OUTLINE_SHADER);
+  }
+
+  override render(renderer: THREE.WebGLRenderer, writeBuffer: THREE.WebGLRenderTarget, readBuffer: THREE.WebGLRenderTarget, deltaTime: number, maskActive: boolean): void {
+    this.uniforms.tDepth.value = readBuffer.depthTexture;
+    this.uniforms.uNear.value = this.cam.near;
+    this.uniforms.uFar.value = this.cam.far;
+    this.uniforms.uRes.value.set(readBuffer.width, readBuffer.height);
+    super.render(renderer, writeBuffer, readBuffer, deltaTime, maskActive);
+  }
+}
 
 const GRADE_SHADER = {
   uniforms: {
@@ -160,6 +197,7 @@ export class Stage {
   private bloom: UnrealBloomPass | null = null;
   private grade: ShaderPass | null = null;
   private godRays: ShaderPass | null = null;
+  private outline: OutlinePass | null = null;
   private scene = new THREE.Scene();
   private pref: GfxPref = loadPref();
   private quality: Quality = qualityFor('low');
@@ -224,9 +262,12 @@ export class Stage {
     renderer.setPixelRatio(q.pixelRatio);
     renderer.shadowMap.enabled = q.shadows;
     this.composer?.dispose();
-    const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: q.samples });
+    const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: q.samples, depthTexture: new THREE.DepthTexture(1, 1) });
     this.composer = new EffectComposer(renderer, rt);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
+    this.outline = new OutlinePass(this.camera);
+    this.outline.uniforms.uThick.value = 1.1 * q.pixelRatio;
+    this.composer.addPass(this.outline);
     this.godRays = new ShaderPass(GODRAYS_SHADER);
     this.godRays.enabled = false;
     this.composer.addPass(this.godRays);
@@ -287,8 +328,6 @@ export class Stage {
     this.env = new Environment(preset, this.renderer, this.quality);
     this.scene.add(this.env.group);
     this.scene.fog = this.env.fog;
-    this.scene.environment = this.env.envMap;
-    this.scene.environmentIntensity = this.env.preset.envIntensity;
     this.fx = new FxSystem(this.camera, this.env.lights, this.env.staticLightCount);
     this.scene.add(this.fx.group);
     const p = this.env.preset;
@@ -303,6 +342,7 @@ export class Stage {
       this.bloom.strength = g.bloom;
       this.bloom.threshold = g.bloomThreshold;
     }
+    if (this.outline) this.outline.uniforms.uLine.value.set(p.outline);
     if (this.godRays) {
       this.godRays.enabled = this.quality.godRays && p.godRays > 0;
       this.godRays.uniforms.uStrength.value = p.godRays;
@@ -407,7 +447,7 @@ export class Stage {
       const aspect = isAlly ? 200 / 320 : 1;
       const width = height * aspect;
       const res = isAlly ? [400, 640] : [360, 360];
-      const glow = isAlly ? 40 : 34;
+      const glow = isAlly ? 18 : 16;
       const pad = Math.round(glow * 1.5);
       const rim = isAlly ? characterAccent(spec.defId) : '#e0685a';
       const svg = isAlly ? characterSvg(spec.defId) : enemyFigure(spec.defId);
@@ -547,8 +587,9 @@ export class Stage {
       cam.fov = fov;
       // 진영 중심이 화면 가운데 오도록, 좁은 화면일수록 왼쪽으로 옮긴다.
       const cx = 0.4 - (1 - this.xScale) * 2;
-      pos = new THREE.Vector3(cx, 2.3 + (dist - 15) * 0.12, dist);
-      look = new THREE.Vector3(cx - 0.1, 1.45, 0);
+      // 하늘(별·마법 장식)이 더 보이도록 눈높이를 낮추고 시선을 조금 든다
+      pos = new THREE.Vector3(cx, 1.9 + (dist - 15) * 0.1, dist);
+      look = new THREE.Vector3(cx - 0.1, 2.15, 0);
     } else {
       cam.fov = 40;
       pos = new THREE.Vector3(0, 2.6, 17);

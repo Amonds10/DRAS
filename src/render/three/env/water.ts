@@ -13,9 +13,9 @@ export function buildSea(ctx: BuildCtx): void {
     textureHeight: size,
     waterNormals: waterNormals(),
     sunDirection: ctx.sunDir.clone(),
-    sunColor: new THREE.Color(p.sun.color).multiplyScalar(1.2),
+    sunColor: new THREE.Color(p.sun.color).multiplyScalar(0.7),
     waterColor: new THREE.Color(p.ground.color),
-    distortionScale: 2.2,
+    distortionScale: 0.55,
     alpha: 1,
     fog: true,
   });
