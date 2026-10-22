@@ -24,7 +24,7 @@ const EXPOSE_FACTOR = 1.3;
 const STAR_SHIELD_FACTOR = 0.5;
 const STAR_SHIELD_CHAIN = 3;
 
-export const DEFAULT_MODS: BattleMods = { stardustPerTurn: 3, startStardust: 3, fullChainBonus: 1 };
+export const DEFAULT_MODS: BattleMods = { stardustPerTurn: 3, startStardust: 4, fullChainBonus: 1 };
 
 type Unit = Ally | Enemy;
 
@@ -313,7 +313,7 @@ function runPlayerPhase(state: BattleState, plan: PlannedCast[], rng: Rng, event
   state.seal = null;
 }
 
-function enemyHitAmount(enemy: Enemy, power: number, target: Ally): number {
+export function enemyHitAmount(enemy: Enemy, power: number, target: Ally): number {
   const raw = ((power * effectiveAtk(enemy)) / 10) * defFactor(target.def);
   return Math.max(1, Math.round(raw));
 }

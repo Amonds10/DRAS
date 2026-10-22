@@ -2,17 +2,18 @@ import type { Element, ReactionDef } from '../core/types';
 
 export interface ElementMeta {
   name: string;
+  en: string;
   glyph: string;
   color: string;
 }
 
 export const ELEMENTS: Record<Element | 'star', ElementMeta> = {
-  sol: { name: '태양', glyph: '☉', color: '#ffc861' },
-  luna: { name: '달', glyph: '☾', color: '#a8c8ff' },
-  nebula: { name: '성운', glyph: '✺', color: '#f59bd6' },
-  comet: { name: '혜성', glyph: '☄', color: '#6fe6d6' },
-  void: { name: '공허', glyph: '◉', color: '#a184ff' },
-  star: { name: '별빛', glyph: '✦', color: '#ece9ff' },
+  sol: { name: '태양', en: 'SOL', glyph: '☉', color: '#efbe55' },
+  luna: { name: '달', en: 'LUNA', glyph: '☾', color: '#a9c2e8' },
+  nebula: { name: '성운', en: 'NEBULA', glyph: '✺', color: '#e09bc4' },
+  comet: { name: '혜성', en: 'COMET', glyph: '☄', color: '#74cdbd' },
+  void: { name: '공허', en: 'VOID', glyph: '◉', color: '#a891e6' },
+  star: { name: '별빛', en: 'STELLA', glyph: '✦', color: '#f1e6c8' },
 };
 
 export const ELEMENT_ORDER: Element[] = ['sol', 'luna', 'nebula', 'comet', 'void'];
@@ -21,6 +22,7 @@ export const ELEMENT_ORDER: Element[] = ['sol', 'luna', 'nebula', 'comet', 'void
 export const REACTIONS: ReactionDef[] = [
   {
     id: 'eclipse',
+    en: 'ECLIPSE',
     name: '일식',
     from: 'sol',
     to: 'luna',
@@ -29,6 +31,7 @@ export const REACTIONS: ReactionDef[] = [
   },
   {
     id: 'moonset',
+    en: 'MOONSET',
     name: '월몰',
     from: 'luna',
     to: 'void',
@@ -40,6 +43,7 @@ export const REACTIONS: ReactionDef[] = [
   },
   {
     id: 'blackhole',
+    en: 'BLACK HOLE',
     name: '블랙홀',
     from: 'void',
     to: 'comet',
@@ -51,6 +55,7 @@ export const REACTIONS: ReactionDef[] = [
   },
   {
     id: 'meteor',
+    en: 'METEOR SHOWER',
     name: '유성우',
     from: 'comet',
     to: 'nebula',
@@ -59,6 +64,7 @@ export const REACTIONS: ReactionDef[] = [
   },
   {
     id: 'supernova',
+    en: 'SUPERNOVA',
     name: '초신성',
     from: 'nebula',
     to: 'sol',
@@ -69,6 +75,7 @@ export const REACTIONS: ReactionDef[] = [
   },
   {
     id: 'flare',
+    en: 'SOLAR FLARE',
     name: '홍염',
     from: 'sol',
     to: 'comet',
@@ -77,6 +84,7 @@ export const REACTIONS: ReactionDef[] = [
   },
   {
     id: 'tide',
+    en: 'TIDE',
     name: '조수',
     from: 'luna',
     to: 'nebula',

@@ -62,6 +62,7 @@ export interface UnitDef {
 export interface ReactionDef {
   id: string;
   name: string;
+  en: string;
   from: Element;
   to: Element;
   desc: string;

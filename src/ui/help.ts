@@ -1,0 +1,37 @@
+import { CHAIN_MULT } from '../core/link';
+import { ELEMENT_ORDER, ELEMENTS, REACTIONS } from '../data/elements';
+import { h } from './dom';
+import { elBadge, modal, reactionChip } from './widgets';
+
+export function showHelp(): void {
+  const body = h(
+    'div',
+    { class: 'help' },
+    h('section', {}, h('h3', {}, '한 턴의 흐름'), h('ol', {},
+      h('li', {}, '적 머리 위의 ', h('b', {}, '예고'), '를 보고 무엇을 할지 정합니다.'),
+      h('li', {}, '술사의 마법을 누른 순서대로 ', h('b', {}, '시전 순서'), '가 정해집니다. 쉬게 할 술사는 비워 둡니다.'),
+      h('li', {}, h('b', {}, '시전'), '을 누르면 순서대로 마법이 나가고, 이어서 적이 행동합니다.'),
+      h('li', {}, '적 카드를 누르면 ', h('b', {}, '집중 대상'), '이 바뀝니다. 단일 대상 마법은 집중 대상을 노립니다.'),
+    )),
+    h('section', {}, h('h3', {}, '성속과 링크'),
+      h('p', { class: 'help-els' }, ELEMENT_ORDER.map((e) => h('span', { class: 'help-el' }, elBadge(e, 'sm'), ELEMENTS[e].name))),
+      h('p', {}, '마법마다 받는 성속과 넘기는 성속이 있습니다(예: ☉ → ☾). 직전 마법이 넘긴 성속을 이번 마법이 받으면 ', h('b', {}, '링크'), '가 이어집니다.'),
+      h('ul', {},
+        h('li', {}, h('b', {}, '●'), ' 기점 마법: 링크를 받지 않고 새 체인을 엽니다.'),
+        h('li', {}, h('b', {}, '✦ → ↻'), ' 별빛 마법: 어떤 성속이든 받아 그대로 넘깁니다. 반응은 일으키지 않습니다.'),
+      ),
+    ),
+    h('section', {}, h('h3', {}, '체인 배율'),
+      h('div', { class: 'help-chain' }, [1, 2, 3, 4].map((n) => h('div', {}, h('b', {}, `${n}`), h('small', {}, `×${CHAIN_MULT[n]}`)))),
+      h('p', {}, '4명이 모두 끊김 없이 이어지면 ', h('b', {}, '성좌 완성'), ': 모든 적에게 추가 피해를 주고 성진 1을 돌려받습니다.'),
+    ),
+    h('section', {}, h('h3', {}, '성좌 반응'),
+      h('ul', { class: 'help-reactions' }, REACTIONS.map((r) => h('li', {}, reactionChip(r.id), h('span', {}, r.desc)))),
+    ),
+    h('section', {}, h('h3', {}, '성진과 성식'),
+      h('p', {}, h('b', {}, '성진 ✦'), '은 파티가 함께 쓰는 마나입니다. 매 턴 3씩 차고, 최대 10까지 모입니다.'),
+      h('p', {}, h('b', {}, '성식 ⊘'), ': 적이 성속 하나를 봉인하면, 다음 턴에는 그 성속으로 넘어가는 링크가 끊깁니다.'),
+    ),
+  );
+  modal('플레이 방법', body, () => {});
+}
