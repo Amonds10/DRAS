@@ -701,10 +701,14 @@ export function battleScreen(app: App): HTMLElement {
   };
 
   /** 스킬 유형별 시전 연출. 피해 자체는 damage 이벤트에서 터진다. */
-  const castFx = (tag: SkillTag, caster: string, targets: string[], color: string, focusUid: string | null) => {
+  const castFx = (tag: SkillTag, caster: string, targets: string[], color: string, focusUid: string | null, element: string) => {
     const fx = stage.fx;
     if (!fx) return;
     const from = chest(caster);
+    const motion = characterMotion(battle.allies.find((a) => a.uid === caster)?.defId ?? '');
+    // 총잡이와 혜성 성속은 꼬리 긴 혜성탄으로 쏜다
+    const shot = (t: string, travel = 0.24, arc = 0.6, delay = 0) =>
+      motion === 'shoot' || element === 'comet' ? fx.comet(from, chest(t), color, travel * 0.8, delay) : fx.projectile(from, chest(t), color, travel, arc, delay);
     const uniq = [...new Set(targets)];
     sound.whoosh(tag === 'pierce' || tag === 'finisher' ? 'beam' : tag === 'aoe' || tag === 'resonance' ? 'sweep' : tag === 'mark' ? 'mark' : 'projectile');
     switch (tag) {
@@ -713,10 +717,10 @@ export function battleScreen(app: App): HTMLElement {
       case 'dot':
       case 'debuff':
       case 'drain':
-        uniq.forEach((t) => fx.projectile(from, chest(t), color));
+        uniq.forEach((t) => shot(t));
         break;
       case 'multi':
-        targets.forEach((t, i) => fx.projectile(from, chest(t), color, 0.22, 0.3 + (i % 2) * 0.6, i * 0.09));
+        targets.forEach((t, i) => shot(t, 0.22, 0.3 + (i % 2) * 0.6, i * 0.09));
         break;
       case 'aoe':
         fx.sweep(enemyCenter(), color, 6.5);
@@ -751,15 +755,22 @@ export function battleScreen(app: App): HTMLElement {
         fx.sweep(enemyCenter(), color, 3.5);
         break;
       case 'mark':
-        targets.forEach((t, i) => fx.projectile(from, chest(t), color, 0.18, 0.5, i * 0.07));
+        targets.forEach((t, i) => shot(t, 0.18, 0.5, i * 0.07));
         if (focusUid) fx.mark(stage.actorPos(focusUid, 'top'), color);
         break;
       case 'resonance':
         fx.ring(feet(caster), color, 0.4, 4.5, 0.6);
         if (uniq.length > 1) fx.sweep(enemyCenter(), color, 6.5);
-        else uniq.forEach((t) => fx.projectile(from, chest(t), color));
+        else uniq.forEach((t) => shot(t));
         break;
     }
+  };
+
+  /** 집중선: 화면 가장자리에서 가운데로 모이는 선(만화식 강조) */
+  const speedLines = (color: string) => {
+    const el = h('div', { class: 'speedlines', style: { '--el': color } });
+    scene.append(el);
+    setTimeout(() => el.remove(), 650);
   };
 
   /**
@@ -791,6 +802,7 @@ export function battleScreen(app: App): HTMLElement {
     if (target) stage.punch(chest(target), 1.1);
     stage.slowMo(0.35, 0.5);
     await wait(un ? 1050 : 700);
+    speedLines(color);
     el.classList.add('out');
     setTimeout(() => el.remove(), 400);
   }
@@ -806,6 +818,7 @@ export function battleScreen(app: App): HTMLElement {
     let lastTargets: string[] = [];
     /** 이번 시전이 예열을 터뜨렸는지(피해 숫자를 크게) */
     let unleashed = false;
+    let lastElement: string = 'star';
     for (let k = 0; k < events.length; k++) {
       const ev = events[k];
       const text = eventText(battle, ev);
@@ -832,7 +845,11 @@ export function battleScreen(app: App): HTMLElement {
           stage.anim(ev.allyUid, sp.tag === 'charge' ? 'charge' : SUPPORT_TAGS.has(sp.tag) ? 'channel' : 'cast');
           sound.cast(unit.element, ev.chain, characterMotion(unit.id));
           if (ev.linked) sound.link(ev.chain, prevOut ?? unit.element);
+          // 준비 동작: 카메라가 시전자에게 다가가고, 뒤에 마법진이 서고, 빛이 손끝으로 모인다
+          stage.focus(chest(ev.allyUid), 0.7);
           stage.fx?.magicCircle(feet(ev.allyUid), color, 2.2, 0.9, 'magic_01');
+          stage.fx?.castCircle(chest(ev.allyUid), color, sp.cost >= 2 ? 3.6 : 2.8);
+          stage.fx?.gather(chest(ev.allyUid).add(new THREE.Vector3(0.7, 0.1, 0)), color, sp.cost >= 2 ? 22 : 14);
           if (ev.linked && prevCaster) stage.fx?.arc(chest(prevCaster), chest(ev.allyUid), prevOut ? elColor(prevOut) : color);
           showCallout(
             h(
@@ -845,7 +862,14 @@ export function battleScreen(app: App): HTMLElement {
             ev.linked ? 'linked' : '',
           );
           await wait(260);
-          castFx(sp.tag, ev.allyUid, lastTargets, color, focusAt(events, k));
+          const motion = characterMotion(unit.id);
+          if (!SUPPORT_TAGS.has(sp.tag) && sp.tag !== 'charge' && (motion === 'thrust' || motion === 'slash' || motion === 'bash')) stage.afterimage(ev.allyUid, color);
+          lastElement = unit.element;
+          castFx(sp.tag, ev.allyUid, lastTargets, color, focusAt(events, k), unit.element);
+          // 시선이 대상으로 넘어간다
+          const tgt = lastTargets[0] ?? focusAt(events, k);
+          if (tgt && !SUPPORT_TAGS.has(sp.tag)) stage.focus(lastTargets.length > 1 && new Set(lastTargets).size > 1 ? enemyCenter() : chest(tgt), 0.55);
+          else stage.focus(null);
           await wait(300);
           prevCaster = ev.allyUid;
           prevOut = ev.outElement;
@@ -880,7 +904,12 @@ export function battleScreen(app: App): HTMLElement {
         case 'damage': {
           const unit = [...battle.allies, ...battle.enemies].find((u) => u.uid === ev.targetUid)!;
           for (const t of hpTargets(ev.targetUid)) updateHpBar(t, ev.hpAfter, unit.maxHp, ev.shieldAfter);
-          stage.anim(ev.targetUid, 'hit');
+          const crit = unleashed && ev.source === 'ally';
+          // 세게 맞을수록 크게 밀리고 잠깐 멈춘다(역경직)
+          const power = crit ? 2.4 : Math.min(2, Math.max(0.6, ev.amount / 14));
+          stage.anim(ev.targetUid, 'hit', power);
+          if (crit) stage.hitStop(0.14);
+          else if (ev.source !== 'burn' && ev.amount >= 12) stage.hitStop(0.06);
           const fx = stage.fx;
           const p = chest(ev.targetUid);
           if (fx) {
@@ -901,9 +930,12 @@ export function battleScreen(app: App): HTMLElement {
               fx.impact(p, lastColor, 0.8);
               fx.burn(p, lastColor);
             } else fx.impact(p, lastColor, lastTag === 'multi' ? 0.7 : lastTag === 'aoe' ? 0.9 : 1);
+            // 성속마다 다른 타격 모양
+            if (ev.source === 'ally' && ev.amount > 0) fx.signature(lastElement, p, lastColor, lastTag === 'multi' ? 0.6 : crit ? 1.8 : 1);
           }
-          const crit = unleashed && ev.source === 'ally';
           if (crit && stage.fx) {
+            stage.impactFrame(lastColor);
+            speedLines(lastColor);
             stage.fx.impact(p, '#ffffff', 2.2);
             stage.fx.ring(feet(ev.targetUid), lastColor, 1, 8, 0.8, 'circle_03');
             stage.shake(0.55);
@@ -986,6 +1018,7 @@ export function battleScreen(app: App): HTMLElement {
         case 'enemyStunned': {
           if (!enemyPhase) {
             enemyPhase = true;
+            stage.focus(null);
             stage.fx?.fadeArcs();
             queueEl.querySelectorAll('.q-slot').forEach((q) => q.classList.add('spent'));
             showCallout(h('div', { class: 'banner phase-banner' }, h('small', {}, 'ENEMY PHASE'), h('b', {}, '적의 차례')), 'enemy');
@@ -997,9 +1030,13 @@ export function battleScreen(app: App): HTMLElement {
             await wait(360);
             break;
           }
+          // 예고 동작: 적이 붉게 빛을 모았다가 덮친다
+          stage.focus(chest(ev.enemyUid), 0.35);
+          stage.fx?.gather(chest(ev.enemyUid), '#ff5a4a', 12, 0.26);
           stage.anim(ev.enemyUid, 'act');
           sound.enemyAct();
           await wait(260);
+          stage.focus(null);
           break;
         }
         case 'unleash':
@@ -1041,6 +1078,7 @@ export function battleScreen(app: App): HTMLElement {
       }
     }
     stage.fx?.fadeArcs();
+    stage.focus(null);
     await wait(250);
   }
 

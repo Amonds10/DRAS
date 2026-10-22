@@ -58,7 +58,7 @@ WebGL이 필요합니다. 배경, 바닥 반사, 블룸, VFX는 three.js로 그�
   - `quality.ts`: 그래픽 품질(자동/높음/낮음). 높음은 그림자, MSAA, 빛줄기, 풀이 더 많다
   - `fx.ts`: 스킬 VFX
   - `stage.ts`: 카메라, 후처리, 캐릭터 판
-- `src/render/rig.ts`: 술사 6명의 일러스트(SVG)를 뼈대 조각(머리·머리카락·팔·몸·다리·망토)으로 나눈 것
+- `src/render/rig.ts`: 술사 6명의 검은 실루엣 일러스트(SVG)를 뼈대 조각(머리·머리카락·팔·몸·다리·망토)으로 나눈 것
 - `src/render/three/puppet.ts`: 조각을 판으로 세운 컷아웃 인형. 숨쉬기, 무기별 공격(찌르기·들어올리기·사격·베기·들이받기), 예열, 피격, 쓰러짐, 승리 자세
 - `src/render/figures.ts`: 적 형상(SVG). 무대에서 몸을 젖혔다 덮치고, 맞으면 찌그러지고, 쓰러지면 돌며 사라진다
 - `src/audio/sound.ts`: 효과음과 배경 음악. 마법 소리는 FM 합성 종소리(성속마다 음 높이가 다름), 배경 음악은 장면별 화음 진행 위에 패드·베이스·아르페지오·북을 실시간으로 엮는다
@@ -71,6 +71,7 @@ WebGL이 필요합니다. 배경, 바닥 반사, 블룸, VFX는 three.js로 그�
 
 - VFX 텍스처: [Kenney Particle Pack](https://github.com/Calinou/kenney-particle-pack) by Kenney (CC0). 원본 중 42장을 흰색과 알파로 변환해 `public/fx/`에 넣었습니다. 라이선스는 `public/fx/LICENSE-kenney.txt`에 있습니다.
 - 효과음: Kenney의 UI·Casino·RPG 사운드(CC0, [iwenzhou/kenney](https://github.com/iwenzhou/kenney) 미러에서). 16개를 골라 `public/sfx/`에 넣었습니다. 라이선스는 `public/sfx/LICENSE-kenney.md`에 있습니다. 마법 효과음과 배경 음악은 Web Audio로 직접 합성합니다.
+- 배경 음악: [0 A.D.](https://play0ad.com/)의 음악(Wildfire Games, Omri Lahav 외, [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/)). 6곡을 MP3로 변환해 `public/bgm/`에 넣었습니다. 곡 목록과 바꾸는 법은 `public/bgm/CREDITS.md`에 있습니다. 파일을 못 읽으면 직접 생성하는 음악으로 돌아갑니다.
 - [three.js](https://threejs.org/) (MIT)
 - 글꼴: Noto Serif KR, Bodoni Moda ([Fontsource](https://fontsource.org/)로 번들, OFL)
 - 디자인 스킬: [taste-skill](https://github.com/Leonxlnx/taste-skill) (MIT). Claude Code용 프런트엔드 디자인 지침으로 `.claude/skills/design-taste-frontend/`에 넣었습니다.

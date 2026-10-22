@@ -53,7 +53,7 @@ interface Actor {
   hover: number;
   phase: number;
   offset: THREE.Vector3;
-  anim: { kind: ActorAnim; t: number } | null;
+  anim: { kind: ActorAnim; t: number; power: number } | null;
   flash: number;
   alpha: number;
   dead: boolean;
@@ -228,12 +228,15 @@ const GRADE_SHADER = {
     uTime: { value: 0 },
     uRes: { value: new THREE.Vector2(1, 1) },
     uFlash: { value: 0 },
+    /** 임팩트 프레임: 한두 프레임 동안 흑백 판화처럼 뒤집는다 */
+    uImpact: { value: 0 },
+    uImpactCol: { value: new THREE.Color(1, 0.95, 0.85) },
     uHaze: { value: 0 },
     uHorizon: { value: 0.5 },
   },
   vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
   fragmentShader: /* glsl */ `
-    uniform sampler2D tDiffuse; uniform vec3 uTint; uniform float uContrast, uTime, uFlash, uHaze, uHorizon; uniform vec2 uRes;
+    uniform sampler2D tDiffuse; uniform vec3 uTint, uImpactCol; uniform float uContrast, uTime, uFlash, uHaze, uHorizon, uImpact; uniform vec2 uRes;
     varying vec2 vUv;
     float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
     void main() {
@@ -254,6 +257,10 @@ const GRADE_SHADER = {
       c *= mix(0.45, 1.0, v);
       c += (hash(vUv * uRes + uTime) - 0.5) * 0.014;
       c += uFlash * vec3(1.0, 0.95, 0.85) * 0.25;
+      if (uImpact > 0.5) {
+        float li = dot(c, vec3(0.299, 0.587, 0.114));
+        c = li > 0.32 ? uImpactCol : vec3(0.02, 0.015, 0.03);
+      }
       gl_FragColor = vec4(c, 1.0);
     }`,
 };
@@ -302,6 +309,11 @@ export class Stage {
   private screenFlash = 0;
   private timeScale = 1;
   private slowLeft = 0;
+  private stopLeft = 0;
+  private impact = 0;
+  private focusPt = new THREE.Vector3();
+  private focusK = 0;
+  private focusGoal = 0;
   private size = new THREE.Vector2(1, 1);
   /** 세로 화면에서는 진영 간격을 좁혀 카메라를 당긴다 */
   private xScale = 1;
@@ -637,10 +649,10 @@ export class Stage {
   }
 
   /** 동작 재생. 술사는 관절 동작, 적은 판을 기울이고 늘였다 줄인다. */
-  anim(uid: string, kind: ActorAnim): void {
+  anim(uid: string, kind: ActorAnim, power = 1): void {
     const a = this.actors.get(uid);
     if (!a) return;
-    a.anim = { kind, t: 0 };
+    a.anim = { kind, t: 0, power };
     if (kind === 'hit') a.flash = 1.4;
     if (kind === 'cast' || kind === 'channel') a.flash = 0.35;
     if (kind === 'charge') a.flash = 0.6;
@@ -705,6 +717,37 @@ export class Stage {
     for (const a of this.actors.values()) if (a.puppet && !a.dead) a.puppet.play('victory');
   }
 
+  /** 연출 카메라를 이 지점으로(null이면 원래 자리로) */
+  focus(point: THREE.Vector3 | null, strength = 1): void {
+    if (point) {
+      this.focusPt.copy(point);
+      this.focusGoal = strength;
+    } else this.focusGoal = 0;
+  }
+
+  /** 역경직(초) */
+  hitStop(seconds: number): void {
+    this.stopLeft = Math.max(this.stopLeft, seconds);
+  }
+
+  /** 임팩트 프레임: 화면이 한순간 흑백 판화로 뒤집힌다 */
+  impactFrame(color: THREE.ColorRepresentation = 0xfff2d8): void {
+    this.impact = 1;
+    this.grade?.uniforms.uImpactCol.value.set(color);
+  }
+
+  /** 잔상: 돌진하는 술사 뒤로 실루엣이 몇 겹 남는다 */
+  afterimage(uid: string, color: THREE.ColorRepresentation, count = 3): void {
+    const a = this.actors.get(uid);
+    const tex = (a?.puppet?.caster.material as THREE.MeshBasicMaterial | undefined)?.map;
+    if (!a?.puppet || !tex || !this.fx) return;
+    const c = a.puppet.caster;
+    for (let i = 0; i < count; i++) {
+      const pos = new THREE.Vector3(a.base.x + a.puppet.reach - i * 0.25, a.hover + c.position.y, a.base.z + 0.05);
+      this.fx.ghost(tex, pos, [c.scale.x, c.scale.y], color, 0.28, i * 0.045);
+    }
+  }
+
   /** 잠깐 느리게(극딜 연출) */
   slowMo(scale: number, seconds: number): void {
     this.timeScale = scale;
@@ -766,6 +809,13 @@ export class Stage {
     }
     pos.x += Math.sin(this.t * 0.17) * 0.35;
     pos.y += Math.sin(this.t * 0.11) * 0.12;
+    // 연출 카메라: 시전자 → 대상 순서로 다가갔다가 돌아온다. 세로 화면에서는 약하게.
+    this.focusK += (this.focusGoal - this.focusK) * Math.min(1, dt * 5);
+    if (this.focusK > 0.002) {
+      const k = this.focusK * (cam.aspect < 1 ? 0.45 : 1);
+      pos.lerp(this.focusPt.clone().add(new THREE.Vector3(0, 0.9, 9)), 0.32 * k);
+      look.lerp(this.focusPt, 0.4 * k);
+    }
     if (this.punchAmt > 0) {
       pos.lerp(this.punchTarget.clone().add(new THREE.Vector3(0, 1, 6)), 0.12 * this.punchAmt);
       look.lerp(this.punchTarget, 0.25 * this.punchAmt);
@@ -822,12 +872,15 @@ export class Stage {
               break;
             }
             case 'hit': {
-              const k = Math.max(0, 1 - t / 0.35);
-              a.offset.x = 0.3 * k * Math.min(1, t / 0.05);
-              roll = -0.12 * k;
-              sx = 1 - 0.12 * k;
-              sy = 1 + 0.1 * k;
-              if (t > 0.35) a.anim = null;
+              // 세게 맞을수록 멀리 밀리고 크게 찌그러진다
+              const pw = a.anim.power;
+              const k = Math.max(0, 1 - t / (0.3 + 0.15 * pw));
+              a.offset.x = 0.3 * pw * k * Math.min(1, t / 0.04);
+              a.offset.y = 0.12 * pw * Math.sin(Math.min(1, t / 0.3) * Math.PI) * (pw > 1.4 ? 1 : 0);
+              roll = -0.12 * pw * k;
+              sx = 1 - 0.12 * Math.min(pw, 2) * k;
+              sy = 1 + 0.1 * Math.min(pw, 2) * k;
+              if (t > 0.45 + 0.15 * pw) a.anim = null;
               break;
             }
             case 'die': {
@@ -931,9 +984,15 @@ export class Stage {
       this.slowLeft -= raw;
       if (this.slowLeft <= 0) this.timeScale = 1;
     }
-    const dt = raw * this.timeScale;
+    // 역경직(히트스톱): 아주 잠깐 인물과 효과를 멈춰 타격에 무게를 싣는다. 카메라는 계속 흔들린다.
+    let dt = raw * this.timeScale;
+    if (this.stopLeft > 0) {
+      this.stopLeft -= raw;
+      dt = 0;
+    }
     this.t += dt;
-    this.updateCamera(dt);
+    this.impact = Math.max(0, this.impact - raw * 12);
+    this.updateCamera(raw);
     this.updateActors(dt);
     this.env?.update(this.t, dt);
     this.fx?.update(dt, this.t);
@@ -951,6 +1010,7 @@ export class Stage {
     if (this.composer && this.container && this.canvas.isConnected) {
       this.grade!.uniforms.uTime.value = this.t;
       this.grade!.uniforms.uFlash.value = this.screenFlash;
+      this.grade!.uniforms.uImpact.value = this.impact > 0.5 ? 1 : 0;
       this.composer.render(dt);
     }
     for (const cb of this.frameCbs) cb();

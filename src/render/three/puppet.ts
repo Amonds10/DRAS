@@ -107,7 +107,7 @@ function loadFull(id: string): Promise<HTMLImageElement | null> {
 
 // ── 동작 키프레임 ──────────────────────────────────────────
 
-type Channel = 'body' | 'head' | 'hair' | 'tail' | 'armF' | 'armB' | 'x' | 'y';
+type Channel = 'body' | 'head' | 'hair' | 'tail' | 'armF' | 'armB' | 'x' | 'y' | 'sq';
 type Pose = Partial<Record<Channel, number>>;
 interface Clip {
   keys: { t: number; p: Pose }[];
@@ -125,24 +125,24 @@ const Z: Pose = {};
 
 /** 무기별 공격 동작. 회전은 라디안(+는 반시계: 몸은 뒤로 젖힘, 팔은 앞·위로 듦), 이동은 viewBox 단위. */
 const ATTACK: Record<Motion, Clip> = {
-  // 창: 뒤로 당겼다가 앞으로 뛰어들며 찌른다
-  thrust: clip([0, 0.17, 0.27, 0.42, 0.78], [Z, { body: 0.12, armF: 0.4, armB: -0.2, x: -8, y: -3 }, { body: -0.18, armF: -0.3, armB: 0.3, x: 70, tail: 0.2 }, { body: -0.12, armF: -0.2, x: 60 }, Z]),
+  // 창: 웅크려 뒤로 당겼다가(예비 동작) 앞으로 튀어 나가 찌르고, 살짝 지나쳤다 돌아온다(여운)
+  thrust: clip([0, 0.17, 0.24, 0.3, 0.44, 0.8], [Z, { body: 0.14, armF: 0.45, armB: -0.2, x: -10, y: -5, sq: -0.07 }, { body: -0.22, armF: -0.35, armB: 0.35, x: 78, tail: 0.25, sq: 0.08 }, { body: -0.16, armF: -0.28, x: 84, sq: 0.02 }, { body: -0.1, armF: -0.15, x: 62 }, Z]),
   // 지팡이·구슬: 들어 올려 빛을 모았다가 앞으로 내민다
-  raise: clip([0, 0.22, 0.34, 0.6, 0.95], [Z, { armF: 0.75, head: 0.14, body: 0.05, y: 7, tail: -0.12, hair: -0.1 }, { armF: 0.55, head: 0.06, body: -0.08, y: 9, x: 6 }, { armF: 0.3, y: 4 }, Z]),
+  raise: clip([0, 0.22, 0.3, 0.38, 0.62, 0.95], [Z, { armF: 0.8, head: 0.16, body: 0.06, y: 8, tail: -0.15, hair: -0.12, sq: 0.05 }, { armF: 0.5, head: 0.04, body: -0.1, y: 10, x: 8, sq: -0.03 }, { armF: 0.55, body: -0.06, y: 9, x: 6 }, { armF: 0.3, y: 4 }, Z]),
   // 총: 겨누고, 반동에 몸이 뒤로 튄다
-  shoot: clip([0, 0.16, 0.21, 0.36, 0.72], [Z, { armF: 0.08, body: -0.04, head: -0.03 }, { armF: 0.3, body: 0.1, head: 0.06, x: -14, tail: 0.1 }, { armF: 0.08, body: 0.03, x: -6 }, Z]),
+  shoot: clip([0, 0.16, 0.2, 0.3, 0.42, 0.72], [Z, { armF: 0.06, body: -0.05, head: -0.04, sq: -0.03 }, { armF: 0.36, body: 0.12, head: 0.08, x: -18, tail: 0.14, sq: 0.04 }, { armF: 0.22, body: 0.08, x: -14 }, { armF: 0.06, body: 0.02, x: -5 }, Z]),
   // 단검: 높이 들었다가 뛰어들며 내리긋는다
-  slash: clip([0, 0.16, 0.25, 0.42, 0.8], [Z, { armF: 1.4, body: 0.1, head: 0.05, x: -6 }, { armF: -0.55, body: -0.2, x: 80, tail: 0.25, y: -4 }, { armF: -0.4, body: -0.12, x: 66 }, Z]),
+  slash: clip([0, 0.16, 0.23, 0.3, 0.46, 0.82], [Z, { armF: 1.5, body: 0.12, head: 0.06, x: -8, sq: 0.06 }, { armF: -0.65, body: -0.24, x: 88, tail: 0.3, y: -6, sq: -0.06 }, { armF: -0.72, body: -0.2, x: 92, y: -5 }, { armF: -0.4, body: -0.12, x: 68 }, Z]),
   // 방패: 웅크렸다가 몸으로 들이받는다
-  bash: clip([0, 0.2, 0.3, 0.46, 0.82], [Z, { body: 0.1, armF: 0.2, x: -10, y: -6 }, { body: -0.16, armF: -0.12, x: 62, tail: 0.18 }, { body: -0.1, x: 54 }, Z]),
+  bash: clip([0, 0.2, 0.28, 0.34, 0.5, 0.85], [Z, { body: 0.12, armF: 0.22, x: -12, y: -8, sq: -0.08 }, { body: -0.18, armF: -0.14, x: 70, tail: 0.2, sq: 0.07 }, { body: -0.14, x: 74 }, { body: -0.1, x: 56 }, Z]),
 };
 
 const CLIPS = {
   // 보조 주문: 가볍게 손을 들어 올린다
-  channel: clip([0, 0.25, 0.55, 0.9], [Z, { armF: 0.45, head: 0.1, y: 5, tail: -0.08 }, { armF: 0.35, y: 4 }, Z]),
+  channel: clip([0, 0.25, 0.55, 0.9], [Z, { armF: 0.5, head: 0.12, y: 6, tail: -0.1, sq: 0.03 }, { armF: 0.38, y: 4 }, Z]),
   // 예열: 웅크려 힘을 모았다가 솟구친다
-  charge: clip([0, 0.22, 0.5, 0.66, 1.05], [Z, { y: -9, body: -0.1, head: -0.12, armF: -0.25, armB: 0.25, tail: 0.1 }, { y: -10, body: -0.12, head: -0.14, armF: -0.3, armB: 0.3 }, { y: 8, body: 0.06, head: 0.1, armF: 0.3, tail: -0.2, hair: -0.15 }, Z]),
-  hit: clip([0, 0.06, 0.4], [Z, { body: 0.16, head: 0.12, x: -16, armF: 0.1, tail: -0.15 }, Z]),
+  charge: clip([0, 0.22, 0.5, 0.62, 0.75, 1.05], [Z, { y: -10, body: -0.12, head: -0.14, armF: -0.28, armB: 0.28, tail: 0.12, sq: -0.08 }, { y: -11, body: -0.14, head: -0.16, armF: -0.32, armB: 0.32, sq: -0.09 }, { y: 12, body: 0.08, head: 0.12, armF: 0.4, tail: -0.25, hair: -0.2, sq: 0.08 }, { y: 6, body: 0.04, armF: 0.25, sq: 0.02 }, Z]),
+  hit: clip([0, 0.05, 0.16, 0.45], [Z, { body: 0.2, head: 0.16, x: -20, armF: 0.14, tail: -0.2, sq: -0.06 }, { body: 0.12, head: 0.08, x: -14 }, Z]),
   die: clip([0, 0.25, 0.6], [Z, { body: 0.2, head: 0.2, x: -10 }, { body: -0.3, head: -0.35, armF: -0.4, armB: 0.3, y: -36, x: -6 }], true),
   victory: clip([0, 0.3, 1.2], [Z, { armF: 1.1, head: 0.12, y: 4 }, { armF: 1.0, head: 0.1, y: 3 }], true),
 };
@@ -317,7 +317,8 @@ export class Puppet {
     B.body.position.set((rootY[0] - 100) * k + v('x') * k, -(rootY[1] - 310) * k + v('y') * k + Math.sin(t * 1.8) * 0.6 * k * calm, 0);
     B.legs.position.x = v('x') * k * 0.92;
     B.body.rotation.z = v('body') + Math.sin(t * 1.6) * 0.012 * calm;
-    B.body.scale.y = 1 + Math.sin(t * 1.8) * 0.01 * calm;
+    B.body.scale.y = 1 + Math.sin(t * 1.8) * 0.01 * calm + v('sq');
+    B.body.scale.x = 1 - v('sq') * 0.6;
     B.head.rotation.z = v('head') + Math.sin(t * 1.1 + 1) * 0.03 * calm;
     B.hair.rotation.z = v('hair') + Math.sin(t * 1.4 + 2) * 0.07 * calm;
     B.tail.rotation.z = v('tail') + Math.sin(t * 1.25) * 0.045 * calm;

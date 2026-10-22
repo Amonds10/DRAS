@@ -143,6 +143,7 @@ class SoundSystem {
     this.noise = this.makeNoise();
     this.applyLevels();
     void this.loadSamples();
+    void this.loadTracks();
     this.setSong(this.mood, true);
     this.timer = window.setInterval(() => this.schedule(), 50);
   }
@@ -499,6 +500,10 @@ class SoundSystem {
   victory(): void {
     if (!this.ok) return;
     const t = this.now();
+    if (this.playOnce('victory')) {
+      this.play('coins', 0.4, 1, 0.3);
+      return;
+    }
     this.duck(3);
     [67, 72, 76, 79].forEach((n, i) => this.bell(n, t + i * 0.12, 0.14, 2, 3.5));
     [72, 76, 79, 84].forEach((n) => this.bell(n, t + 0.55, 0.11, 3.2, 2));
@@ -508,6 +513,7 @@ class SoundSystem {
   defeat(): void {
     if (!this.ok) return;
     const t = this.now();
+    if (this.playOnce('defeat')) return;
     this.duck(3);
     [69, 65, 62, 57].forEach((n, i) => this.bell(n, t + i * 0.22, 0.12, 2.4, 1.41));
   }
@@ -530,9 +536,94 @@ class SoundSystem {
     if (this.ctx) this.setSong(mood, false);
   }
 
+  // ── 음악 파일 ───────────────────────────────────────
+  // public/bgm/tracks.json에 장면별 파일을 적어 두면 생성 음악 대신 그 곡을 반복 재생한다.
+  // 예: { "title": "title.mp3", "battle": "battle.mp3", "boss": "boss.mp3" }
+  // 층 장면(dawn·neon·dune·snow·sky)에 곡이 없으면 battle, 그다음 생성 음악 순서로 찾는다.
+
+  private tracks: Record<string, string> | null = null;
+  private fileTrack: { url: string; el: HTMLAudioElement; gain: GainNode } | null = null;
+
+  private async loadTracks(): Promise<void> {
+    try {
+      const res = await fetch(`${import.meta.env.BASE_URL}bgm/tracks.json`);
+      if (!res.ok) return;
+      const data = (await res.json()) as Record<string, unknown>;
+      this.tracks = Object.fromEntries(Object.entries(data).filter((e): e is [string, string] => typeof e[1] === 'string'));
+      this.playFile(this.trackFor(this.mood));
+    } catch {
+      this.tracks = null;
+    }
+  }
+
+  private trackFor(mood: Mood): string | null {
+    const t = this.tracks;
+    if (!t) return null;
+    const floor = mood === 'dawn' || mood === 'neon' || mood === 'dune' || mood === 'snow' || mood === 'sky';
+    const name = t[mood] ?? (floor || mood === 'boss' ? t.battle : mood === 'quiet' ? t.map : undefined) ?? null;
+    return name ? `${import.meta.env.BASE_URL}bgm/${name}` : null;
+  }
+
+  /** 음악 파일로 넘어간다(같은 곡이면 그대로). null이면 파일 재생을 멈추고 생성 음악으로 돌아간다. */
+  private playFile(url: string | null): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    if (this.fileTrack?.url === url) return;
+    const t = ctx.currentTime;
+    const old = this.fileTrack;
+    if (old) {
+      old.gain.gain.setTargetAtTime(0, t, 0.4);
+      window.setTimeout(() => old.el.pause(), 1800);
+    }
+    this.fileTrack = null;
+    if (!url) return;
+    const el = new Audio(url);
+    el.loop = true;
+    el.preload = 'auto';
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    try {
+      ctx.createMediaElementSource(el).connect(gain).connect(this.musicBus);
+    } catch {
+      return;
+    }
+    gain.gain.setTargetAtTime(1.6, t + 0.3, 0.6);
+    el.addEventListener('error', () => {
+      // 파일이 없거나 못 풀면 생성 음악으로
+      if (this.fileTrack?.el === el) this.fileTrack = null;
+    });
+    void el.play().catch(() => {
+      if (this.fileTrack?.el === el) this.fileTrack = null;
+    });
+    this.fileTrack = { url, el, gain };
+  }
+
+  /** 짧은 곡을 한 번만(승리·패배). 흐르던 배경 곡은 줄인다. 곡이 없으면 false. */
+  private playOnce(key: string): boolean {
+    const ctx = this.ctx;
+    const name = this.tracks?.[key];
+    if (!ctx || !name || this.pref !== 'on') return false;
+    this.playFile(null);
+    const el = new Audio(`${import.meta.env.BASE_URL}bgm/${name}`);
+    try {
+      const g = ctx.createGain();
+      g.gain.value = 1.6;
+      ctx.createMediaElementSource(el).connect(g).connect(this.musicBus);
+    } catch {
+      return false;
+    }
+    void el.play().catch(() => undefined);
+    return true;
+  }
+
   private setSong(mood: Mood, immediate: boolean): void {
     const ctx = this.ctx!;
     const t = ctx.currentTime;
+    if (this.tracks) {
+      const url = this.trackFor(mood);
+      this.playFile(url);
+      if (url) return;
+    }
     const apply = () => {
       this.song = SONGS[mood];
       this.step = 0;
@@ -565,7 +656,8 @@ class SoundSystem {
     if (this.nextTime < ctx.currentTime - 0.5) this.nextTime = ctx.currentTime + 0.05;
     const sixteenth = 60 / this.song.bpm / 4;
     while (this.nextTime < ctx.currentTime + 0.25) {
-      if (this.pref === 'on') this.playStep(this.step, this.nextTime, sixteenth);
+      // 음악 파일이 흐르는 동안에는 생성 음악을 쉰다
+      if (this.pref === 'on' && !this.fileTrack) this.playStep(this.step, this.nextTime, sixteenth);
       this.nextTime += sixteenth;
       this.step++;
     }
