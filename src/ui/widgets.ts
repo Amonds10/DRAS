@@ -1,6 +1,7 @@
 import { enemyHitAmount } from '../core/battle';
 import type { Ally, Element, Enemy, Intent, SpellDef, SpellInput, SpellOutput, Status } from '../core/types';
 import { ELEMENTS, STATUS_META, reactionById } from '../data/elements';
+import { TAG_NAMES } from '../data/spells';
 import { unitById } from '../data/units';
 import { h } from './dom';
 
@@ -145,7 +146,8 @@ export const NUM = ['1', '2', '3', '4', '5', '6', '7'];
 
 export interface SpellCardOpts {
   element: Element | 'star';
-  numeral?: string;
+  /** 작은 카드에 표시할 시전자 이름 */
+  owner?: string;
   order?: number;
   chosen?: boolean;
   disabled?: boolean;
@@ -153,31 +155,36 @@ export interface SpellCardOpts {
   size?: 'hand' | 'mini';
 }
 
-/** 마법 카드 */
+export function tagLabel(spell: SpellDef): HTMLElement {
+  return h('span', { class: `skill-tag tag-${spell.tag}` }, TAG_NAMES[spell.tag]);
+}
+
+/** 스킬 카드: 비용, 유형, 성속 아이콘, 이름, 입출력 성속, 설명 */
 export function spellCard(spell: SpellDef, opts: SpellCardOpts): HTMLElement {
   const meta = ELEMENTS[opts.element];
   const tag = opts.onClick ? 'button' : 'div';
-  const el = h(
+  const mini = opts.size === 'mini';
+  return h(
     tag as 'button',
     {
       type: opts.onClick ? 'button' : undefined,
-      class: `tarot tarot-${opts.size ?? 'hand'} ${opts.chosen ? 'chosen' : ''}`,
+      class: `skill-card ${mini ? 'mini' : ''} ${opts.chosen ? 'chosen' : ''}`,
       style: { '--el': meta.color },
       disabled: opts.disabled,
-      title: `${spell.name} — ${spell.desc}`,
+      title: `${spell.name} (${TAG_NAMES[spell.tag]}) — ${spell.desc}`,
       onclick: opts.onClick,
     },
     h(
       'span',
-      { class: 'tarot-top' },
-      h('span', { class: 'tarot-cost' }, Array.from({ length: Math.max(spell.cost, 0) }, () => h('i'))),
-      opts.numeral ? h('span', { class: 'tarot-num' }, opts.numeral) : null,
+      { class: 'sc-head' },
+      h('span', { class: 'sc-cost', 'aria-label': `성진 ${spell.cost}` }, Array.from({ length: spell.cost }, () => h('i'))),
+      mini ? null : tagLabel(spell),
     ),
-    h('span', { class: 'tarot-art' }, h('span', { class: 'tarot-glyph' }, meta.glyph)),
-    h('span', { class: 'tarot-name' }, spell.name),
-    h('span', { class: 'tarot-flow' }, spellFlow(spell)),
-    opts.size !== 'mini' ? h('span', { class: 'tarot-desc' }, spell.desc) : null,
-    opts.order !== undefined ? h('span', { class: 'tarot-order' }, NUM[opts.order]) : null,
+    h('span', { class: 'sc-icon' }, meta.glyph),
+    h('span', { class: 'sc-name' }, spell.name),
+    mini && opts.owner ? h('span', { class: 'sc-owner' }, opts.owner) : null,
+    h('span', { class: 'sc-flow' }, spellFlow(spell)),
+    mini ? null : h('span', { class: 'sc-desc' }, spell.desc),
+    opts.order !== undefined ? h('span', { class: 'sc-order' }, NUM[opts.order]) : null,
   );
-  return el;
 }

@@ -1,4 +1,6 @@
 import { clearRun, loadRun, saveRun, type RunState } from '../core/run';
+import { floorPreset } from '../render/three/environment';
+import { getStage } from '../render/three/stage';
 import { storage } from './dom';
 import { battleScreen } from './screens/battle';
 import { mapScreen } from './screens/map';
@@ -16,8 +18,21 @@ export class App {
   /** 연출 속도 배율(1 = 기본, 2 = 빠르게) */
   speed: number;
 
-  constructor(private root: HTMLElement) {
+  constructor(
+    private root: HTMLElement,
+    private bg: HTMLElement,
+  ) {
     this.speed = Number(storage.getItem(SPEED_KEY)) || 1;
+  }
+
+  /** 전투가 아닌 화면에서는 공유 무대를 뒷배경으로 쓴다. */
+  private showBackground(screen: ScreenName): void {
+    const stage = getStage();
+    stage.clearActors();
+    stage.mount(this.bg, 'menu');
+    const inRun = this.run && (screen === 'map' || screen === 'reward' || screen === 'result');
+    stage.setScene(inRun ? floorPreset(Math.min(this.run!.floor, 4)) : 'title');
+    this.bg.hidden = false;
   }
 
   savedRun(): RunState | null {
@@ -49,6 +64,8 @@ export class App {
 
   go(screen: ScreenName): void {
     const render = { title: titleScreen, team: teamScreen, map: mapScreen, battle: battleScreen, reward: rewardScreen, result: resultScreen }[screen];
+    if (screen === 'battle') this.bg.hidden = true;
+    else this.showBackground(screen);
     const view = render(this);
     view.classList.add('screen', `view-${screen}`);
     this.root.replaceChildren(view);

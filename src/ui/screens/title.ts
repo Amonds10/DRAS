@@ -36,14 +36,20 @@ export function titleScreen(app: App): HTMLElement {
   return h(
     'main',
     { class: 'title-wrap' },
-    h('div', { class: 'title-hero' }, h('h1', { class: 'title-logo' }, '성좌술사'), h('p', { class: 'title-tag' }, '마법과 마법을 이어 별자리를 완성하는 턴제 전투')),
+    h(
+      'div',
+      { class: 'title-hero' },
+      h('p', { class: 'title-code' }, 'STARWEAVER'),
+      h('h1', { class: 'title-logo' }, '성좌술사'),
+      h('p', { class: 'title-tag' }, '마법과 마법을 이어 별자리를 완성하는 턴제 전투'),
+    ),
     h(
       'nav',
       { class: 'title-menu', 'aria-label': '메인 메뉴' },
       saved ? menuItem('이어하기', `${floorIdx + 1}층 · ${FLOORS[floorIdx].name}`, () => app.resume(saved), true) : null,
-      menuItem('새 여정', null, startNew, !saved),
-      menuItem('플레이 방법', null, () => showHelp()),
+      menuItem('새 여정', 'NEW GAME', startNew, !saved),
+      menuItem('플레이 방법', 'GUIDE', () => showHelp()),
     ),
-    h('footer', { class: 'title-foot' }, '프로토타입 v0.3'),
+    h('footer', { class: 'title-foot' }, 'PROTOTYPE v0.4'),
   );
 }

@@ -4,18 +4,18 @@ import { TEAM_SIZE, analyzeTeam } from '../../core/team';
 import type { UnitDef } from '../../core/types';
 import { spellById } from '../../data/spells';
 import { ROLE_NAMES, UNIT_LIST, unitById } from '../../data/units';
-import { allyFigure } from '../../render/figures';
+import { characterSvg } from '../../render/characters';
 import type { App } from '../app';
 import { h } from '../dom';
 import { showHelp } from '../help';
-import { NUM, button, costPips, elBadge, elColor, reactionChip, spellFlow } from '../widgets';
+import { NUM, button, costPips, elBadge, elColor, reactionChip, spellFlow, tagLabel } from '../widgets';
 
 function spellLine(spellId: string): HTMLElement {
   const sp = spellById(spellId);
   return h(
     'div',
     { class: 'spell-line' },
-    h('div', { class: 'spell-line-head' }, h('span', { class: 'spell-name' }, sp.name), spellFlow(sp), costPips(sp.cost)),
+    h('div', { class: 'spell-line-head' }, tagLabel(sp), h('span', { class: 'spell-name' }, sp.name), spellFlow(sp), costPips(sp.cost)),
     h('p', { class: 'spell-desc' }, sp.desc),
   );
 }
@@ -37,17 +37,19 @@ function unitCard(unit: UnitDef, order: number, onToggle: () => void, full: bool
       'div',
       { class: 'unit-portrait' },
       h('div', { class: 'portrait-fig' }),
+      h('span', { class: 'portrait-code' }, unit.code),
       selected ? h('span', { class: 'order-seal' }, NUM[order]) : null,
     ),
     h(
       'div',
       { class: 'unit-body' },
       h('div', { class: 'unit-head' }, elBadge(unit.element, 'sm'), h('h3', {}, unit.name), h('span', { class: 'role-tag' }, ROLE_NAMES[unit.role])),
+      h('p', { class: 'unit-concept' }, unit.concept),
       h('dl', { class: 'unit-stats' }, h('div', {}, h('dt', {}, 'HP'), h('dd', {}, unit.maxHp)), h('div', {}, h('dt', {}, '공격'), h('dd', {}, unit.atk)), h('div', {}, h('dt', {}, '방어'), h('dd', {}, unit.def))),
-      h('div', { class: 'unit-spells' }, unit.spells.map(spellLine)),
+      h('div', { class: 'unit-spells' }, h('p', { class: 'unit-spells-head' }, `스킬 ${unit.spells.length}개 · 매 라운드 2장`), unit.spells.map(spellLine)),
     ),
   );
-  card.querySelector('.portrait-fig')!.innerHTML = allyFigure(unit.role, color, unit.element === 'star');
+  card.querySelector('.portrait-fig')!.innerHTML = characterSvg(unit.id);
   return card;
 }
 
@@ -62,7 +64,7 @@ function synergyPanel(selected: string[]): HTMLElement {
     h(
       'div',
       { class: 'syn-stats' },
-      h('div', { class: 'syn-stat' }, h('span', { class: 'syn-label' }, '최대 체인'), h('span', { class: `syn-value ${syn.maxChain >= 4 ? 'full' : ''}` }, syn.maxChain)),
+      h('div', { class: 'syn-stat' }, h('span', { class: 'syn-label' }, '가능한 최대 체인'), h('span', { class: `syn-value ${syn.maxChain >= 4 ? 'full' : ''}` }, syn.maxChain)),
       h('div', { class: 'syn-stat' }, h('span', { class: 'syn-label' }, '링크 쌍'), h('span', { class: 'syn-value' }, syn.linkPairs)),
     ),
     h('div', { class: 'syn-block' }, h('h4', {}, '발동 가능한 성좌 반응'), syn.reactions.length ? h('div', { class: 'chip-row' }, syn.reactions.map(reactionChip)) : h('p', { class: 'syn-none' }, '아직 없음')),
@@ -70,7 +72,7 @@ function synergyPanel(selected: string[]): HTMLElement {
       ? h(
           'div',
           { class: 'syn-block' },
-          h('h4', {}, '예시 순서'),
+          h('h4', {}, '손패가 맞으면 이런 순서로'),
           h(
             'ol',
             { class: 'syn-seq' },
@@ -109,7 +111,7 @@ export function teamScreen(app: App): HTMLElement {
         'header',
         { class: 'screen-head' },
         button('← 메인', () => app.go('title'), { class: 'btn-back' }),
-        h('div', { class: 'screen-title' }, h('h1', {}, '술사 편성')),
+        h('div', { class: 'screen-title' }, h('p', { class: 'eyebrow' }, 'SQUAD'), h('h1', {}, '술사 편성')),
         button('?', () => showHelp(), { class: 'btn-icon', title: '플레이 방법' }),
       ),
       h(

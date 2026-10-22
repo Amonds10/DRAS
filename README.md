@@ -1,6 +1,6 @@
 # 성좌술사 (Starweaver)
 
-별과 마법을 테마로 한 턴제 전투 프로토타입입니다. 술사 4명을 편성하고, 한 턴 안에서 마법 카드를 쏘는 순서를 정합니다. 앞 마법이 내보낸 성속을 다음 마법이 받으면 링크가 이어져 체인 배율과 성좌 반응이 발동합니다.
+별과 마법을 테마로 한 2.5D 턴제 전투 프로토타입입니다. 술사 6명 중 4명을 편성하고, 매 라운드 술사마다 스킬 5개 중 2장을 뽑습니다. 그중 무엇을 어떤 순서로 쓸지 정하면, 앞 스킬이 내보낸 성속을 다음 스킬이 받을 때 링크가 이어집니다. 링크가 이어지면 체인 배율과 성좌 반응이 발동합니다.
 
 ## 실행
 
@@ -11,12 +11,24 @@ npm test         # 전투 로직 단위 테스트
 npm run build    # 타입 검사 + 배포용 빌드 (dist/)
 ```
 
+WebGL이 필요합니다. 배경, 바닥 반사, 블룸, VFX는 three.js로 그립니다.
+
 ## 구조
 
-- `src/core/` 전투 규칙(DOM 의존 없음): 링크·체인, 전투 상태머신, 팀 궁합 분석, 런 진행과 저장
-- `src/data/` 성속·반응, 마법, 술사, 적, 층 구성, 보상
-- `src/render/` 배경 밤하늘, 별자리 형상(SVG)
-- `src/ui/` 화면: 메인 → 편성 → 성도(지도) → 전투 → 보상 → 결과
-- `tests/core/` Vitest 테스트
+- `src/core/`: 전투 규칙(DOM 의존 없음). 링크·체인, 전투 상태머신, 손패 뽑기, 팀 궁합 분석, 런 진행과 저장
+- `src/data/`: 성속·반응, 스킬 30종, 술사 6명, 적, 층 구성, 보상
+- `src/render/three/`: 2.5D 무대
+  - `environment.ts`: 층별 배경(하늘·도시·비·안개·오로라·일식)
+  - `fx.ts`: 스킬 VFX
+  - `stage.ts`: 카메라, 후처리, 캐릭터 판
+- `src/render/characters.ts`, `figures.ts`: 캐릭터와 적의 2D 일러스트(SVG)
+- `src/ui/`: 화면. 메인 → 편성 → 성도(지도) → 전투 → 보상 → 결과
+- `tests/core/`: Vitest 테스트
 
 기획과 로드맵은 [docs/PLAN.md](docs/PLAN.md)에 있습니다.
+
+## 사용한 외부 자원
+
+- VFX 텍스처: [Kenney Particle Pack](https://github.com/Calinou/kenney-particle-pack) by Kenney (CC0). 원본 중 42장을 흰색과 알파로 변환해 `public/fx/`에 넣었습니다. 라이선스는 `public/fx/LICENSE-kenney.txt`에 있습니다.
+- [three.js](https://threejs.org/) (MIT)
+- 글꼴: Noto Sans KR, Barlow Condensed (Google Fonts, OFL)

@@ -2,7 +2,7 @@ import { DEFAULT_MODS } from '../../core/battle';
 import { startBattle } from '../../core/run';
 import { FLOORS, type FloorKind } from '../../data/encounters';
 import { unitById } from '../../data/units';
-import { allyFigure } from '../../render/figures';
+import { characterSvg } from '../../render/characters';
 import type { App } from '../app';
 import { h, s } from '../dom';
 import { NUM, button, elColor, hpBar } from '../widgets';
@@ -87,7 +87,7 @@ export function mapScreen(app: App): HTMLElement {
               h('div', { class: 'party-fig' }),
               h('div', { class: 'party-info' }, h('div', { class: 'party-name' }, h('span', { class: 'slot-num' }, NUM[i]), u.name), h('div', { class: 'party-sub' }, `공격 ${a.atk} · 방어 ${a.def}`), hpBar(a.hp, a.maxHp, 0)),
             );
-            row.querySelector('.party-fig')!.innerHTML = allyFigure(u.role, elColor(u.element), u.element === 'star');
+            row.querySelector('.party-fig')!.innerHTML = characterSvg(u.id);
             return row;
           }),
           modLines.length ? h('div', { class: 'mods' }, modLines.map((m) => h('span', { class: 'mod-chip' }, m))) : null,
