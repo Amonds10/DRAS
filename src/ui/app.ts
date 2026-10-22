@@ -1,3 +1,4 @@
+import { sound, type Mood } from '../audio/sound';
 import { clearRun, loadRun, saveRun, type RunState } from '../core/run';
 import { floorPreset } from '../render/three/environment';
 import { getStage } from '../render/three/stage';
@@ -62,7 +63,18 @@ export class App {
     this.go(byPhase[run.phase]);
   }
 
+  /** 화면과 층에 맞는 배경 음악 */
+  private moodFor(screen: ScreenName): Mood {
+    if (screen === 'title' || screen === 'team') return 'title';
+    if (screen === 'result') return 'quiet';
+    if (screen !== 'battle' || !this.run) return 'map';
+    const byFloor: Mood[] = ['dawn', 'neon', 'dune', 'snow', 'sky'];
+    const boss = !!this.run.battle?.enemies.some((e) => e.defId === 'star_devourer' || e.defId === 'fallen_keeper');
+    return boss ? 'boss' : byFloor[Math.min(this.run.floor, 4)];
+  }
+
   go(screen: ScreenName): void {
+    sound.setMood(this.moodFor(screen));
     const render = { title: titleScreen, team: teamScreen, map: mapScreen, battle: battleScreen, reward: rewardScreen, result: resultScreen }[screen];
     if (screen === 'battle') this.bg.hidden = true;
     else this.showBackground(screen);

@@ -4,16 +4,17 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { characterAccent, characterSvg } from '../characters';
+import { characterAccent } from '../characters';
 import { enemyFigure } from '../figures';
 import { Environment, type ScenePreset } from './environment';
 import { FxSystem } from './fx';
 import { guessTier, loadPref, qualityFor, savePref, type GfxPref, type Quality, type Tier } from './quality';
+import { clipLength, Puppet } from './puppet';
 import { fxTexture, svgTexture } from './textures';
 
 export type Framing = 'menu' | 'battle';
 export type ActorPart = 'feet' | 'chest' | 'head' | 'top';
-export type ActorAnim = 'cast' | 'act' | 'hit' | 'die';
+export type ActorAnim = 'cast' | 'channel' | 'charge' | 'act' | 'hit' | 'die';
 
 export interface ActorSpec {
   uid: string;
@@ -23,10 +24,26 @@ export interface ActorSpec {
   boss?: boolean;
 }
 
+interface Aura {
+  level: number;
+  /** 화면에 보이는 값(부드럽게 따라간다) */
+  shown: number;
+  max: number;
+  color: THREE.Color;
+  glow: THREE.Sprite;
+  ring: THREE.Mesh;
+  emit: number;
+}
+
 interface Actor {
   spec: ActorSpec;
-  mesh: THREE.Mesh;
-  mat: THREE.MeshBasicMaterial;
+  /** 장면에 놓인 물체: 술사는 인형 뿌리, 적은 판 */
+  obj: THREE.Object3D;
+  mesh?: THREE.Mesh;
+  mat?: THREE.MeshBasicMaterial;
+  puppet?: Puppet;
+  aura: Aura | null;
+  order: number;
   shadow: THREE.Mesh;
   base: THREE.Vector3;
   /** 화면 비율 보정 전 가로 위치 */
@@ -294,6 +311,8 @@ export class Stage {
   private punchAmt = 0;
   private punchTarget = new THREE.Vector3();
   private screenFlash = 0;
+  private timeScale = 1;
+  private slowLeft = 0;
   private size = new THREE.Vector2(1, 1);
   /** 세로 화면에서는 진영 간격을 좁혀 카메라를 당긴다 */
   private xScale = 1;
@@ -351,7 +370,7 @@ export class Stage {
     this.composer.addPass(this.grade);
     this.composer.addPass(new OutputPass());
     for (const a of this.actors.values()) {
-      const caster = a.mesh.getObjectByName('shadow-caster');
+      const caster = a.obj.getObjectByName('shadow-caster');
       if (caster) caster.castShadow = q.shadows;
     }
     this.resize();
@@ -479,12 +498,16 @@ export class Stage {
 
   clearActors(): void {
     for (const a of this.actors.values()) {
-      this.actorGroup.remove(a.mesh, a.shadow);
-      a.mat.map?.dispose();
-      a.mat.dispose();
+      this.actorGroup.remove(a.obj, a.shadow);
+      if (a.puppet) a.puppet.dispose();
+      else {
+        a.mat!.map?.dispose();
+        a.mat!.dispose();
+        const caster = a.obj.getObjectByName('shadow-caster') as THREE.Mesh | undefined;
+        (caster?.material as THREE.Material | undefined)?.dispose();
+      }
       (a.shadow.material as THREE.Material).dispose();
-      const caster = a.mesh.getObjectByName('shadow-caster') as THREE.Mesh | undefined;
-      (caster?.material as THREE.Material | undefined)?.dispose();
+      this.dropAura(a);
     }
     this.actors.clear();
   }
@@ -493,7 +516,7 @@ export class Stage {
    * 캐릭터 판 재질. 2D 그림이 3D 장면에서 떠 보이지 않도록
    * 장면 색조를 곱하고, 화면상 빛 방향 쪽 외곽에 역광 테두리를 더하고, 발밑을 살짝 어둡게 한다.
    */
-  private actorMaterial(texture: THREE.Texture, w: number, h: number): THREE.MeshBasicMaterial {
+  private actorMaterial(texture: THREE.Texture, w: number, h: number, foot = true): THREE.MeshBasicMaterial {
     const mat = new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, toneMapped: true });
     const texel = new THREE.Vector2(3.5 / w, 3.5 / h);
     mat.onBeforeCompile = (sh) => {
@@ -507,8 +530,8 @@ export class Stage {
         float aFar = texture2D(map, vMapUv + uRimDir * uTexel * 2.5).a;
         float rim = clamp(aHere - 0.5 * (aToward + aFar), 0.0, 1.0) * step(0.5, aHere);
         // 발밑 그늘: 그림 아래쪽 12%를 조금 어둡게
-        float foot = mix(0.72, 1.0, smoothstep(0.06, 0.2, vMapUv.y));
-        diffuseColor.rgb = (diffuseColor.rgb * uTint + uFill * smoothstep(0.3, 0.9, vMapUv.y)) * foot + uRimCol * rim * uRimK;`,
+        float foot = ${foot ? 'mix(0.72, 1.0, smoothstep(0.06, 0.2, vMapUv.y))' : '1.0'};
+        diffuseColor.rgb = (diffuseColor.rgb * uTint + uFill * ${foot ? 'smoothstep(0.3, 0.9, vMapUv.y)' : '0.12'}) * foot + uRimCol * rim * uRimK * ${foot ? '1.0' : '0.4'};`,
       );
     };
     return mat;
@@ -524,40 +547,56 @@ export class Stage {
       const isAlly = spec.side === 'ally';
       const keeper = spec.defId === 'fallen_keeper';
       const height = isAlly ? 2.75 : spec.boss ? 4.6 : keeper ? 3.4 : 2.3;
-      const aspect = isAlly ? 200 / 320 : 1;
-      const width = height * aspect;
-      const res = isAlly ? [400, 640] : [360, 360];
-      const glow = isAlly ? 18 : 16;
-      const pad = Math.round(glow * 1.5);
-      const rim = isAlly ? characterAccent(spec.defId) : '#e0685a';
-      const svg = isAlly ? characterSvg(spec.defId) : enemyFigure(spec.defId);
-      const { texture } = svgTexture(svg, res[0], res[1], rim, glow);
-      const mat = this.actorMaterial(texture, res[0] + pad * 2, res[1] + pad * 2);
-      const mesh = new THREE.Mesh(plane, mat);
-      // 그림자는 실루엣 모양 그대로: 화면에는 안 그리고 그림자만 드리우는 판을 겹친다.
-      // (그림자 패스는 본 재질의 alphaTest를 따르므로, 빛 번짐까지 그림자가 되지 않게 따로 둔다)
-      const caster = new THREE.Mesh(plane, new THREE.MeshBasicMaterial({ map: texture, alphaTest: 0.5, colorWrite: false, depthWrite: false, side: THREE.DoubleSide, shadowSide: THREE.DoubleSide }));
-      caster.castShadow = this.quality.shadows;
-      caster.name = 'shadow-caster';
-      mesh.add(caster);
-      const sx = width * ((res[0] + pad * 2) / res[0]);
-      const sy = height * ((res[1] + pad * 2) / res[1]);
-      mesh.scale.set(sx, sy, 1);
-      const padWorld = (pad / res[1]) * height;
-      mesh.userData.yOffset = sy / 2 - padWorld;
-      mesh.userData.sy = sy;
+      const width = isAlly ? height * (120 / 300) : height;
+      const order = 10 + Math.round((z + 5) * 10) * 10;
+      let obj: THREE.Object3D;
+      let puppet: Puppet | undefined;
+      let mesh: THREE.Mesh | undefined;
+      let mat: THREE.MeshBasicMaterial | undefined;
+      if (isAlly) {
+        // 술사: 조각 인형(관절 애니메이션)
+        puppet = new Puppet(spec.defId, height, characterAccent(spec.defId), (tex, w, h) => {
+          const m = this.actorMaterial(tex, w, h, false);
+          // 무대 앞에 선 인물은 안개에 덜 묻히게 한다(그림 색이 바래지 않도록)
+          m.fog = false;
+          return m;
+        }, order, this.quality.shadows);
+        obj = puppet.root;
+      } else {
+        const res = [360, 360];
+        const glow = 16;
+        const pad = Math.round(glow * 1.5);
+        const { texture } = svgTexture(enemyFigure(spec.defId), res[0], res[1], '#e0685a', glow);
+        mat = this.actorMaterial(texture, res[0] + pad * 2, res[1] + pad * 2);
+        mesh = new THREE.Mesh(plane, mat);
+        // 그림자는 실루엣 모양 그대로: 화면에는 안 그리고 그림자만 드리우는 판을 겹친다.
+        const caster = new THREE.Mesh(plane, new THREE.MeshBasicMaterial({ map: texture, alphaTest: 0.5, colorWrite: false, depthWrite: false, side: THREE.DoubleSide, shadowSide: THREE.DoubleSide }));
+        caster.castShadow = this.quality.shadows;
+        caster.name = 'shadow-caster';
+        mesh.add(caster);
+        const sx = width * ((res[0] + pad * 2) / res[0]);
+        const sy = height * ((res[1] + pad * 2) / res[1]);
+        mesh.scale.set(sx, sy, 1);
+        const padWorld = (pad / res[1]) * height;
+        mesh.userData.yOffset = sy / 2 - padWorld;
+        mesh.userData.sx = sx;
+        mesh.userData.sy = sy;
+        mesh.renderOrder = order;
+        obj = mesh;
+      }
       const shadow = new THREE.Mesh(plane, new THREE.MeshBasicMaterial({ map: fxTexture('blob'), transparent: true, depthWrite: false }));
       shadow.rotation.x = -Math.PI / 2;
-      shadow.scale.set(width * 1.1, width * 0.45, 1);
+      shadow.scale.set(width * 1.4, width * 0.55, 1);
       shadow.renderOrder = 2;
       const hover = isAlly || keeper ? 0 : 0.35;
-      const base = new THREE.Vector3(x, 0, z);
       const actor: Actor = {
         spec,
+        obj,
         mesh,
         mat,
+        puppet,
         shadow,
-        base,
+        base: new THREE.Vector3(x, 0, z),
         slotX: x,
         height,
         width,
@@ -568,10 +607,12 @@ export class Stage {
         flash: 0,
         alpha: spec.dead ? (isAlly ? 0.25 : 0) : 1,
         dead: !!spec.dead,
+        aura: null,
+        order,
       };
-      mesh.renderOrder = 10 + Math.round((z + 5) * 10);
+      if (puppet && spec.dead) puppet.play('die');
       this.actors.set(spec.uid, actor);
-      this.actorGroup.add(mesh, shadow);
+      this.actorGroup.add(obj, shadow);
     };
     allies.forEach((s, i) => add(s, ...ALLY_SLOTS[i]));
     enemies.forEach((s, i) => add(s, ...eSlots[i]));
@@ -582,6 +623,7 @@ export class Stage {
     const a = this.actors.get(uid);
     if (!a) return new THREE.Vector3();
     const p = a.base.clone().add(a.offset);
+    if (a.puppet) p.x += a.puppet.reach;
     const y = a.hover + (part === 'feet' ? 0 : part === 'chest' ? a.height * 0.55 : part === 'head' ? a.height * 0.85 : a.height);
     p.y += y;
     if (part === 'feet') p.y = 0;
@@ -594,25 +636,35 @@ export class Stage {
     return { x: ((p.x + 1) / 2) * this.size.x, y: ((1 - p.y) / 2) * this.size.y };
   }
 
-  /** 액터의 화면상 상자(DOM 오버레이용) */
+  /** 액터의 화면상 상자(DOM 오버레이용). 동작으로 잠깐 움직여도 제자리 기준으로 둔다. */
   actorBox(uid: string): { left: number; top: number; width: number; height: number; feet: { x: number; y: number } } | null {
     const a = this.actors.get(uid);
     if (!a) return null;
-    const feet = this.project(this.actorPos(uid, 'feet'));
-    const top = this.project(this.actorPos(uid, 'top'));
+    const feet = this.project(a.base);
+    const top = this.project(a.base.clone().add(new THREE.Vector3(0, a.hover + a.height, 0)));
     const base = this.project(a.base.clone().add(new THREE.Vector3(0, a.hover, 0)));
     const right = this.project(a.base.clone().add(new THREE.Vector3(a.width / 2, a.hover, 0)));
     const w = Math.abs(right.x - base.x) * 2;
     return { left: base.x - w / 2, top: top.y, width: w, height: base.y - top.y, feet };
   }
 
+  /** 동작 재생. 술사는 관절 동작, 적은 판을 기울이고 늘였다 줄인다. */
   anim(uid: string, kind: ActorAnim): void {
     const a = this.actors.get(uid);
     if (!a) return;
     a.anim = { kind, t: 0 };
     if (kind === 'hit') a.flash = 1.4;
-    if (kind === 'cast') a.flash = 0.5;
+    if (kind === 'cast' || kind === 'channel') a.flash = 0.35;
+    if (kind === 'charge') a.flash = 0.6;
     if (kind === 'die') a.dead = true;
+    if (a.puppet) a.puppet.play(kind === 'cast' || kind === 'act' ? 'attack' : kind);
+  }
+
+  /** 동작 길이(초): 연출 대기 시간 맞추기용 */
+  animLength(uid: string, kind: ActorAnim): number {
+    const a = this.actors.get(uid);
+    if (!a?.puppet) return 0.5;
+    return clipLength(kind === 'cast' || kind === 'act' ? 'attack' : kind, a.puppet.motion);
   }
 
   setDead(uid: string, dead: boolean): void {
@@ -620,6 +672,55 @@ export class Stage {
     if (!a) return;
     a.dead = dead;
     a.alpha = dead ? (a.spec.side === 'ally' ? 0.25 : 0) : 1;
+    if (a.puppet) {
+      if (dead) a.puppet.play('die');
+      else a.puppet.revive();
+    }
+  }
+
+  /**
+   * 예열 오라: 중첩이 쌓일수록 몸 뒤 빛이 커지고, 발밑 마법진이 돌고, 불씨가 더 자주 피어오른다.
+   * level 0이면 끈다. max에 닿으면 흰빛이 섞여 '준비됨'을 알린다.
+   */
+  setAura(uid: string, level: number, color: string, max = 6): void {
+    const a = this.actors.get(uid);
+    if (!a) return;
+    if (level <= 0) {
+      this.dropAura(a);
+      return;
+    }
+    if (!a.aura) {
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: fxTexture('soft'), color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 }));
+      glow.renderOrder = a.order - 2;
+      const ring = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: fxTexture('magic_02'), color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 }));
+      ring.rotation.x = -Math.PI / 2;
+      ring.renderOrder = 3;
+      this.actorGroup.add(glow, ring);
+      a.aura = { level: 0, shown: 0, max, color: new THREE.Color(color), glow, ring, emit: 0 };
+    }
+    a.aura.level = level;
+    a.aura.max = max;
+    a.aura.color.set(color);
+  }
+
+  private dropAura(a: Actor): void {
+    if (!a.aura) return;
+    this.actorGroup.remove(a.aura.glow, a.aura.ring);
+    a.aura.glow.material.dispose();
+    (a.aura.ring.material as THREE.Material).dispose();
+    a.aura.ring.geometry.dispose();
+    a.aura = null;
+  }
+
+  /** 승리 자세 */
+  victory(): void {
+    for (const a of this.actors.values()) if (a.puppet && !a.dead) a.puppet.play('victory');
+  }
+
+  /** 잠깐 느리게(극딜 연출) */
+  slowMo(scale: number, seconds: number): void {
+    this.timeScale = scale;
+    this.slowLeft = seconds;
   }
 
   shake(amount = 0.25): void {
@@ -711,49 +812,121 @@ export class Stage {
       a.base.x = a.slotX * this.xScale;
       const isAlly = a.spec.side === 'ally';
       a.offset.set(0, 0, 0);
+      let roll = 0;
+      let sx = 1;
+      let sy = 1;
       if (a.anim) {
         a.anim.t += dt;
         const t = a.anim.t;
-        switch (a.anim.kind) {
-          case 'cast': {
-            const k = t < 0.15 ? t / 0.15 : Math.max(0, 1 - (t - 0.15) / 0.4);
-            a.offset.x = 0.55 * k;
-            if (t > 0.6) a.anim = null;
-            break;
+        // 술사는 인형이 직접 움직이고, 여기서는 적 판의 기울기와 늘임만 정한다.
+        if (!a.puppet) {
+          switch (a.anim.kind) {
+            case 'act': {
+              // 뒤로 몸을 젖혀 부풀었다가 아군 쪽으로 늘어나며 덮친다
+              const wind = Math.min(1, t / 0.16);
+              const lunge = t < 0.16 ? 0 : t < 0.26 ? (t - 0.16) / 0.1 : Math.max(0, 1 - (t - 0.26) / 0.34);
+              a.offset.x = -1.5 * lunge + 0.25 * wind * (1 - lunge);
+              roll = -0.16 * wind * (1 - lunge) + 0.22 * lunge;
+              sx = 1 + 0.1 * wind * (1 - lunge) + 0.25 * lunge;
+              sy = 1 + 0.08 * wind * (1 - lunge) - 0.15 * lunge;
+              if (t > 0.62) a.anim = null;
+              break;
+            }
+            case 'hit': {
+              const k = Math.max(0, 1 - t / 0.35);
+              a.offset.x = 0.3 * k * Math.min(1, t / 0.05);
+              roll = -0.12 * k;
+              sx = 1 - 0.12 * k;
+              sy = 1 + 0.1 * k;
+              if (t > 0.35) a.anim = null;
+              break;
+            }
+            case 'die': {
+              const k = Math.min(1, t / 0.7);
+              roll = k * k * 5;
+              sx = sy = 1 - k * 0.7;
+              a.offset.y = -k * 0.4;
+              a.alpha = Math.max(0, 1 - k);
+              if (t > 0.7) a.anim = null;
+              break;
+            }
+            default:
+              if (t > 0.6) a.anim = null;
           }
-          case 'act': {
-            const k = t < 0.12 ? t / 0.12 : Math.max(0, 1 - (t - 0.12) / 0.35);
-            a.offset.x = -1.1 * k;
-            if (t > 0.5) a.anim = null;
-            break;
-          }
-          case 'hit':
-            a.offset.x = Math.sin(t * 60) * 0.12 * Math.max(0, 1 - t / 0.3) * (isAlly ? -1 : 1);
-            if (t > 0.3) a.anim = null;
-            break;
-          case 'die':
-            a.offset.y = t * 0.5;
-            a.alpha = Math.max(isAlly ? 0.25 : 0, 1 - t / 0.6);
-            if (t > 0.6) a.anim = null;
-            break;
+        } else {
+          if (a.anim.kind === 'die') a.alpha = Math.max(0.25, 1 - a.anim.t / 0.8);
+          if (a.anim.t > 1.5) a.anim = null;
         }
       }
-      const bob = a.hover > 0 ? Math.sin(this.t * 1.4 + a.phase) * 0.08 : 0;
-      const breathe = isAlly && !a.dead ? 1 + Math.sin(this.t * 1.8 + a.phase) * 0.008 : 1;
-      a.mesh.position.set(a.base.x + a.offset.x, a.hover + bob + a.offset.y + (a.mesh.userData.yOffset as number) * breathe, a.base.z);
-      a.mesh.scale.y = (a.mesh.userData.sy as number) * breathe;
-      // 세로축 빌보드: 카메라가 흔들리거나 다가가도 판이 비스듬히 찌그러지지 않게 항상 카메라를 본다.
-      const yaw = Math.atan2(this.camera.position.x - a.mesh.position.x, this.camera.position.z - a.mesh.position.z);
-      a.mesh.rotation.y = yaw;
-      // 그림자 판은 빛을 정면으로 보게 돌려, 옆빛에서도 실루엣 그대로 그림자가 진다.
-      const caster = a.mesh.children[0];
-      if (caster) caster.rotation.y = lightYaw - yaw;
+      const yaw = Math.atan2(this.camera.position.x - a.base.x, this.camera.position.z - a.base.z);
       a.flash = Math.max(0, a.flash - dt * 4);
-      const tone = a.dead && isAlly ? 0.4 : 1;
-      a.mat.color.setScalar(tone + a.flash * 2.2);
-      a.mat.opacity = a.alpha;
-      a.shadow.position.set(a.base.x + a.offset.x, 0.02, a.base.z);
+      const tone = a.dead && isAlly ? 0.45 : 1;
+      if (a.puppet) {
+        a.puppet.update(this.t, dt, a.phase);
+        a.obj.position.set(a.base.x + a.offset.x, a.hover + a.offset.y, a.base.z);
+        a.obj.rotation.y = yaw;
+        a.puppet.caster.rotation.y = lightYaw - yaw;
+        a.puppet.setColor(tone + a.flash * 2.2, a.alpha);
+      } else {
+        const bob = a.hover > 0 ? Math.sin(this.t * 1.4 + a.phase) * 0.08 : 0;
+        const breathe = 1 + Math.sin(this.t * 2 + a.phase) * 0.025;
+        roll += Math.sin(this.t * 0.9 + a.phase) * 0.035;
+        const m = a.mesh!;
+        m.scale.set((m.userData.sx as number) * sx * (2 - breathe), (m.userData.sy as number) * sy * breathe, 1);
+        // 판은 발끝을 축으로 기울고 늘어난다
+        const yo = (m.userData.yOffset as number) * sy * breathe;
+        m.position.set(a.base.x + a.offset.x - Math.sin(roll) * yo, a.hover + bob + a.offset.y + Math.cos(roll) * yo, a.base.z);
+        m.rotation.set(0, yaw, roll);
+        // 그림자 판은 빛을 정면으로 보게 돌려, 옆빛에서도 실루엣 그대로 그림자가 진다.
+        const caster = m.children[0];
+        if (caster) caster.rotation.y = lightYaw - yaw;
+        a.mat!.color.setScalar(tone + a.flash * 2.2);
+        a.mat!.opacity = a.alpha;
+      }
+      const reach = a.puppet ? a.puppet.reach : 0;
+      a.shadow.position.set(a.base.x + a.offset.x + reach, 0.02, a.base.z);
       (a.shadow.material as THREE.MeshBasicMaterial).opacity = a.alpha * (a.hover > 0 ? 0.6 : 1) * (this.quality.shadows && this.env?.preset.scenery !== 'neon' ? 0.6 : 1);
+      this.updateAura(a, dt);
+    }
+  }
+
+  private updateAura(a: Actor, dt: number): void {
+    const au = a.aura;
+    if (!au) return;
+    au.shown += (au.level - au.shown) * Math.min(1, dt * 5);
+    const k = au.shown / au.max;
+    const ready = au.level >= Math.min(3, au.max);
+    const pulse = 0.8 + 0.2 * Math.sin(this.t * (4 + k * 6));
+    const reach = a.puppet ? a.puppet.reach : 0;
+    const x = a.base.x + reach;
+    const col = au.color.clone().lerp(new THREE.Color(0xffffff), ready ? 0.25 : 0);
+    au.glow.position.set(x, a.height * 0.5, a.base.z - 0.05);
+    const s = a.height * (0.9 + k * 1.1) * pulse;
+    au.glow.scale.set(s * 0.8, s * 1.15, 1);
+    au.glow.material.color.copy(col);
+    au.glow.material.opacity = (0.18 + k * 0.5) * a.alpha;
+    au.ring.position.set(x, 0.05, a.base.z);
+    au.ring.rotation.z += dt * (0.6 + k * 2.4);
+    const rs = 1.4 + k * 1.6;
+    au.ring.scale.set(rs, rs, 1);
+    (au.ring.material as THREE.MeshBasicMaterial).color.copy(col);
+    (au.ring.material as THREE.MeshBasicMaterial).opacity = (0.25 + k * 0.6) * a.alpha;
+    // 불씨: 중첩당 초당 2개
+    if (!this.fx || a.dead) return;
+    au.emit += dt * au.shown * 2;
+    while (au.emit >= 1) {
+      au.emit -= 1;
+      const p = new THREE.Vector3(x + (Math.random() - 0.5) * a.width * 1.4, Math.random() * a.height * 0.5, a.base.z + 0.1);
+      this.fx.sprite({
+        tex: Math.random() < 0.5 ? 'flame_02' : 'star_05',
+        color: col,
+        pos: p,
+        size: 0.18 + k * 0.2,
+        to: 0.04,
+        life: 0.8 + Math.random() * 0.5,
+        vel: new THREE.Vector3((Math.random() - 0.5) * 0.3, 1.2 + k * 1.6, 0),
+        curve: 'pulse',
+      });
     }
   }
 
@@ -763,8 +936,13 @@ export class Stage {
       this.last = now;
       return;
     }
-    const dt = Math.min(0.05, (now - this.last) / 1000);
+    const raw = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
+    if (this.slowLeft > 0) {
+      this.slowLeft -= raw;
+      if (this.slowLeft <= 0) this.timeScale = 1;
+    }
+    const dt = raw * this.timeScale;
     this.t += dt;
     this.updateCamera(dt);
     this.updateActors(dt);

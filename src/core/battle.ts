@@ -265,6 +265,7 @@ function applyEffects(state: BattleState, effects: Effect[], ctx: CastContext, r
           const k = statusStacks(ctx.caster, 'kindle');
           hctx.extraMult = (hctx.extraMult ?? 1) * (1 + k * eff.kindleMult);
           ctx.caster.statuses = ctx.caster.statuses.filter((s) => s.id !== 'kindle');
+          if (k > 0) events.push({ type: 'unleash', allyUid: ctx.caster.uid, stacks: k, mult: Math.round((1 + k * eff.kindleMult) * 100) / 100 });
         }
         // 공명 해방: 그 성속 각인을 모두 소모
         if (eff.releaseAttune) {
@@ -347,7 +348,7 @@ function applyEffects(state: BattleState, effects: Effect[], ctx: CastContext, r
       case 'kindle':
         for (const a of allyTargets(state, ctx.caster, eff.target)) {
           addStatus(a, 'kindle', 99, eff.amount);
-          events.push({ type: 'status', targetUid: a.uid, status: 'kindle', turns: 99 });
+          events.push({ type: 'status', targetUid: a.uid, status: 'kindle', turns: 99, stacks: statusStacks(a, 'kindle') });
         }
         break;
       case 'mark': {

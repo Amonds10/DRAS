@@ -23,6 +23,8 @@ WebGL이 필요합니다. 배경, 바닥 반사, 블룸, VFX는 three.js로 그�
 | 별흔 ✧ | 적(최대 10) | 별흔 주문, 연타 | 아군 타격마다 중첩 × 0.4 고정 피해. 일부 주문은 터뜨려 소모 |
 | 속성 공명 | 전투 전체(속성별 최대 10) | 시전마다 내보낸 성속 +1 | 공명 주문은 중첩당 +12%, 해방 주문은 소모해 중첩당 +25% |
 
+예열은 눈으로 보이게 했습니다. 중첩마다 술사 뒤 오라가 커지고 발밑 마법진이 빨리 돌며 불씨가 오르고, 상승음이 반음씩 높아집니다. 분대 칸의 6칸 게이지가 3칸을 넘으면 READY가 뜨고, 극딜 카드에 지금 배율(예: ▲4 ×3.8)이 붙습니다. 극딜을 쓰면 컷인과 함께 시간이 잠깐 느려지고 큰 피해 숫자가 터집니다.
+
 편성 화면의 추천 덱(`src/data/decks.ts`)은 팀과 주문서를 한 번에 맞춥니다.
 
 | 덱 | 운영 | 핵심 술사 |
@@ -56,7 +58,10 @@ WebGL이 필요합니다. 배경, 바닥 반사, 블룸, VFX는 three.js로 그�
   - `quality.ts`: 그래픽 품질(자동/높음/낮음). 높음은 그림자, MSAA, 빛줄기, 풀이 더 많다
   - `fx.ts`: 스킬 VFX
   - `stage.ts`: 카메라, 후처리, 캐릭터 판
-- `src/render/characters.ts`, `figures.ts`: 캐릭터와 적의 2D 일러스트(SVG)
+- `src/render/rig.ts`: 술사 6명의 일러스트(SVG)를 뼈대 조각(머리·머리카락·팔·몸·다리·망토)으로 나눈 것
+- `src/render/three/puppet.ts`: 조각을 판으로 세운 컷아웃 인형. 숨쉬기, 무기별 공격(찌르기·들어올리기·사격·베기·들이받기), 예열, 피격, 쓰러짐, 승리 자세
+- `src/render/figures.ts`: 적 형상(SVG). 무대에서 몸을 젖혔다 덮치고, 맞으면 찌그러지고, 쓰러지면 돌며 사라진다
+- `src/audio/sound.ts`: 효과음과 배경 음악. 마법 소리는 FM 합성 종소리(성속마다 음 높이가 다름), 배경 음악은 장면별 화음 진행 위에 패드·베이스·아르페지오·북을 실시간으로 엮는다
 - `src/ui/`: 화면. 메인 → 편성 → 성도(지도) → 전투 → 보상 → 결과
 - `tests/core/`: Vitest 테스트
 
@@ -65,6 +70,7 @@ WebGL이 필요합니다. 배경, 바닥 반사, 블룸, VFX는 three.js로 그�
 ## 사용한 외부 자원
 
 - VFX 텍스처: [Kenney Particle Pack](https://github.com/Calinou/kenney-particle-pack) by Kenney (CC0). 원본 중 42장을 흰색과 알파로 변환해 `public/fx/`에 넣었습니다. 라이선스는 `public/fx/LICENSE-kenney.txt`에 있습니다.
+- 효과음: Kenney의 UI·Casino·RPG 사운드(CC0, [iwenzhou/kenney](https://github.com/iwenzhou/kenney) 미러에서). 16개를 골라 `public/sfx/`에 넣었습니다. 라이선스는 `public/sfx/LICENSE-kenney.md`에 있습니다. 마법 효과음과 배경 음악은 Web Audio로 직접 합성합니다.
 - [three.js](https://threejs.org/) (MIT)
 - 글꼴: Noto Serif KR, Bodoni Moda ([Fontsource](https://fontsource.org/)로 번들, OFL)
 - 디자인 스킬: [taste-skill](https://github.com/Leonxlnx/taste-skill) (MIT). Claude Code용 프런트엔드 디자인 지침으로 `.claude/skills/design-taste-frontend/`에 넣었습니다.

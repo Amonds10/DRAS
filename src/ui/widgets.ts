@@ -73,8 +73,12 @@ export function statusRow(statuses: Status[]): HTMLElement {
     { class: 'status-row' },
     statuses.map((st) => {
       const meta = STATUS_META[st.id];
-      const label = st.id === 'burn' || st.id === 'atkUp' ? `${meta.name} ${st.value ?? ''}` : meta.name;
-      return h('span', { class: `status ${meta.debuff ? 'debuff' : 'buff'}`, title: `${label} (${st.turns >= 99 ? '지속' : `${st.turns}턴`})` }, meta.glyph, st.turns < 99 ? h('small', {}, st.turns) : null);
+      // 중첩형(예열·별흔·연소)은 중첩 수를, 나머지는 남은 턴을 작게 붙인다
+      const stacking = st.id === 'kindle' || st.id === 'starmark' || st.id === 'burn';
+      const lasting = st.turns >= 90;
+      const label = st.id === 'burn' || st.id === 'atkUp' || stacking ? `${meta.name} ${st.value ?? ''}` : meta.name;
+      const small = stacking ? st.value : lasting ? null : st.turns;
+      return h('span', { class: `status ${meta.debuff ? 'debuff' : 'buff'} st-${st.id}`, title: `${label} (${lasting ? '지속' : `${st.turns}턴`})` }, meta.glyph, small != null ? h('small', {}, small) : null);
     }),
   );
 }

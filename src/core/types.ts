@@ -240,7 +240,8 @@ export type BattleEvent =
   | { type: 'damage'; targetUid: string; amount: number; absorbed: number; source: DamageSource; hpAfter: number; shieldAfter: number }
   | { type: 'heal'; targetUid: string; amount: number; hpAfter: number }
   | { type: 'shield'; targetUid: string; amount: number; shieldAfter: number }
-  | { type: 'status'; targetUid: string; status: StatusId; turns: number }
+  | { type: 'status'; targetUid: string; status: StatusId; turns: number; stacks?: number }
+  | { type: 'unleash'; allyUid: string; stacks: number; mult: number }
   | { type: 'purge'; targetUid: string }
   | { type: 'stardust'; amount: number }
   | { type: 'attune'; element: Element; total: number }

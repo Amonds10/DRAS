@@ -1,3 +1,4 @@
+import { sound } from '../../audio/sound';
 import { FLOORS } from '../../data/encounters';
 import type { App } from '../app';
 import { h } from '../dom';
@@ -18,6 +19,12 @@ function gfxItem(): HTMLButtonElement {
     h('b', {}, '그래픽'),
     sub,
   );
+}
+
+/** 소리 토글: 음악·효과음 → 효과음만 → 끔 */
+function soundItem(): HTMLButtonElement {
+  const sub = h('small', {}, sound.label());
+  return h('button', { type: 'button', class: 'menu-item menu-item-sub', title: '소리', 'data-sfx': 'none', onclick: () => (sub.textContent = sound.cycle()) }, h('b', {}, '소리'), sub);
 }
 
 export function titleScreen(app: App): HTMLElement {
@@ -62,6 +69,7 @@ export function titleScreen(app: App): HTMLElement {
       menuItem('새 여정', 'NEW GAME', startNew, !saved),
       menuItem('플레이 방법', 'GUIDE', () => showHelp()),
       gfxItem(),
+      soundItem(),
     ),
     h('footer', { class: 'title-foot' }, 'PROTOTYPE v0.4'),
   );
