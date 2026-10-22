@@ -106,7 +106,9 @@ export function buildTerrain(ctx: BuildCtx): (x: number, z: number) => number {
     c.lerp(steep, steepK);
     // 사구는 바람받이(햇빛 쪽) 경사를 살짝 밝게
     if (p.terrain === 'mountains' && y > 40) c.lerp(high, smoothstep(0.2, 0.0, slope) * 0.8);
-    c.multiplyScalar(0.94 + (n - 0.5) * 0.18);
+    // 그림처럼 큰 색 얼룩: 낮은 주파수 노이즈로 밝은 면과 어두운 면을 크게 나눈다
+    const patch = fbm2(x * 0.03 + 7, z * 0.03 - 3, 3, 23);
+    c.multiplyScalar(0.86 + (n - 0.5) * 0.12 + smoothstep(0.42, 0.62, patch) * 0.22);
     cols.set([c.r, c.g, c.b], i * 3);
   }
   geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));

@@ -17,7 +17,7 @@
     "vitest": "^4.1.12"
   },
   "dependencies": {
-    "@fontsource/cormorant-garamond": "^5.3.0",
+    "@fontsource/bodoni-moda": "^5.3.0",
     "@fontsource/noto-serif-kr": "^5.3.1",
     "three": "^0.186.1"
   }

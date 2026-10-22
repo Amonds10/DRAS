@@ -15,9 +15,9 @@ import { h, sleep } from '../dom';
 import { cycleGraphics, graphicsLabel } from '../graphics';
 import { showHelp } from '../help';
 import type { LinkHint } from '../widgets';
-import { TAG_NAMES } from '../../data/spells';
+import { TAG_EN, TAG_NAMES } from '../../data/spells';
 import { characterBust } from '../../render/characters';
-import { cornerStars, sealSvg, sigilRingSvg } from '../arcane';
+import { cornerStars, guillocheSvg, sealSvg, sigilRingSvg } from '../arcane';
 import { glyph } from '../glyphs';
 import { NUM, allyName, button, elBadge, elColor, hpBar, intentView, modal, spellFlow, statusRow, updateHpBar } from '../widgets';
 
@@ -281,7 +281,10 @@ export function battleScreen(app: App): HTMLElement {
 
   const hotkeys: { uid: string; spellId: string }[] = [];
 
-  /** 스킬 버튼: 원형 아이콘 + 이름 + 비용. 링크 예고는 오른쪽 위 작은 표식. */
+  /**
+   * 주문 카드: 리버스 1999 전투 카드처럼 세로 카드.
+   * 위에 비용 별, 가운데 금선 리본 위 인장, 아래 이름과 영문 표식. 고른 카드는 순서 도장이 찍힌다.
+   */
   const skillButton = (a: Ally, id: string, planIdx: number, myCost: number) => {
     const unit = unitById(a.defId);
     const sp = spellById(id);
@@ -290,6 +293,9 @@ export function battleScreen(app: App): HTMLElement {
     hotkeys.push({ uid: a.uid, spellId: id });
     const hint = busy || tooCostly ? undefined : linkHint(a.uid, id);
     const hintText = !hint ? null : hint.kind === 'link' ? `×${hint.text.split('×')[1]}` : hint.kind === 'reaction' ? hint.text.split(' ')[0] : hint.kind === 'break' ? '끊김' : null;
+    const art = h('span', { class: 'sk-art' });
+    art.innerHTML = guillocheSvg(id.length * 1.3 + id.charCodeAt(0) * 0.07);
+    art.append(sigilDisc(sp.tag, null));
     const b = h(
       'button',
       {
@@ -302,17 +308,18 @@ export function battleScreen(app: App): HTMLElement {
         onmouseenter: () => showPeek(a.uid, id),
         onfocus: () => showPeek(a.uid, id),
       },
-      sigilDisc(sp.tag, chosen ? NUM[planIdx] : null),
+      h('span', { class: 'sk-top' }, h('span', { class: 'sk-cost', 'aria-hidden': 'true' }, Array.from({ length: sp.cost }, () => h('i'))), h('kbd', { class: 'sk-key', 'aria-hidden': 'true' }, `${hotkeys.length}`)),
+      art,
       h('span', { class: 'sk-name' }, sp.name),
-      h('span', { class: 'sk-cost', 'aria-hidden': 'true' }, Array.from({ length: sp.cost }, () => h('i'))),
+      h('span', { class: 'sk-en' }, TAG_EN[sp.tag]),
       hintText ? h('span', { class: 'sk-hint' }, hintText) : null,
-      h('kbd', { class: 'sk-key', 'aria-hidden': 'true' }, `${hotkeys.length}`),
+      chosen ? h('span', { class: 'sk-order' }, NUM[planIdx]) : null,
     );
     b.dataset.peek = `${a.uid}:${id}`;
     return b;
   };
 
-  /** 인장 원판: 눈금 고리 + 유형 아이콘(+ 고른 순서) */
+  /** 인장 원판: 눈금 고리 + 유형 아이콘 */
   const sigilDisc = (tag: Parameters<typeof glyph>[0], order: string | null) => {
     const disc = h('span', { class: 'sk-disc' });
     disc.innerHTML = sigilRingSvg();

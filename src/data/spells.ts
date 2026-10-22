@@ -47,6 +47,23 @@ export function spellById(id: string): SpellDef {
   return s;
 }
 
+/** 카드 아래 작은 영문 표식(리버스 1999식 Didone 대문자) */
+export const TAG_EN: Record<SkillTag, string> = {
+  strike: 'STRIKE',
+  multi: 'FLURRY',
+  aoe: 'NOVA',
+  pierce: 'PIERCE',
+  execute: 'VERDICT',
+  drain: 'DRAIN',
+  dot: 'BURN',
+  delayed: 'OMEN',
+  debuff: 'HEX',
+  heal: 'MEND',
+  shield: 'WARD',
+  buff: 'RITE',
+  utility: 'ARCANA',
+};
+
 export const TAG_NAMES: Record<SkillTag, string> = {
   strike: '단일',
   multi: '연타',

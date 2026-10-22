@@ -79,3 +79,29 @@ export function cornerStars(): string {
   const star = (cls: string) => `<i class="corner ${cls}">✦</i>`;
   return star('tl') + star('tr') + star('bl') + star('br');
 }
+
+/**
+ * 기요셰(guilloche) 리본: 가는 사인 곡선 여러 가닥이 엇갈려 흐르는 금선 무늬.
+ * 리버스 1999 전투 카드 연출의 금선 리본을 참고했다. seed마다 흐름이 달라진다.
+ */
+export function guillocheSvg(seed: number, strands = 9): string {
+  let paths = '';
+  for (let k = 0; k < strands; k++) {
+    const ph = seed * 1.7 + k * 0.38;
+    const amp = 18 + k * 1.6;
+    let d = '';
+    for (let i = 0; i <= 40; i++) {
+      const y = (i / 40) * 140 - 10;
+      const x = 50 + Math.sin(y * 0.045 + ph) * amp * Math.sin(seed + k * 0.2) + Math.sin(y * 0.11 + ph * 2) * 4;
+      d += `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`;
+    }
+    paths += `<path d="${d}" fill="none" stroke="currentColor" stroke-width="${k % 3 === 0 ? 0.7 : 0.35}" opacity="${(0.35 + (k % 3) * 0.2).toFixed(2)}"/>`;
+  }
+  let sparks = '';
+  for (let i = 0; i < 6; i++) {
+    const x = 20 + ((Math.sin(seed * 9.1 + i * 3.7) + 1) / 2) * 60;
+    const y = 10 + ((Math.cos(seed * 4.3 + i * 2.1) + 1) / 2) * 100;
+    sparks += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${i % 2 ? 0.7 : 1.1}" fill="currentColor"/>`;
+  }
+  return `<svg viewBox="0 0 100 120" preserveAspectRatio="xMidYMid slice" aria-hidden="true" class="guilloche">${paths}${sparks}</svg>`;
+}

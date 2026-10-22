@@ -1,9 +1,10 @@
+import '@fontsource/bodoni-moda/500.css';
+import '@fontsource/bodoni-moda/600.css';
+import '@fontsource/bodoni-moda/500-italic.css';
+import '@fontsource/noto-serif-kr/400.css';
+import '@fontsource/noto-serif-kr/500.css';
 import '@fontsource/noto-serif-kr/700.css';
 import '@fontsource/noto-serif-kr/900.css';
-import '@fontsource/cormorant-garamond/600.css';
-import '@fontsource/cormorant-garamond/700.css';
-import '@fontsource/cormorant-garamond/600-italic.css';
-import '@fontsource/cormorant-garamond/700-italic.css';
 import './styles.css';
 import { App } from './ui/app';
 
