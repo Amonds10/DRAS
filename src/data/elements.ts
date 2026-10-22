@@ -103,16 +103,16 @@ export function reactionById(id: string): ReactionDef {
   return r;
 }
 
-export const STATUS_META: Record<string, { name: string; glyph: string; debuff: boolean }> = {
-  stun: { name: '기절', glyph: '✕', debuff: true },
-  weaken: { name: '약화', glyph: '↓', debuff: true },
-  burn: { name: '연소', glyph: '♨', debuff: true },
-  expose: { name: '노출', glyph: '◎', debuff: true },
-  atkUp: { name: '공격 상승', glyph: '↑', debuff: false },
-  seal: { name: '성식', glyph: '⊘', debuff: true },
-  doom: { name: '폭격 예정', glyph: '◎', debuff: true },
-  taunt: { name: '도발', glyph: '⛨', debuff: false },
-  counter: { name: '반격', glyph: '⟲', debuff: false },
-  kindle: { name: '예열', glyph: '▲', debuff: false },
-  starmark: { name: '별흔', glyph: '✧', debuff: true },
+export const STATUS_META: Record<string, { name: string; glyph: string; debuff: boolean; desc: string }> = {
+  stun: { name: '기절', glyph: '✕', debuff: true, desc: '이번 턴에 행동하지 못한다' },
+  weaken: { name: '약화', glyph: '↓', debuff: true, desc: '주는 피해가 줄어든다' },
+  burn: { name: '연소', glyph: '♨', debuff: true, desc: '라운드가 끝날 때 중첩만큼 피해' },
+  expose: { name: '노출', glyph: '◎', debuff: true, desc: '받는 피해가 늘어난다' },
+  atkUp: { name: '공격 상승', glyph: '↑', debuff: false, desc: '주는 피해가 늘어난다' },
+  seal: { name: '성식', glyph: '⊘', debuff: true, desc: '그 성속으로 가는 링크가 끊긴다' },
+  doom: { name: '폭격 예정', glyph: '◎', debuff: true, desc: '라운드가 끝날 때 폭격이 떨어진다' },
+  taunt: { name: '도발', glyph: '⛨', debuff: false, desc: '적의 공격을 끌어온다' },
+  counter: { name: '반격', glyph: '⟲', debuff: false, desc: '맞으면 되받아친다' },
+  kindle: { name: '예열', glyph: '▲', debuff: false, desc: '극딜 주문이 소모해 피해를 크게 키운다' },
+  starmark: { name: '별흔', glyph: '✧', debuff: true, desc: '아군에게 맞을 때마다 중첩 × 0.4 추가 피해' },
 };

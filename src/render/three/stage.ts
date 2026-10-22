@@ -1001,19 +1001,19 @@ export class Stage {
     const x = a.base.x + reach;
     const col = au.color.clone().lerp(new THREE.Color(0xffffff), ready ? 0.25 : 0);
     au.glow.position.set(x, a.height * 0.5, a.base.z - 0.05);
-    const s = a.height * (0.9 + k * 1.1) * pulse;
+    const s = a.height * (0.75 + k * 0.55) * pulse;
     au.glow.scale.set(s * 0.8, s * 1.15, 1);
     au.glow.material.color.copy(col);
-    au.glow.material.opacity = (0.18 + k * 0.5) * a.alpha;
+    au.glow.material.opacity = (0.08 + k * 0.22) * a.alpha;
     au.ring.position.set(x, 0.05, a.base.z);
     au.ring.rotation.z += dt * (0.6 + k * 2.4);
     const rs = 1.4 + k * 1.6;
     au.ring.scale.set(rs, rs, 1);
     (au.ring.material as THREE.MeshBasicMaterial).color.copy(col);
-    (au.ring.material as THREE.MeshBasicMaterial).opacity = (0.25 + k * 0.6) * a.alpha;
+    (au.ring.material as THREE.MeshBasicMaterial).opacity = (0.2 + k * 0.45) * a.alpha;
     // 불씨: 중첩당 초당 2개
     if (!this.fx || a.dead) return;
-    au.emit += dt * au.shown * 2;
+    au.emit += dt * au.shown * 1.2;
     while (au.emit >= 1) {
       au.emit -= 1;
       const p = new THREE.Vector3(x + (Math.random() - 0.5) * a.width * 1.4, Math.random() * a.height * 0.5, a.base.z + 0.1);

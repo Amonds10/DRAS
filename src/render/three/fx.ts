@@ -184,7 +184,7 @@ export class FxSystem {
       const a = Math.random() * Math.PI * 2;
       this.sprite({ tex: 'spark_06', color: 0xffffff, pos, size: [0.08, 0.6 * scale], to: [0.02, 1.4 * scale], life: 0.28, rot: a - Math.PI / 2, vel: new THREE.Vector3(Math.cos(a), Math.sin(a), 0).multiplyScalar(5 * scale), drag: 4, curve: 'flash' });
     }
-    this.linger(pos, color, Math.round(8 * scale), 1.2 * scale);
+    this.linger(pos, color, Math.round(5 * scale), 1.2 * scale);
     this.light(pos, color, 2.6 * scale, 0.5);
   }
 
@@ -345,7 +345,7 @@ export class FxSystem {
    */
   signature(element: string, pos: THREE.Vector3, color: THREE.ColorRepresentation, scale = 1): void {
     scale *= 1.35;
-    this.linger(pos, color, Math.round(6 * scale), 1.4 * scale);
+    this.linger(pos, color, Math.round(3 * scale), 1.4 * scale);
     switch (element) {
       case 'sol':
         for (let i = 0; i < 8; i++) this.sprite({ tex: 'trace_06', color, pos, size: [0.25 * scale, 0.4], to: [0.12 * scale, 3.4 * scale], life: 0.35, rot: (i / 8) * Math.PI * 2, curve: 'flash' });

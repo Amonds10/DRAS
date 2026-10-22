@@ -78,7 +78,13 @@ export function statusRow(statuses: Status[]): HTMLElement {
       const lasting = st.turns >= 90;
       const label = st.id === 'burn' || st.id === 'atkUp' || stacking ? `${meta.name} ${st.value ?? ''}` : meta.name;
       const small = stacking ? st.value : lasting ? null : st.turns;
-      return h('span', { class: `status ${meta.debuff ? 'debuff' : 'buff'} st-${st.id}`, title: `${label} (${lasting ? '지속' : `${st.turns}턴`})` }, meta.glyph, small != null ? h('small', {}, small) : null);
+      return h(
+        'span',
+        { class: `status ${meta.debuff ? 'debuff' : 'buff'} st-${st.id}`, title: `${meta.debuff ? '약화 효과' : '강화 효과'} · ${label}: ${meta.desc} (${lasting ? '지속' : `${st.turns}턴 남음`})` },
+        h('i', { class: 'st-dir', 'aria-hidden': 'true' }, meta.debuff ? '▼' : '▲'),
+        meta.glyph,
+        small != null ? h('small', {}, small) : null,
+      );
     }),
   );
 }

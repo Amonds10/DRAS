@@ -217,6 +217,10 @@ export function battleScreen(app: App): HTMLElement {
         planIdx >= 0 ? h('span', { class: 'order-tag' }, NUM[planIdx]) : null,
         isAlive(a) && threatCount(a) ? h('span', { class: 'threat-tag', title: '이번 턴 공격받을 예정' }, '!') : null,
       ),
+      // 머리 위 상태: 강화(초록 ▲)와 약화(빨강 ▼), 보호막
+      isAlive(a) && (a.statuses.length || a.shield)
+        ? h('div', { class: 'actor-status' }, a.shield ? h('span', { class: 'status shield-chip', title: `보호막 ${a.shield}` }, '⛨', h('small', {}, a.shield)) : null, statusRow(a.statuses))
+        : null,
     );
     void fc;
     void i;
@@ -463,6 +467,7 @@ export function battleScreen(app: App): HTMLElement {
   };
 
   function showPeek(uid: string, spellId: string) {
+    if (busy) return;
     peek = { uid, spellId };
     peekSlot.replaceChildren(...[peekView()].filter((x): x is HTMLElement => !!x));
     placePeek();
@@ -766,6 +771,117 @@ export function battleScreen(app: App): HTMLElement {
     }
   };
 
+  /** 한 시전이 만든 결과: 다음 시전·적 차례 전까지의 이벤트를 모은다 */
+  const castSummary = (events: BattleEvent[], from: number) => {
+    let dmg = 0;
+    let hits = 0;
+    let heal = 0;
+    let shield = 0;
+    let dust = 0;
+    let reaction: string | null = null;
+    const buffs = new Map<string, number>();
+    const debuffs = new Map<string, number>();
+    for (let i = from + 1; i < events.length; i++) {
+      const ev = events[i];
+      if (ev.type === 'cast' || ev.type === 'enemyAct' || ev.type === 'enemyStunned' || ev.type === 'round') break;
+      if (ev.type === 'damage' && ev.source !== 'enemy') {
+        dmg += ev.amount;
+        hits++;
+      } else if (ev.type === 'heal') heal += ev.amount;
+      else if (ev.type === 'shield' && !ev.targetUid.startsWith('e')) shield += ev.amount;
+      else if (ev.type === 'stardust' && ev.amount > 0) dust += ev.amount;
+      else if (ev.type === 'reaction') reaction = reactionById(ev.reactionId).name;
+      else if (ev.type === 'status') {
+        const meta = STATUS_META[ev.status];
+        const label = ev.status === 'kindle' ? `${meta.name} ${ev.stacks ?? ''}`.trim() : meta.name;
+        (meta.debuff ? debuffs : buffs).set(label, 1);
+      }
+    }
+    const chips: HTMLElement[] = [];
+    if (dmg) chips.push(h('span', { class: 'rc dmg' }, `피해 ${dmg}`, hits > 1 ? h('small', {}, ` ${hits}타`) : null));
+    if (heal) chips.push(h('span', { class: 'rc heal' }, `회복 ${heal}`));
+    if (shield) chips.push(h('span', { class: 'rc shield' }, `⛨ 보호막 ${shield}`));
+    for (const b of buffs.keys()) chips.push(h('span', { class: 'rc buff' }, `▲ ${b}`));
+    for (const d of debuffs.keys()) chips.push(h('span', { class: 'rc debuff' }, `▼ ${d}`));
+    if (dust) chips.push(h('span', { class: 'rc dust' }, `✦ 성진 +${dust}`));
+    if (reaction) chips.push(h('span', { class: 'rc react' }, `반응 ${reaction}`));
+    return chips;
+  };
+
+  /** 시전 이름표(스타레일·리버스 1999처럼 위쪽에 크게): 초상, 주문 이름, 유형, 링크, 결과 */
+  const plateSlot = h('div', { class: 'plate-slot', 'aria-live': 'polite' });
+  const railSlot = h('div', { class: 'rail-slot' });
+  const hitSlot = h('div', { class: 'hit-slot' });
+  scene.append(plateSlot, railSlot, hitSlot);
+
+  const showSkillPlate = (allyUid: string, spellId: string, chainText: string, linked: boolean, chips: HTMLElement[], step: string) => {
+    const ally = battle.allies.find((a) => a.uid === allyUid)!;
+    const unit = unitById(ally.defId);
+    const sp = spellById(spellId);
+    const bust = h('div', { class: 'sp-bust' });
+    bust.innerHTML = characterBust(ally.defId);
+    plateSlot.replaceChildren(
+      h(
+        'div',
+        { class: `skill-plate ${linked ? 'linked' : ''}`, style: { '--el': elColor(unit.element) } },
+        bust,
+        h(
+          'div',
+          { class: 'sp-body' },
+          h('small', { class: 'sp-who' }, `${step} · ${unit.name} `, h('span', {}, unit.code)),
+          h('b', { class: 'sp-name' }, glyph(sp.tag, 'sp-glyph'), sp.name),
+          h('div', { class: 'sp-meta' }, h('span', { class: 'sp-tag' }, `${TAG_NAMES[sp.tag]} · ${TAG_EN[sp.tag]}`), h('span', { class: `sp-link ${linked ? 'on' : ''}` }, chainText)),
+          chips.length ? h('div', { class: 'sp-result' }, chips) : null,
+        ),
+      ),
+    );
+  };
+
+  const showEnemyPlate = (enemyUid: string, text: string) => {
+    const def = enemyById(battle.enemies.find((e) => e.uid === enemyUid)!.defId);
+    plateSlot.replaceChildren(h('div', { class: 'skill-plate enemy' }, h('div', { class: 'sp-body' }, h('small', { class: 'sp-who' }, 'ENEMY'), h('b', { class: 'sp-name' }, def.name), h('div', { class: 'sp-meta' }, h('span', { class: 'sp-tag' }, text)))));
+  };
+
+  /** 행동 순서 레일: 이번 턴 계획한 시전 넷. 진행 중·완료·실패를 표시한다. */
+  const buildRail = (casts: PlannedCast[]) => {
+    railSlot.replaceChildren(
+      h(
+        'ol',
+        { class: 'action-rail', 'aria-label': '이번 턴 시전 순서' },
+        casts.map((c, i) => {
+          const ally = battle.allies.find((a) => a.uid === c.allyUid)!;
+          const unit = unitById(ally.defId);
+          const bust = h('span', { class: 'ar-bust' });
+          bust.innerHTML = characterBust(ally.defId);
+          return h('li', { class: 'ar-item', 'data-uid': c.allyUid, style: { '--el': elColor(unit.element) } }, h('span', { class: 'ar-num' }, NUM[i]), bust, h('span', { class: 'ar-name' }, spellById(c.spellId).name), h('span', { class: 'ar-state' }));
+        }),
+      ),
+    );
+  };
+  const railMark = (uid: string, state: 'active' | 'done' | 'fail', note = '') => {
+    const li = railSlot.querySelector<HTMLElement>(`.ar-item[data-uid="${uid}"]`);
+    if (!li) return;
+    railSlot.querySelectorAll('.ar-item.active').forEach((x) => {
+      x.classList.remove('active');
+      x.classList.add('done');
+    });
+    li.classList.remove('active', 'done', 'fail');
+    li.classList.add(state);
+    const st = li.querySelector('.ar-state');
+    if (st) st.textContent = state === 'fail' ? note : state === 'done' ? '✓' : '';
+  };
+
+  /** 타격 합계: 연타일수록 숫자가 쌓여 올라간다 */
+  let hitTotal = { n: 0, dmg: 0 };
+  const bumpHits = (amount: number, color: string) => {
+    hitTotal = { n: hitTotal.n + 1, dmg: hitTotal.dmg + amount };
+    hitSlot.replaceChildren(h('div', { class: 'hit-total', style: { '--el': color } }, h('b', {}, `${hitTotal.dmg}`), h('small', {}, `${hitTotal.n} HIT${hitTotal.n > 1 ? 'S' : ''} · 총 피해`)));
+  };
+  const resetHits = () => {
+    hitTotal = { n: 0, dmg: 0 };
+    hitSlot.querySelector('.hit-total')?.classList.add('out');
+  };
+
   /** 집중선: 화면 가장자리에서 가운데로 모이는 선(만화식 강조) */
   const speedLines = (color: string) => {
     const el = h('div', { class: 'speedlines', style: { '--el': color } });
@@ -816,6 +932,24 @@ export function battleScreen(app: App): HTMLElement {
     let lastColor = '#ffffff';
     let lastCaster = '';
     let lastTargets: string[] = [];
+    const castTotal = events.filter((x) => x.type === 'cast' || x.type === 'skip').length;
+    const stats = { dmg: 0, casts: 0, reactions: 0, chain: 0 };
+    /** 우리 차례가 끝나면 이번 턴 성과를 잠깐 보여 준다 */
+    const turnSummary = async () => {
+      if (!stats.casts) return;
+      showCallout(
+        h(
+          'div',
+          { class: 'banner turn-summary' },
+          h('small', {}, 'YOUR TURN'),
+          h('b', {}, `총 피해 ${stats.dmg}`),
+          h('span', {}, `시전 ${stats.casts} · 최대 체인 ${stats.chain}${stats.reactions ? ` · 성좌 반응 ${stats.reactions}` : ''}`),
+        ),
+        'summary',
+      );
+      await wait(1000);
+      clearCallout();
+    };
     /** 이번 시전이 예열을 터뜨렸는지(피해 숫자를 크게) */
     let unleashed = false;
     let lastElement: string = 'star';
@@ -827,6 +961,7 @@ export function battleScreen(app: App): HTMLElement {
         case 'cast': {
           castIdx++;
           unleashed = false;
+          stats.chain = Math.max(stats.chain, ev.chain);
           const unit = unitById(battle.allies.find((a) => a.uid === ev.allyUid)!.defId);
           const color = elColor(unit.element);
           const sp = spellById(ev.spellId);
@@ -852,16 +987,17 @@ export function battleScreen(app: App): HTMLElement {
           if (ev.linked) sound.link(ev.chain, prevOut ?? unit.element);
           stage.fx?.magicCircle(feet(ev.allyUid), color, 2.6, 1.1, 'magic_01');
           if (ev.linked && prevCaster) stage.fx?.arc(chest(prevCaster), chest(ev.allyUid), prevOut ? elColor(prevOut) : color);
-          showCallout(
-            h(
-              'div',
-              { class: 'cast-callout', style: { '--el': color } },
-              h('span', { class: 'cc-owner' }, `${unit.code} · ${unit.name}`),
-              h('b', {}, sp.name),
-              h('span', { class: 'cc-chain' }, ev.linked ? `LINK ${ev.chain} · ×${ev.mult}` : ev.sealed ? '성식 — 링크 끊김' : prevCaster ? 'LINK BROKEN' : `CHAIN 1${ev.mult !== 1 ? ` · ×${ev.mult}` : ''}`),
-            ),
-            ev.linked ? 'linked' : '',
+          resetHits();
+          railMark(ev.allyUid, 'active');
+          showSkillPlate(
+            ev.allyUid,
+            ev.spellId,
+            ev.linked ? `LINK ${ev.chain} · ×${ev.mult}` : ev.sealed ? '성식 — 링크 끊김' : prevCaster ? '링크 끊김 · 새 체인' : `CHAIN 1${ev.mult !== 1 ? ` · ×${ev.mult}` : ''}`,
+            ev.linked,
+            castSummary(events, k),
+            `${castIdx + 1} / ${castTotal}`,
           );
+          stats.casts++;
           await wait(260);
           const motion = characterMotion(unit.id);
           if (!SUPPORT_TAGS.has(sp.tag) && sp.tag !== 'charge' && (motion === 'thrust' || motion === 'slash' || motion === 'bash')) stage.afterimage(ev.allyUid, color);
@@ -883,6 +1019,7 @@ export function battleScreen(app: App): HTMLElement {
           const at = target ? chest(target) : enemyCenter();
           stage.fx?.nova(at, elColor(r.from), elColor(r.to), 0.8);
           sound.reaction(r.from, r.to);
+          stats.reactions++;
           stage.flashScreen(0.15);
           stage.punch(at, 0.7);
           stage.glowPulse(0.4);
@@ -949,6 +1086,10 @@ export function battleScreen(app: App): HTMLElement {
             stage.flashScreen(0.18);
           }
           const big = crit || ev.source === 'chain' || ev.source === 'doom' || lastTag === 'execute';
+          if (ev.source !== 'enemy' && !enemyPhase) {
+            bumpHits(ev.amount, lastColor);
+            stats.dmg += ev.amount;
+          }
           sound.hit(crit ? 'crit' : ev.amount === 0 && ev.absorbed ? 'blocked' : ev.source === 'ally' ? (lastTag === 'execute' || lastCaster.length && characterMotion(battle.allies.find((a) => a.uid === lastCaster)?.defId ?? '') === 'slash' ? 'slash' : 'ally') : ev.source);
           floatText(ev.targetUid, ev.amount > 0 ? `${ev.amount}` : `⛨${ev.absorbed}`, ev.source === 'enemy' ? 'dmg-ally' : ev.source === 'burn' ? 'dmg-burn' : crit ? 'dmg-crit' : big ? 'dmg-big' : 'dmg');
           if (big) stage.glowPulse(crit ? 0.55 : 0.25);
@@ -1002,7 +1143,7 @@ export function battleScreen(app: App): HTMLElement {
             await wait(260);
             break;
           }
-          floatText(ev.targetUid, meta.name, meta.debuff ? 'debuff' : 'buff');
+          floatText(ev.targetUid, `${meta.debuff ? '▼' : '▲'} ${meta.name}`, meta.debuff ? 'debuff' : 'buff');
           await wait(110);
           break;
         }
@@ -1021,7 +1162,8 @@ export function battleScreen(app: App): HTMLElement {
         }
         case 'skip':
           floatText(ev.allyUid, ev.reason === 'cost' ? '성진 부족' : '시전 불가', 'debuff');
-          await wait(240);
+          railMark(ev.allyUid, 'fail', ev.reason === 'cost' ? '성진 부족' : ev.reason === 'stun' ? '기절' : '불가');
+          await wait(420);
           break;
         case 'enemyAct':
         case 'enemyStunned': {
@@ -1030,8 +1172,12 @@ export function battleScreen(app: App): HTMLElement {
             stage.focus(null);
             stage.fx?.fadeArcs();
             queueEl.querySelectorAll('.q-slot').forEach((q) => q.classList.add('spent'));
+            await turnSummary();
+            plateSlot.replaceChildren();
+            railSlot.replaceChildren();
+            resetHits();
             showCallout(h('div', { class: 'banner phase-banner' }, h('small', {}, 'ENEMY PHASE'), h('b', {}, '적의 차례')), 'enemy');
-            await wait(600);
+            await wait(700);
             clearCallout();
           }
           if (ev.type === 'enemyStunned') {
@@ -1041,6 +1187,7 @@ export function battleScreen(app: App): HTMLElement {
           }
           // 예고 동작: 적이 붉게 빛을 모았다가 덮친다
           stage.focus(chest(ev.enemyUid), 0.35);
+          showEnemyPlate(ev.enemyUid, { attack: `공격${ev.intent.kind === 'attack' && ev.intent.targetId ? ` → ${unitLabel(battle, ev.intent.targetId)}` : ''}`, attackAll: '전체 공격', defend: '방어 태세', buff: '힘을 모은다', seal: '성식 — 성속 봉인', charge: '큰 공격 준비' }[ev.intent.kind]);
           stage.fx?.gather(chest(ev.enemyUid), '#ff5a4a', 16, 0.36);
           await wait(320);
           stage.anim(ev.enemyUid, 'act');
@@ -1087,8 +1234,12 @@ export function battleScreen(app: App): HTMLElement {
           break;
       }
     }
+    if (!enemyPhase) await turnSummary();
     stage.fx?.fadeArcs();
     stage.focus(null);
+    plateSlot.replaceChildren();
+    railSlot.replaceChildren();
+    resetHits();
     await wait(250);
   }
 
@@ -1096,18 +1247,26 @@ export function battleScreen(app: App): HTMLElement {
     if (busy) return;
     busy = true;
     const toRun = plan;
-    root.classList.add('busy');
+    root.classList.add('busy', 'executing');
+    peek = null;
+    peekSlot.replaceChildren();
     render();
     clearPreview();
+    buildRail(toRun);
     const events = executeRound(battle, toRun);
     plan = [];
     await play(events);
     app.save();
     busy = false;
-    root.classList.remove('busy');
+    root.classList.remove('busy', 'executing');
     clearCallout();
     if (battle.outcome === 'ongoing') {
       render();
+      // 새 손패가 한 장씩 날아든다
+      dockSlot.querySelectorAll<HTMLElement>('.sk').forEach((el, i) => {
+        el.classList.add('deal');
+        el.style.animationDelay = `${i * 45}ms`;
+      });
       sound.ui('card_fan', 0.5);
     } else showOutcome();
   }
