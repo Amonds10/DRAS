@@ -84,19 +84,12 @@ export function allyFigure(role: Role, color: string, halo = false): string {
     .join('');
   const robe = `M${p.ls[0]} ${p.ls[1]} Q50 40 ${p.rs[0]} ${p.rs[1]} L${p.rk[0] + 8} ${p.rk[1] + 22} Q50 ${p.rk[1] + 30} ${p.lk[0] - 8} ${p.lk[1] + 22} Z`;
   return `<svg viewBox="0 0 100 160" class="fig fig-ally" aria-hidden="true">
-    <defs>
-      <radialGradient id="g-${role}-${color.slice(1)}" cx="50%" cy="45%" r="60%">
-        <stop offset="0" stop-color="${color}" stop-opacity=".2"/>
-        <stop offset="1" stop-color="${color}" stop-opacity="0"/>
-      </radialGradient>
-    </defs>
-    <ellipse cx="50" cy="84" rx="40" ry="70" fill="url(#g-${role}-${color.slice(1)})"/>
-    <path d="${robe}" fill="${color}" fill-opacity=".12" stroke="${color}" stroke-opacity=".35" stroke-width=".6"/>
+    <path d="${robe}" fill="${color}" fill-opacity=".06" stroke="${color}" stroke-opacity=".3" stroke-width=".6"/>
     ${halo ? `<circle cx="${p.head[0]}" cy="${p.head[1]}" r="13" fill="none" stroke="${color}" stroke-width=".8" stroke-dasharray="1 3" class="fig-halo"/>` : ''}
     <g stroke="${color}" stroke-width="1.1" stroke-linecap="round" opacity=".85">${bones}</g>
-    <circle cx="${p.head[0]}" cy="${p.head[1]}" r="7.5" fill="${color}" fill-opacity=".14" stroke="${color}" stroke-width="1.2"/>
-    <g fill="#fff8e6">${joints}</g>
-    <circle cx="${p.neck[0]}" cy="${p.neck[1] + 12}" r="3" fill="#fff" class="fig-heart"/>
+    <circle cx="${p.head[0]}" cy="${p.head[1]}" r="7.5" fill="none" stroke="${color}" stroke-width="1.2"/>
+    <g fill="#f3efe6">${joints}</g>
+    
     ${prop(role, p, color)}
   </svg>`;
 }

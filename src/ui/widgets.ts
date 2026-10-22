@@ -141,12 +141,7 @@ export function modal(title: string, body: Node, onClose: () => void): HTMLEleme
   return backdrop;
 }
 
-export const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
-
-/** 장식 구분선: ── ✦ ── */
-export function decoRule(label?: string): HTMLElement {
-  return h('div', { class: 'deco-rule', 'aria-hidden': label ? undefined : 'true' }, h('i'), label ? h('span', {}, label) : h('b', {}, '✦'), h('i'));
-}
+export const NUM = ['1', '2', '3', '4', '5', '6', '7'];
 
 export interface SpellCardOpts {
   element: Element | 'star';
@@ -158,7 +153,7 @@ export interface SpellCardOpts {
   size?: 'hand' | 'mini';
 }
 
-/** 타로풍 마법 카드 */
+/** 마법 카드 */
 export function spellCard(spell: SpellDef, opts: SpellCardOpts): HTMLElement {
   const meta = ELEMENTS[opts.element];
   const tag = opts.onClick ? 'button' : 'div';
@@ -178,11 +173,11 @@ export function spellCard(spell: SpellDef, opts: SpellCardOpts): HTMLElement {
       h('span', { class: 'tarot-cost' }, Array.from({ length: Math.max(spell.cost, 0) }, () => h('i'))),
       opts.numeral ? h('span', { class: 'tarot-num' }, opts.numeral) : null,
     ),
-    h('span', { class: 'tarot-art' }, h('span', { class: 'tarot-rays' }), h('span', { class: 'tarot-glyph' }, meta.glyph)),
+    h('span', { class: 'tarot-art' }, h('span', { class: 'tarot-glyph' }, meta.glyph)),
     h('span', { class: 'tarot-name' }, spell.name),
     h('span', { class: 'tarot-flow' }, spellFlow(spell)),
     opts.size !== 'mini' ? h('span', { class: 'tarot-desc' }, spell.desc) : null,
-    opts.order !== undefined ? h('span', { class: 'tarot-order' }, ROMAN[opts.order]) : null,
+    opts.order !== undefined ? h('span', { class: 'tarot-order' }, NUM[opts.order]) : null,
   );
   return el;
 }

@@ -1,7 +1,7 @@
 import { FLOORS } from '../../data/encounters';
 import type { App } from '../app';
 import { h } from '../dom';
-import { button, decoRule } from '../widgets';
+import { button } from '../widgets';
 
 export function resultScreen(app: App): HTMLElement {
   const run = app.run!;
@@ -19,10 +19,9 @@ export function resultScreen(app: App): HTMLElement {
     { class: `result-wrap ${won ? 'won' : 'lost'}` },
     h(
       'div',
-      { class: 'result-card deco-card' },
-      h('p', { class: 'kicker' }, won ? 'CONSTELLATION COMPLETE' : 'THE STARS FADE'),
+      { class: 'result-card panel' },
+      h('p', { class: 'eyebrow' }, won ? '여정 완료' : '여정 실패'),
       h('h1', {}, won ? '하늘을 되찾았다' : '별빛이 꺼졌다'),
-      decoRule(),
       h('p', { class: 'muted' }, won ? '삼켜진 하늘에 다시 별자리가 떠올랐습니다.' : '다음 여정에서는 더 긴 체인을 이어 보세요.'),
       h('dl', { class: 'result-stats' }, stats.map(([k, v]) => h('div', {}, h('dt', {}, k), h('dd', {}, v)))),
       h(

@@ -5,7 +5,7 @@ import { unitById } from '../../data/units';
 import { allyFigure } from '../../render/figures';
 import type { App } from '../app';
 import { h, s } from '../dom';
-import { ROMAN, button, decoRule, elColor, hpBar } from '../widgets';
+import { NUM, button, elColor, hpBar } from '../widgets';
 
 const KIND_LABEL: Record<FloorKind, string> = { battle: '전투', elite: '강적', boss: '보스' };
 const KIND_GLYPH: Record<FloorKind, string> = { battle: '✧', elite: '✶', boss: '✹' };
@@ -30,7 +30,7 @@ function chart(current: number): HTMLElement {
         'div',
         { class: `map-node ${state} kind-${f.kind}`, style: { left: `${POS[i][0]}%`, top: `${POS[i][1]}%` } },
         h('span', { class: 'map-star' }, h('span', {}, KIND_GLYPH[f.kind])),
-        h('span', { class: 'map-label' }, h('b', {}, `${ROMAN[i]} · ${KIND_LABEL[f.kind]}`), h('small', {}, f.name)),
+        h('span', { class: 'map-label' }, h('b', {}, `${i + 1}층 · ${KIND_LABEL[f.kind]}`), h('small', {}, f.name)),
       );
     }),
   );
@@ -52,24 +52,24 @@ export function mapScreen(app: App): HTMLElement {
     h(
       'header',
       { class: 'screen-head' },
-      button('‹ 메인', () => app.go('title'), { class: 'btn-back', title: '진행 상황은 저장됩니다' }),
-      h('div', { class: 'screen-title' }, h('p', { class: 'kicker' }, 'STAR CHART'), h('h1', {}, '별의 여정')),
+      button('← 메인', () => app.go('title'), { class: 'btn-back', title: '진행 상황은 저장됩니다' }),
+      h('div', { class: 'screen-title' }, h('h1', {}, '별의 여정')),
       h('span', { class: 'head-spacer' }),
     ),
     h(
       'div',
       { class: 'map-layout' },
-      h('section', { class: 'map-board' }, h('div', { class: 'bg-astrolabe' }, h('i'), h('i'), h('i')), chart(run.floor)),
+      h('section', { class: 'map-board' }, chart(run.floor)),
       h(
         'aside',
         { class: 'map-side' },
         h(
           'div',
-          { class: `next-floor deco-card kind-${floor.kind}` },
-          h('p', { class: 'kicker' }, `FLOOR ${ROMAN[run.floor]} / ${ROMAN[FLOORS.length - 1]}`),
+          { class: `next-floor panel kind-${floor.kind}` },
+          h('p', { class: 'eyebrow' }, `${run.floor + 1}층 / ${FLOORS.length}층`),
           h('h2', {}, floor.name),
           h('p', { class: 'muted' }, floor.kind === 'boss' ? '별을 삼키는 자가 기다립니다. 체인 3 미만의 공격은 절반만 통합니다.' : floor.kind === 'elite' ? '강한 적이 기다립니다. 충분히 대비하세요.' : '성역을 떠도는 적들을 물리치세요.'),
-          button('전투 개시', () => {
+          button('전투 시작', () => {
             startBattle(run);
             app.save();
             app.go('battle');
@@ -77,16 +77,15 @@ export function mapScreen(app: App): HTMLElement {
         ),
         h(
           'div',
-          { class: 'dossier party-status' },
-          h('p', { class: 'dossier-kicker' }, 'PARTY'),
-          decoRule(),
+          { class: 'panel party-status' },
+          h('h3', {}, '파티'),
           run.team.map((a, i) => {
             const u = unitById(a.defId);
             const row = h(
               'div',
               { class: 'party-line', style: { '--el': elColor(u.element) } },
               h('div', { class: 'party-fig' }),
-              h('div', { class: 'party-info' }, h('div', { class: 'party-name' }, h('span', { class: 'slot-num' }, ROMAN[i]), u.name), h('div', { class: 'party-sub' }, `ATK ${a.atk} · DEF ${a.def}`), hpBar(a.hp, a.maxHp, 0)),
+              h('div', { class: 'party-info' }, h('div', { class: 'party-name' }, h('span', { class: 'slot-num' }, NUM[i]), u.name), h('div', { class: 'party-sub' }, `공격 ${a.atk} · 방어 ${a.def}`), hpBar(a.hp, a.maxHp, 0)),
             );
             row.querySelector('.party-fig')!.innerHTML = allyFigure(u.role, elColor(u.element), u.element === 'star');
             return row;

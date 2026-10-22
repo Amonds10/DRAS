@@ -2,15 +2,10 @@ import { FLOORS } from '../../data/encounters';
 import type { App } from '../app';
 import { h } from '../dom';
 import { showHelp } from '../help';
-import { ROMAN, button, decoRule, modal } from '../widgets';
+import { button, modal } from '../widgets';
 
-function menuItem(label: string, sub: string, onClick: () => void, primary = false): HTMLButtonElement {
-  return h(
-    'button',
-    { type: 'button', class: `menu-item ${primary ? 'primary' : ''}`, onclick: onClick },
-    h('span', { class: 'menu-diamond' }, '◆'),
-    h('span', { class: 'menu-text' }, h('b', {}, label), h('small', {}, sub)),
-  );
+function menuItem(label: string, sub: string | null, onClick: () => void, primary = false): HTMLButtonElement {
+  return h('button', { type: 'button', class: `menu-item ${primary ? 'primary' : ''}`, onclick: onClick }, h('b', {}, label), sub ? h('small', {}, sub) : null);
 }
 
 export function titleScreen(app: App): HTMLElement {
@@ -41,22 +36,14 @@ export function titleScreen(app: App): HTMLElement {
   return h(
     'main',
     { class: 'title-wrap' },
-    h('div', { class: 'title-bg', 'aria-hidden': 'true' }, h('div', { class: 'bg-rays' }), h('div', { class: 'bg-astrolabe big' }, h('i'), h('i'), h('i'), h('i'))),
-    h(
-      'div',
-      { class: 'title-hero' },
-      h('p', { class: 'title-kicker' }, 'ANNO STELLARUM'),
-      h('h1', { class: 'title-logo' }, '성좌술사'),
-      decoRule('STARWEAVER'),
-      h('p', { class: 'title-tag' }, 'Weave the stars, one spell at a time.'),
-    ),
+    h('div', { class: 'title-hero' }, h('h1', { class: 'title-logo' }, '성좌술사'), h('p', { class: 'title-tag' }, '마법과 마법을 이어 별자리를 완성하는 턴제 전투')),
     h(
       'nav',
       { class: 'title-menu', 'aria-label': '메인 메뉴' },
-      saved ? menuItem('이어하기', `${ROMAN[floorIdx]}층 · ${FLOORS[floorIdx].name}`, () => app.resume(saved), true) : null,
-      menuItem('새 여정', 'NEW JOURNEY', startNew, !saved),
-      menuItem('플레이 방법', 'HOW TO PLAY', () => showHelp()),
+      saved ? menuItem('이어하기', `${floorIdx + 1}층 · ${FLOORS[floorIdx].name}`, () => app.resume(saved), true) : null,
+      menuItem('새 여정', null, startNew, !saved),
+      menuItem('플레이 방법', null, () => showHelp()),
     ),
-    h('footer', { class: 'title-foot' }, 'PROTOTYPE · v0.2'),
+    h('footer', { class: 'title-foot' }, '프로토타입 v0.3'),
   );
 }

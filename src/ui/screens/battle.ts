@@ -11,7 +11,7 @@ import { allyFigure, enemyFigure } from '../../render/figures';
 import type { App } from '../app';
 import { h, s, sleep } from '../dom';
 import { showHelp } from '../help';
-import { ROMAN, allyName, button, elBadge, elColor, hpBar, intentView, modal, reactionChip, spellCard, statusRow, updateHpBar } from '../widgets';
+import { NUM, allyName, button, elBadge, elColor, hpBar, intentView, modal, reactionChip, spellCard, statusRow, updateHpBar } from '../widgets';
 
 /** 무대 위 아군 위치: [가로 %, 발끝 세로 %] */
 const ALLY_POS: [number, number][] = [
@@ -133,7 +133,7 @@ export function battleScreen(app: App): HTMLElement {
     return h(
       'div',
       { class: 'gauge', title: `성진 ${battle.stardust} / ${battle.maxStardust} (매 턴 +${battle.mods.stardustPerTurn})` },
-      h('span', { class: 'gauge-label' }, 'STARDUST'),
+      h('span', { class: 'gauge-label' }, '성진'),
       h('span', { class: 'pips' }, Array.from({ length: battle.maxStardust }, (_, i) => h('i', { class: i < left ? 'on' : i < battle.stardust ? 'planned' : '' }))),
       h('b', { class: 'gauge-num' }, `${left}`),
     );
@@ -154,14 +154,14 @@ export function battleScreen(app: App): HTMLElement {
         'data-uid': a.uid,
         style: { left: `${ALLY_POS[i][0]}%`, top: `${ALLY_POS[i][1]}%`, '--el': color, '--z': String(ALLY_POS[i][1]) },
       },
-      planIdx >= 0 ? h('span', { class: 'fighter-order' }, ROMAN[planIdx]) : null,
+      planIdx >= 0 ? h('span', { class: 'fighter-order' }, NUM[planIdx]) : null,
       threat ? h('span', { class: 'fighter-threat', title: '이번 턴 공격받을 예정' }, h('span', {}, '⚔')) : null,
       h('div', { class: 'fighter-fig' }),
       h('div', { class: 'fighter-floor' }),
       h(
         'div',
         { class: 'plate' },
-        h('div', { class: 'plate-name' }, h('span', { class: 'plate-num' }, ROMAN[i]), h('span', { class: 'plate-text' }, unit.name)),
+        h('div', { class: 'plate-name' }, h('span', { class: 'plate-num' }, NUM[i]), h('span', { class: 'plate-text' }, unit.name)),
         hpBar(a.hp, a.maxHp, a.shield),
         statusRow(a.statuses),
       ),
@@ -223,7 +223,7 @@ export function battleScreen(app: App): HTMLElement {
                 p && steps[i].reactionId ? reactionChip(steps[i].reactionId!) : null,
                 h('span', { class: 'q-link-mark' }, p ? (steps[i].linked ? `×${steps[i].mult}` : steps[i].sealed ? '⊘' : '✕') : ''),
               );
-        if (!p) return [connector, h('div', { class: 'q-slot empty' }, h('span', {}, ROMAN[i]))];
+        if (!p) return [connector, h('div', { class: 'q-slot empty' }, h('span', {}, NUM[i]))];
         const ally = battle.allies.find((a) => a.uid === p.allyUid)!;
         const unit = unitById(ally.defId);
         return [
@@ -231,7 +231,7 @@ export function battleScreen(app: App): HTMLElement {
           h(
             'div',
             { class: 'q-slot', 'data-i': String(i) },
-            spellCard(spellById(p.spellId), { element: unit.element, numeral: ROMAN[battle.allies.indexOf(ally)], size: 'mini' }),
+            spellCard(spellById(p.spellId), { element: unit.element, numeral: NUM[battle.allies.indexOf(ally)], size: 'mini' }),
             h(
               'div',
               { class: 'q-ctrl' },
@@ -265,7 +265,7 @@ export function battleScreen(app: App): HTMLElement {
           return h(
             'div',
             { class: `hand-group ${alive ? '' : 'dead'}`, style: { '--el': elColor(unit.element) } },
-            h('div', { class: 'hand-owner' }, h('span', { class: 'plate-num' }, ROMAN[i]), elBadge(unit.element, 'sm'), h('span', {}, unit.name)),
+            h('div', { class: 'hand-owner' }, h('span', { class: 'plate-num' }, NUM[i]), elBadge(unit.element, 'sm'), h('span', {}, unit.name)),
             h(
               'div',
               { class: 'hand-pair' },
@@ -274,7 +274,7 @@ export function battleScreen(app: App): HTMLElement {
                 const chosen = planIdx >= 0 && plan[planIdx].spellId === id;
                 return spellCard(sp, {
                   element: unit.element,
-                  numeral: ROMAN[i],
+                  numeral: NUM[i],
                   chosen,
                   order: chosen ? planIdx : undefined,
                   disabled: !alive || busy || (!chosen && sp.cost > remaining() + myCost),
@@ -291,16 +291,14 @@ export function battleScreen(app: App): HTMLElement {
         h(
           'div',
           { class: 'chain-readout' },
-          h('span', { class: 'chain-label' }, 'CHAIN'),
+          h('span', { class: 'chain-label' }, '체인'),
           h('b', { class: last?.chain === 4 ? 'full' : '' }, plan.length ? last.chain : 0),
           h('small', {}, last?.chain === 4 ? '성좌 완성' : plan.length ? `×${last.mult}` : '대기 시 성진만 모입니다'),
         ),
         h(
           'button',
           { type: 'button', class: 'cast-btn', disabled: busy, onclick: () => void execute() },
-          h('span', { class: 'cast-ring' }),
-          h('b', {}, plan.length ? '시전' : '대기'),
-          h('small', {}, plan.length ? 'CAST' : 'PASS'),
+          plan.length ? '시전' : '대기',
         ),
         button('초기화', () => {
           plan = [];
@@ -324,7 +322,7 @@ export function battleScreen(app: App): HTMLElement {
     scene = h(
       'section',
       { class: `scene floor-${floor.kind}`, 'aria-label': '전장' },
-      h('div', { class: 'scene-bg' }, h('div', { class: 'bg-rays' }), h('div', { class: 'bg-astrolabe' }, h('i'), h('i'), h('i')), h('div', { class: 'bg-floor' }), h('div', { class: 'bg-curtain left' }), h('div', { class: 'bg-curtain right' })),
+      h('div', { class: 'scene-bg' }),
       skySvg,
       h(
         'header',
@@ -337,7 +335,7 @@ export function battleScreen(app: App): HTMLElement {
             app.save();
             app.go('title');
           }, { class: 'btn-hud', title: '메인으로 (진행 상황은 저장됩니다)' }),
-          h('div', { class: 'plaque' }, h('span', { class: 'plaque-kicker' }, `${ROMAN[run.floor] ?? run.floor + 1} · ${floor.name}`), h('b', {}, `ROUND ${battle.round}`)),
+          h('div', { class: 'plaque' }, h('span', { class: 'plaque-sub' }, `${run.floor + 1}층 · ${floor.name}`), h('b', {}, `${battle.round} 라운드`)),
         ),
         queueEl,
         h(
@@ -348,7 +346,7 @@ export function battleScreen(app: App): HTMLElement {
             app.setSpeed(app.speed > 1 ? 1 : 2);
             render();
           }, { class: 'btn-hud', title: '연출 속도' }),
-          button('≡', showLog, { class: 'btn-hud', title: '전투 기록' }),
+          button('기록', showLog, { class: 'btn-hud', title: '전투 기록' }),
           button('?', () => showHelp(), { class: 'btn-hud', title: '플레이 방법' }),
         ),
       ),
@@ -436,7 +434,7 @@ export function battleScreen(app: App): HTMLElement {
               'div',
               { class: 'cast-callout', style: { '--el': color } },
               spellCard(sp, { element: unit.element, size: 'mini' }),
-              h('div', { class: 'cast-text' }, h('b', {}, sp.name), h('span', {}, ev.linked ? `CHAIN ${ev.chain} · ×${ev.mult}` : ev.sealed ? '성식 — 링크 끊김' : prevCaster ? 'LINK BROKEN' : 'CHAIN 1')),
+              h('div', { class: 'cast-text' }, h('b', {}, sp.name), h('span', {}, ev.linked ? `체인 ${ev.chain} · ×${ev.mult}` : ev.sealed ? '성식으로 링크 끊김' : prevCaster ? '링크 끊김' : '체인 1')),
             ),
             ev.linked ? 'linked' : '',
           );
@@ -451,7 +449,7 @@ export function battleScreen(app: App): HTMLElement {
         case 'reaction': {
           const r = reactionById(ev.reactionId);
           showCallout(
-            h('div', { class: 'reaction-banner', style: { '--from': elColor(r.from), '--to': elColor(r.to) } }, h('small', {}, r.en), h('b', {}, r.name), h('span', {}, r.desc)),
+            h('div', { class: 'banner reaction-banner', style: { '--from': elColor(r.from), '--to': elColor(r.to) } }, h('small', {}, '성좌 반응'), h('b', {}, r.name), h('span', {}, r.desc)),
             'reaction',
           );
           await wait(850);
@@ -459,7 +457,7 @@ export function battleScreen(app: App): HTMLElement {
         }
         case 'fullChain':
           scene.classList.add('complete');
-          showCallout(h('div', { class: 'complete-banner' }, h('small', {}, 'CONSTELLATION COMPLETE'), h('b', {}, '성좌 완성')), 'complete');
+          showCallout(h('div', { class: 'banner complete-banner' }, h('small', {}, '체인 4'), h('b', {}, '성좌 완성')), 'complete');
           await wait(1150);
           break;
         case 'damage': {
@@ -520,7 +518,7 @@ export function battleScreen(app: App): HTMLElement {
             for (const l of skySvg.querySelectorAll('.live')) l.classList.add('faded');
             queueEl.querySelectorAll('.q-slot').forEach((q) => q.classList.add('spent'));
             scene.classList.remove('complete');
-            showCallout(h('div', { class: 'phase-banner enemy' }, h('small', {}, 'ENEMY PHASE'), h('b', {}, '적의 차례')), 'enemy');
+            showCallout(h('div', { class: 'banner phase-banner' }, h('b', {}, '적의 차례')), 'enemy');
             await wait(650);
             clearCallout();
           }
@@ -540,7 +538,7 @@ export function battleScreen(app: App): HTMLElement {
           await wait(420);
           break;
         case 'seal':
-          showCallout(h('div', { class: 'phase-banner seal' }, h('small', {}, 'OCCULTATION'), h('b', {}, `성식 — ${ELEMENTS[ev.element].name} 봉인`)), 'enemy');
+          showCallout(h('div', { class: 'banner phase-banner' }, h('small', {}, '성식'), h('b', {}, `${ELEMENTS[ev.element].name} 봉인`)), 'enemy');
           await wait(750);
           break;
         case 'round':
@@ -582,8 +580,8 @@ export function battleScreen(app: App): HTMLElement {
         { class: `outcome-overlay ${won ? 'won' : 'lost'}` },
         h(
           'div',
-          { class: 'outcome-card deco-card' },
-          h('p', { class: 'kicker' }, won ? 'VICTORY' : 'DEFEAT'),
+          { class: 'outcome-card panel' },
+          h('p', { class: 'eyebrow' }, won ? '승리' : '패배'),
           h('h2', {}, won ? '성역을 지켜냈다' : '모든 술사가 쓰러졌다'),
           h('p', { class: 'muted' }, `최대 체인 ${battle.stats.maxChain} · 성좌 반응 ${battle.stats.reactions} · ${battle.round} 라운드`),
           button(won ? '계속' : '결과 보기', proceed, { variant: 'primary' }),
