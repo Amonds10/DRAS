@@ -48,6 +48,8 @@ export interface PresetDef {
   lamps: number | null;
   /** 해 쪽에서 퍼지는 빛줄기 세기 */
   godRays: number;
+  /** 2D 캐릭터를 장면에 녹이는 빛: 전체 색조, 테두리 역광 색과 세기 */
+  actor: { tint: [number, number, number]; rim: number; rimStrength: number };
   /** 지평선 아지랑이(사막) */
   haze: number;
   grade: { tint: [number, number, number]; contrast: number; exposure: number; bloom: number; bloomThreshold: number };
@@ -70,6 +72,7 @@ export const PRESETS: Record<ScenePreset, PresetDef> = {
     ring: 0xffc640, rain: 0, lightning: false,
     particles: { kind: 'motes', color: 0xffd0a0, count: 160 }, lamps: null,
     godRays: 0.9, haze: 0,
+    actor: { tint: [1.05, 0.96, 0.9], rim: 0xffc08a, rimStrength: 1.3 },
     grade: { tint: [1.03, 0.99, 0.96], contrast: 1.06, exposure: 0.85, bloom: 0.3, bloomThreshold: 1.1 },
   },
   f1: {
@@ -88,6 +91,7 @@ export const PRESETS: Record<ScenePreset, PresetDef> = {
     ring: 0xffe08a, rain: 0, lightning: false,
     particles: { kind: 'motes', color: 0xfff4c0, count: 260 }, lamps: null,
     godRays: 0.4, haze: 0,
+    actor: { tint: [1.08, 1.04, 0.98], rim: 0xfff0d0, rimStrength: 1.5 },
     grade: { tint: [1.0, 1.0, 1.0], contrast: 1.06, exposure: 0.85, bloom: 0.25, bloomThreshold: 1.1 },
   },
   f2: {
@@ -105,6 +109,7 @@ export const PRESETS: Record<ScenePreset, PresetDef> = {
     ring: 0x3fe0ff, rain: 1.0, lightning: true,
     particles: { kind: 'none', color: 0xffffff, count: 0 }, lamps: 0x7ae8ff,
     godRays: 0, haze: 0,
+    actor: { tint: [0.86, 0.92, 1.06], rim: 0x7ae8ff, rimStrength: 1.2 },
     grade: { tint: [0.96, 0.98, 1.06], contrast: 1.1, exposure: 1.05, bloom: 0.75, bloomThreshold: 0.8 },
   },
   f3: {
@@ -123,6 +128,7 @@ export const PRESETS: Record<ScenePreset, PresetDef> = {
     ring: 0xd0582a, rain: 0, lightning: false,
     particles: { kind: 'dust', color: 0xf0d4a0, count: 700 }, lamps: null,
     godRays: 0.35, haze: 1,
+    actor: { tint: [1.18, 1.1, 0.98], rim: 0xfff4e0, rimStrength: 1.1 },
     grade: { tint: [1.03, 1.0, 0.95], contrast: 1.08, exposure: 0.78, bloom: 0.22, bloomThreshold: 1.15 },
   },
   f4: {
@@ -140,6 +146,7 @@ export const PRESETS: Record<ScenePreset, PresetDef> = {
     ring: 0x6ff0e0, rain: 0, lightning: false,
     particles: { kind: 'snow', color: 0xeaf6ff, count: 650 }, lamps: null,
     godRays: 0, haze: 0,
+    actor: { tint: [0.88, 0.97, 1.12], rim: 0xcfeaff, rimStrength: 1.2 },
     grade: { tint: [0.96, 1.02, 1.05], contrast: 1.06, exposure: 1.0, bloom: 0.6, bloomThreshold: 0.82 },
   },
   f5: {
@@ -157,6 +164,7 @@ export const PRESETS: Record<ScenePreset, PresetDef> = {
     ring: 0xff4d4d, rain: 0, lightning: false,
     particles: { kind: 'embers', color: 0xff7a3a, count: 520 }, lamps: null,
     godRays: 0.8, haze: 0,
+    actor: { tint: [1.02, 0.86, 0.82], rim: 0xff7a4a, rimStrength: 1.7 },
     grade: { tint: [1.05, 0.96, 0.93], contrast: 1.12, exposure: 1.05, bloom: 0.7, bloomThreshold: 0.8 },
   },
 };

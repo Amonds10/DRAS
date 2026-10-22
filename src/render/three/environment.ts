@@ -29,6 +29,8 @@ export class Environment {
   readonly envMap: THREE.Texture | null;
   /** 장면에서 해·달을 향하는 방향(빛줄기 위치 계산용) */
   readonly sunDir: THREE.Vector3;
+  /** 그림자를 드리우는 직사광의 방향(지평선 근처 해는 고도를 올려 쓴다) */
+  readonly lightDir = new THREE.Vector3(0, 1, 0);
   private ticks: TickUniforms[] = [];
   private updaters: ((t: number, dt: number) => void)[] = [];
   private disposables: { dispose(): void }[] = [];
@@ -99,6 +101,7 @@ export class Environment {
     const flat = new THREE.Vector3(this.sunDir.x, 0, this.sunDir.z).normalize();
     const el = Math.max(Math.asin(THREE.MathUtils.clamp(this.sunDir.y, -1, 1)), 0.45);
     const dir = flat.multiplyScalar(Math.cos(el)).setY(Math.sin(el));
+    this.lightDir.copy(dir);
     sun.position.copy(dir.multiplyScalar(60)).add(new THREE.Vector3(0, 0, -4));
     sun.target.position.set(0, 0, -4);
     const shadows = ctx.q.shadows && p.scenery !== 'neon';

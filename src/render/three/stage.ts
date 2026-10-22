@@ -165,6 +165,15 @@ export class Stage {
   private quality: Quality = qualityFor('low');
   /** 자동 품질: 장면을 만든 뒤 프레임을 재서 느리면 한 단계 내린다 */
   private probe: { start: number; frames: number } | null = null;
+  /** 2D 캐릭터 판을 장면 빛에 맞추는 공용 uniform */
+  private actorLight = {
+    uTint: { value: new THREE.Color(1, 1, 1) },
+    uRimCol: { value: new THREE.Color(1, 1, 1) },
+    uRimDir: { value: new THREE.Vector2(-0.7, 0.7) },
+    uRimK: { value: 0 },
+    /** 하늘빛 채움: 그늘진 면도 장면 색을 머금게 */
+    uFill: { value: new THREE.Color(0, 0, 0) },
+  };
   private env: Environment | null = null;
   fx: FxSystem | null = null;
   private actors = new Map<string, Actor>();
@@ -301,7 +310,27 @@ export class Stage {
       this.godRays.uniforms.uThreshold.value = p.light?.kind === 'eclipse' ? 0.9 : 2.0;
     }
     // 셰이더 컴파일이 끝날 때쯤부터 잰다
+    const al = p.actor;
+    this.actorLight.uTint.value.setRGB(...al.tint);
+    this.actorLight.uRimCol.value.set(al.rim);
+    this.actorLight.uRimK.value = al.rimStrength;
+    this.actorLight.uFill.value.set(p.hemi.sky).multiplyScalar(p.hemi.intensity * 0.09);
     this.probe = this.pref === 'auto' && this.quality.tier === 'high' ? { start: performance.now() + 800, frames: 0 } : null;
+  }
+
+  /**
+   * 화면에서 빛이 오는 방향(캐릭터 판의 텍스처 좌표 기준). 해를 등진 역광일수록 테두리를 밝게 한다.
+   */
+  private updateRimDir(): void {
+    const dir = this.env?.sunDir ?? new THREE.Vector3(-0.5, 0.6, 0.3);
+    this.camera.updateMatrixWorld();
+    const v = dir.clone().transformDirection(this.camera.matrixWorldInverse);
+    const d = new THREE.Vector2(v.x, Math.max(v.y, 0.25));
+    if (d.lengthSq() < 1e-4) d.set(0, 1);
+    this.actorLight.uRimDir.value.copy(d.normalize());
+    const back = THREE.MathUtils.clamp(-v.z, 0, 1);
+    const base = this.env?.preset.actor.rimStrength ?? 0;
+    this.actorLight.uRimK.value = base * (0.45 + 0.55 * back);
   }
 
   /** 해의 화면 위치를 빛줄기 패스에 넘긴다. 카메라 뒤에 있으면 끈다. */
@@ -340,6 +369,31 @@ export class Stage {
     this.actors.clear();
   }
 
+  /**
+   * 캐릭터 판 재질. 2D 그림이 3D 장면에서 떠 보이지 않도록
+   * 장면 색조를 곱하고, 화면상 빛 방향 쪽 외곽에 역광 테두리를 더하고, 발밑을 살짝 어둡게 한다.
+   */
+  private actorMaterial(texture: THREE.Texture, w: number, h: number): THREE.MeshBasicMaterial {
+    const mat = new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, toneMapped: true });
+    const texel = new THREE.Vector2(3.5 / w, 3.5 / h);
+    mat.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, this.actorLight, { uTexel: { value: texel } });
+      sh.fragmentShader = 'uniform vec3 uTint, uRimCol, uFill; uniform vec2 uRimDir, uTexel; uniform float uRimK;\n' + sh.fragmentShader.replace(
+        '#include <map_fragment>',
+        `#include <map_fragment>
+        float aHere = diffuseColor.a;
+        // 빛 쪽으로 몇 픽셀 옮긴 곳이 비어 있으면 빛을 받는 외곽
+        float aToward = texture2D(map, vMapUv + uRimDir * uTexel).a;
+        float aFar = texture2D(map, vMapUv + uRimDir * uTexel * 2.5).a;
+        float rim = clamp(aHere - 0.5 * (aToward + aFar), 0.0, 1.0) * step(0.5, aHere);
+        // 발밑 그늘: 그림 아래쪽 12%를 조금 어둡게
+        float foot = mix(0.72, 1.0, smoothstep(0.06, 0.2, vMapUv.y));
+        diffuseColor.rgb = (diffuseColor.rgb * uTint + uFill * smoothstep(0.3, 0.9, vMapUv.y)) * foot + uRimCol * rim * uRimK;`,
+      );
+    };
+    return mat;
+  }
+
   setActors(specs: ActorSpec[]): void {
     this.clearActors();
     const allies = specs.filter((s) => s.side === 'ally');
@@ -358,11 +412,11 @@ export class Stage {
       const rim = isAlly ? characterAccent(spec.defId) : '#e0685a';
       const svg = isAlly ? characterSvg(spec.defId) : enemyFigure(spec.defId);
       const { texture } = svgTexture(svg, res[0], res[1], rim, glow);
-      const mat = new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, toneMapped: true });
+      const mat = this.actorMaterial(texture, res[0] + pad * 2, res[1] + pad * 2);
       const mesh = new THREE.Mesh(plane, mat);
       // 그림자는 실루엣 모양 그대로: 화면에는 안 그리고 그림자만 드리우는 판을 겹친다.
       // (그림자 패스는 본 재질의 alphaTest를 따르므로, 빛 번짐까지 그림자가 되지 않게 따로 둔다)
-      const caster = new THREE.Mesh(plane, new THREE.MeshBasicMaterial({ map: texture, alphaTest: 0.5, colorWrite: false, depthWrite: false }));
+      const caster = new THREE.Mesh(plane, new THREE.MeshBasicMaterial({ map: texture, alphaTest: 0.5, colorWrite: false, depthWrite: false, side: THREE.DoubleSide, shadowSide: THREE.DoubleSide }));
       caster.castShadow = this.quality.shadows;
       caster.name = 'shadow-caster';
       mesh.add(caster);
@@ -518,6 +572,9 @@ export class Stage {
   }
 
   private updateActors(dt: number): void {
+    const ld = this.env?.lightDir ?? new THREE.Vector3(0, 1, 0);
+    const lightYaw = Math.atan2(ld.x, ld.z);
+    this.updateRimDir();
     for (const a of this.actors.values()) {
       a.base.x = a.slotX * this.xScale;
       const isAlly = a.spec.side === 'ally';
@@ -553,6 +610,12 @@ export class Stage {
       const breathe = isAlly && !a.dead ? 1 + Math.sin(this.t * 1.8 + a.phase) * 0.008 : 1;
       a.mesh.position.set(a.base.x + a.offset.x, a.hover + bob + a.offset.y + (a.mesh.userData.yOffset as number) * breathe, a.base.z);
       a.mesh.scale.y = (a.mesh.userData.sy as number) * breathe;
+      // 세로축 빌보드: 카메라가 흔들리거나 다가가도 판이 비스듬히 찌그러지지 않게 항상 카메라를 본다.
+      const yaw = Math.atan2(this.camera.position.x - a.mesh.position.x, this.camera.position.z - a.mesh.position.z);
+      a.mesh.rotation.y = yaw;
+      // 그림자 판은 빛을 정면으로 보게 돌려, 옆빛에서도 실루엣 그대로 그림자가 진다.
+      const caster = a.mesh.children[0];
+      if (caster) caster.rotation.y = lightYaw - yaw;
       a.flash = Math.max(0, a.flash - dt * 4);
       const tone = a.dead && isAlly ? 0.4 : 1;
       a.mat.color.setScalar(tone + a.flash * 2.2);
