@@ -13,7 +13,7 @@ function memoryStore(): KeyValueStore {
   };
 }
 
-const TEAM = ['sol_striker', 'luna_striker', 'void_hexer', 'comet_striker'];
+const TEAM = ['solea', 'lune', 'nox', 'vela'];
 
 describe('run', () => {
   it('rejects teams that are not exactly 4 distinct units', () => {

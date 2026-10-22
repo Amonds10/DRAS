@@ -14,28 +14,52 @@ export type SpellOutput = Element | 'echo';
 
 export type Role = 'striker' | 'guardian' | 'support' | 'hexer';
 
-export type StatusId = 'stun' | 'weaken' | 'burn' | 'expose' | 'atkUp' | 'seal';
+export type StatusId = 'stun' | 'weaken' | 'burn' | 'expose' | 'atkUp' | 'seal' | 'doom' | 'taunt' | 'counter';
 
 export interface Status {
   id: StatusId;
   turns: number;
-  /** burn: 턴당 피해, atkUp: 공격 증가량 */
+  /** burn: 턴당 피해, atkUp: 공격 증가량, doom: 라운드 끝 폭발 피해, counter: 반격 피해 */
   value?: number;
   /** seal: 봉인된 성속 */
   element?: Element;
 }
 
-export type EnemyTarget = 'focus' | 'allEnemies' | 'random3';
+export type EnemyTarget = 'focus' | 'allEnemies' | 'random';
 export type AllyTarget = 'lowestAlly' | 'allAllies' | 'self';
 
+export interface DamageEffect {
+  kind: 'damage';
+  power: number;
+  target: EnemyTarget;
+  /** 타격 횟수(기본 1). random은 타격마다 대상을 새로 고른다. */
+  hits?: number;
+  scaleWithChain?: boolean;
+  /** 방어 무시 */
+  pierce?: boolean;
+  /** 대상 HP 35% 이하일 때 배율 */
+  execute?: number;
+  /** 대상에게 약화 효과가 있을 때 배율 */
+  vsDebuffed?: number;
+  /** 준 피해의 일부만큼 시전자 회복 */
+  lifesteal?: number;
+}
+
 export type Effect =
-  | { kind: 'damage'; power: number; target: EnemyTarget; scaleWithChain?: boolean }
+  | DamageEffect
   | { kind: 'heal'; power: number; target: AllyTarget }
   | { kind: 'shield'; power: number; target: AllyTarget }
   | { kind: 'enemyStatus'; status: StatusId; turns: number; value?: number; target: 'focus' | 'allEnemies' }
   | { kind: 'allyStatus'; status: StatusId; turns: number; value?: number; target: AllyTarget }
   | { kind: 'stardust'; amount: number }
-  | { kind: 'purge'; target: 'focus' | 'allEnemies' };
+  | { kind: 'purge'; target: 'focus' | 'allEnemies' }
+  /** 다음 마법의 체인 배율에 더해진다 */
+  | { kind: 'boost'; amount: number }
+  /** 집중 대상에 지연 폭발을 건다. 라운드가 끝날 때 터진다. */
+  | { kind: 'doom'; power: number };
+
+/** 카드에 표시하는 스킬 유형(연출도 이 값을 따른다) */
+export type SkillTag = 'strike' | 'multi' | 'aoe' | 'pierce' | 'execute' | 'drain' | 'dot' | 'delayed' | 'debuff' | 'heal' | 'shield' | 'buff' | 'utility';
 
 export interface SpellDef {
   id: string;
@@ -45,18 +69,24 @@ export interface SpellDef {
   output: SpellOutput;
   effects: Effect[];
   desc: string;
+  tag: SkillTag;
 }
 
 export interface UnitDef {
   id: string;
   name: string;
+  /** 영문 코드네임 */
+  code: string;
+  /** 한 줄 소개 */
+  concept: string;
   /** 'star'는 별빛(중립) 계열 */
   element: Element | 'star';
   role: Role;
   maxHp: number;
   atk: number;
   def: number;
-  spells: [string, string];
+  /** 스킬 덱(매 라운드 2장씩 뽑는다) */
+  spells: string[];
 }
 
 export interface ReactionDef {
@@ -139,6 +169,8 @@ export interface BattleState {
   stardust: number;
   maxStardust: number;
   focusUid: string | null;
+  /** 이번 라운드 손패: 아군 uid → 뽑은 스킬 */
+  hands: Record<string, string[]>;
   /** 이번 아군 턴 동안 봉인된 성속(성식) */
   seal: Element | null;
   outcome: BattleOutcome;
@@ -147,11 +179,13 @@ export interface BattleState {
   stats: { maxChain: number; reactions: number; fullChains: number };
 }
 
+export type DamageSource = 'ally' | 'enemy' | 'burn' | 'chain' | 'doom' | 'counter';
+
 export type BattleEvent =
   | { type: 'cast'; allyUid: string; spellId: string; linked: boolean; chain: number; mult: number; outElement: Element | null; sealed: boolean }
   | { type: 'reaction'; reactionId: string; allyUid: string }
   | { type: 'fullChain'; bonus: number }
-  | { type: 'damage'; targetUid: string; amount: number; absorbed: number; source: 'ally' | 'enemy' | 'burn' | 'chain'; hpAfter: number; shieldAfter: number }
+  | { type: 'damage'; targetUid: string; amount: number; absorbed: number; source: DamageSource; hpAfter: number; shieldAfter: number }
   | { type: 'heal'; targetUid: string; amount: number; hpAfter: number }
   | { type: 'shield'; targetUid: string; amount: number; shieldAfter: number }
   | { type: 'status'; targetUid: string; status: StatusId; turns: number }

@@ -1,5 +1,4 @@
 import { spellById } from '../data/spells';
-import { unitById } from '../data/units';
 import { cloneBattle, executeRound, isAlive } from './battle';
 import type { BattleState, PlannedCast } from './types';
 
@@ -7,7 +6,7 @@ function* candidatePlans(state: BattleState, prefix: PlannedCast[] = [], cost = 
   yield prefix;
   for (const ally of state.allies) {
     if (!isAlive(ally) || prefix.some((p) => p.allyUid === ally.uid)) continue;
-    for (const spellId of unitById(ally.defId).spells) {
+    for (const spellId of state.hands[ally.uid] ?? []) {
       const c = cost + spellById(spellId).cost;
       if (c > state.stardust) continue;
       yield* candidatePlans(state, [...prefix, { allyUid: ally.uid, spellId }], c);

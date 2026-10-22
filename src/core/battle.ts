@@ -1,6 +1,7 @@
 import { ELEMENT_ORDER, reactionById } from '../data/elements';
 import { enemyById } from '../data/enemies';
 import { spellById } from '../data/spells';
+import { unitById } from '../data/units';
 import { FULL_CHAIN, linkStep } from './link';
 import { Rng } from './rng';
 import type {
@@ -8,6 +9,8 @@ import type {
   BattleEvent,
   BattleMods,
   BattleState,
+  DamageEffect,
+  DamageSource,
   Effect,
   Element,
   Enemy,
@@ -19,10 +22,13 @@ import type {
 
 export const MAX_STARDUST = 10;
 export const FULL_CHAIN_POWER = 10;
+export const HAND_SIZE = 2;
 const WEAKEN_FACTOR = 0.7;
 const EXPOSE_FACTOR = 1.3;
 const STAR_SHIELD_FACTOR = 0.5;
 const STAR_SHIELD_CHAIN = 3;
+const EXECUTE_THRESHOLD = 0.35;
+const DEBUFFS: StatusId[] = ['stun', 'weaken', 'burn', 'expose', 'doom'];
 
 export const DEFAULT_MODS: BattleMods = { stardustPerTurn: 3, startStardust: 4, fullChainBonus: 1 };
 
@@ -73,12 +79,14 @@ export function createBattle(allies: Ally[], enemyIds: string[], mods: BattleMod
     stardust: Math.min(mods.startStardust, MAX_STARDUST),
     maxStardust: MAX_STARDUST,
     focusUid: enemies[0]?.uid ?? null,
+    hands: {},
     seal: null,
     outcome: 'ongoing',
     rngState: rng.state,
     mods,
     stats: { maxChain: 0, reactions: 0, fullChains: 0 },
   };
+  drawHands(state);
   rollIntents(state);
   return state;
 }
@@ -92,6 +100,17 @@ function withRng<T>(state: BattleState, fn: (rng: Rng) => T): T {
   const out = fn(rng);
   state.rngState = rng.state;
   return out;
+}
+
+/** 살아 있는 술사마다 스킬 덱에서 2장을 뽑는다. */
+export function drawHands(state: BattleState): void {
+  withRng(state, (rng) => {
+    state.hands = {};
+    for (const a of state.allies) {
+      if (!isAlive(a)) continue;
+      state.hands[a.uid] = rng.shuffle(unitById(a.defId).spells).slice(0, HAND_SIZE);
+    }
+  });
 }
 
 export function rollIntents(state: BattleState): void {
@@ -133,6 +152,7 @@ export function validatePlan(state: BattleState, plan: PlannedCast[]): string | 
     if (!ally) return '알 수 없는 술사입니다.';
     if (!isAlive(ally)) return '쓰러진 술사는 시전할 수 없습니다.';
     if (seen.has(c.allyUid)) return '술사는 한 턴에 한 번만 시전할 수 있습니다.';
+    if (!state.hands[c.allyUid]?.includes(c.spellId)) return '이번 라운드 손패에 없는 스킬입니다.';
     seen.add(c.allyUid);
   }
   if (planCost(plan) > state.stardust) return '성진이 부족합니다.';
@@ -143,7 +163,11 @@ function addStatus(u: Unit, id: StatusId, turns: number, value?: number): void {
   const existing = u.statuses.find((s) => s.id === id);
   if (existing) {
     existing.turns = Math.max(existing.turns, turns);
-    if (value !== undefined) existing.value = id === 'atkUp' && turns >= 99 ? (existing.value ?? 0) + value : Math.max(existing.value ?? 0, value);
+    if (value !== undefined) {
+      // 적의 영구 강화와 지연 폭격은 누적, 나머지는 큰 값을 남긴다.
+      const stacks = (id === 'atkUp' && turns >= 99) || id === 'doom';
+      existing.value = stacks ? (existing.value ?? 0) + value : Math.max(existing.value ?? 0, value);
+    }
   } else {
     const s: Status = { id, turns };
     if (value !== undefined) s.value = value;
@@ -151,12 +175,12 @@ function addStatus(u: Unit, id: StatusId, turns: number, value?: number): void {
   }
 }
 
-function dealDamage(state: BattleState, target: Unit, amount: number, source: 'ally' | 'enemy' | 'burn' | 'chain', events: BattleEvent[]): void {
-  if (!isAlive(target)) return;
+function dealDamage(state: BattleState, target: Unit, amount: number, source: DamageSource, events: BattleEvent[]): number {
+  if (!isAlive(target)) return 0;
   const absorbed = Math.min(target.shield, amount);
   target.shield -= absorbed;
-  const hpLoss = amount - absorbed;
-  target.hp = Math.max(0, target.hp - hpLoss);
+  const hpLoss = Math.min(target.hp, amount - absorbed);
+  target.hp -= hpLoss;
   events.push({ type: 'damage', targetUid: target.uid, amount: hpLoss, absorbed, source, hpAfter: target.hp, shieldAfter: target.shield });
   if (!isAlive(target)) {
     target.statuses = [];
@@ -165,6 +189,7 @@ function dealDamage(state: BattleState, target: Unit, amount: number, source: 'a
     events.push({ type: 'death', uid: target.uid });
     if (state.focusUid === target.uid) state.focusUid = state.enemies.find(isAlive)?.uid ?? null;
   }
+  return hpLoss + absorbed;
 }
 
 interface CastContext {
@@ -175,11 +200,13 @@ interface CastContext {
   pierce: boolean;
 }
 
-function allyHitAmount(ctx: CastContext, power: number, target: Enemy, scaleWithChain: boolean): number {
-  let raw = (power * effectiveAtk(ctx.caster)) / 10;
+function allyHitAmount(ctx: CastContext, eff: DamageEffect, target: Enemy): number {
+  let raw = (eff.power * effectiveAtk(ctx.caster)) / 10;
   raw *= ctx.mult * ctx.damageMult;
-  if (scaleWithChain) raw *= ctx.chain;
-  if (!ctx.pierce) raw *= defFactor(target.def);
+  if (eff.scaleWithChain) raw *= ctx.chain;
+  if (eff.execute && target.hp / target.maxHp <= EXECUTE_THRESHOLD) raw *= eff.execute;
+  if (eff.vsDebuffed && DEBUFFS.some((d) => hasStatus(target, d))) raw *= eff.vsDebuffed;
+  if (!ctx.pierce && !eff.pierce) raw *= defFactor(target.def);
   if (hasStatus(target, 'expose')) raw *= EXPOSE_FACTOR;
   if (enemyById(target.defId).traits?.includes('starShield') && ctx.chain < STAR_SHIELD_CHAIN) raw *= STAR_SHIELD_FACTOR;
   return Math.max(1, Math.round(raw));
@@ -193,31 +220,35 @@ function allyTargets(state: BattleState, caster: Ally, target: 'lowestAlly' | 'a
   return lowest ? [lowest] : [];
 }
 
-function applyEffects(state: BattleState, effects: Effect[], ctx: CastContext, rng: Rng, events: BattleEvent[]): void {
+function healAlly(a: Ally, amount: number, events: BattleEvent[]): void {
+  const healed = Math.min(a.maxHp - a.hp, amount);
+  a.hp += healed;
+  events.push({ type: 'heal', targetUid: a.uid, amount: healed, hpAfter: a.hp });
+}
+
+/** 효과를 적용한다. 다음 마법에 넘길 배율 보너스(boost)를 돌려준다. */
+function applyEffects(state: BattleState, effects: Effect[], ctx: CastContext, rng: Rng, events: BattleEvent[]): number {
+  let boost = 0;
   for (const eff of effects) {
     switch (eff.kind) {
       case 'damage': {
-        const targets: Enemy[] = [];
-        if (eff.target === 'focus') {
-          const f = getFocus(state);
-          if (f) targets.push(f);
-        } else if (eff.target === 'allEnemies') {
-          targets.push(...state.enemies.filter(isAlive));
-        } else {
-          for (let i = 0; i < 3; i++) {
+        const hits = eff.hits ?? 1;
+        let dealt = 0;
+        for (let i = 0; i < hits; i++) {
+          let targets: Enemy[];
+          if (eff.target === 'focus') targets = [getFocus(state)].filter((x): x is Enemy => !!x);
+          else if (eff.target === 'allEnemies') targets = state.enemies.filter(isAlive);
+          else {
             const living = state.enemies.filter(isAlive);
-            if (living.length) targets.push(rng.pick(living));
+            targets = living.length ? [rng.pick(living)] : [];
           }
+          for (const t of targets) dealt += dealDamage(state, t, allyHitAmount(ctx, eff, t), 'ally', events);
         }
-        for (const t of targets) dealDamage(state, t, allyHitAmount(ctx, eff.power, t, !!eff.scaleWithChain), 'ally', events);
+        if (eff.lifesteal && dealt > 0 && isAlive(ctx.caster)) healAlly(ctx.caster, Math.round(dealt * eff.lifesteal), events);
         break;
       }
       case 'heal':
-        for (const a of allyTargets(state, ctx.caster, eff.target)) {
-          const amount = Math.min(a.maxHp - a.hp, Math.round(eff.power * ctx.mult));
-          a.hp += amount;
-          events.push({ type: 'heal', targetUid: a.uid, amount, hpAfter: a.hp });
-        }
+        for (const a of allyTargets(state, ctx.caster, eff.target)) healAlly(a, Math.round(eff.power * ctx.mult), events);
         break;
       case 'shield':
         for (const a of allyTargets(state, ctx.caster, eff.target)) {
@@ -236,7 +267,9 @@ function applyEffects(state: BattleState, effects: Effect[], ctx: CastContext, r
       }
       case 'allyStatus':
         for (const a of allyTargets(state, ctx.caster, eff.target)) {
-          addStatus(a, eff.status, eff.turns, eff.value);
+          // 반격 피해는 시전자의 공격력과 체인 배율을 따른다.
+          const value = eff.status === 'counter' && eff.value ? Math.round(((eff.value * effectiveAtk(ctx.caster)) / 10) * ctx.mult) : eff.value;
+          addStatus(a, eff.status, eff.turns, value);
           events.push({ type: 'status', targetUid: a.uid, status: eff.status, turns: eff.turns });
         }
         break;
@@ -255,8 +288,21 @@ function applyEffects(state: BattleState, effects: Effect[], ctx: CastContext, r
         }
         break;
       }
+      case 'boost':
+        boost += eff.amount;
+        break;
+      case 'doom': {
+        const t = getFocus(state);
+        if (!t) break;
+        let raw = ((eff.power * effectiveAtk(ctx.caster)) / 10) * ctx.mult * ctx.damageMult;
+        if (!ctx.pierce) raw *= defFactor(t.def);
+        addStatus(t, 'doom', 1, Math.max(1, Math.round(raw)));
+        events.push({ type: 'status', targetUid: t.uid, status: 'doom', turns: 1 });
+        break;
+      }
     }
   }
+  return boost;
 }
 
 function checkOutcome(state: BattleState): void {
@@ -267,6 +313,7 @@ function checkOutcome(state: BattleState): void {
 function runPlayerPhase(state: BattleState, plan: PlannedCast[], rng: Rng, events: BattleEvent[]): void {
   let prevOut: Element | null = null;
   let prevChain = 0;
+  let boost = 0;
   for (const cast of plan) {
     if (state.outcome !== 'ongoing') break;
     const ally = state.allies.find((a) => a.uid === cast.allyUid);
@@ -281,17 +328,19 @@ function runPlayerPhase(state: BattleState, plan: PlannedCast[], rng: Rng, event
     }
     state.stardust -= spell.cost;
     const step = linkStep(prevOut, prevChain, spell, state.seal);
-    events.push({ type: 'cast', allyUid: ally.uid, spellId: spell.id, linked: step.linked, chain: step.chain, mult: step.mult, outElement: step.outElement, sealed: step.sealed });
+    const mult = Math.round((step.mult + boost) * 100) / 100;
+    boost = 0;
+    events.push({ type: 'cast', allyUid: ally.uid, spellId: spell.id, linked: step.linked, chain: step.chain, mult, outElement: step.outElement, sealed: step.sealed });
     const reaction = step.reactionId ? reactionById(step.reactionId) : null;
     const ctx: CastContext = {
       caster: ally,
-      mult: step.mult,
+      mult,
       chain: step.chain,
       damageMult: reaction?.damageMult ?? 1,
       pierce: reaction?.pierce ?? false,
     };
     if (reaction) events.push({ type: 'reaction', reactionId: reaction.id, allyUid: ally.uid });
-    applyEffects(state, spell.effects, ctx, rng, events);
+    boost += applyEffects(state, spell.effects, ctx, rng, events);
     if (reaction && reaction.effects.length) applyEffects(state, reaction.effects, { ...ctx, damageMult: 1, pierce: false }, rng, events);
     if (reaction) state.stats.reactions++;
     state.stats.maxChain = Math.max(state.stats.maxChain, step.chain);
@@ -318,6 +367,12 @@ export function enemyHitAmount(enemy: Enemy, power: number, target: Ally): numbe
   return Math.max(1, Math.round(raw));
 }
 
+function hitAlly(state: BattleState, enemy: Enemy, ally: Ally, power: number, events: BattleEvent[]): void {
+  dealDamage(state, ally, enemyHitAmount(enemy, power, ally), 'enemy', events);
+  const counter = ally.statuses.find((s) => s.id === 'counter');
+  if (counter?.value && isAlive(ally) && isAlive(enemy)) dealDamage(state, enemy, counter.value, 'counter', events);
+}
+
 function runEnemyPhase(state: BattleState, rng: Rng, events: BattleEvent[]): void {
   for (const e of state.enemies) e.shield = 0;
   for (const e of state.enemies) {
@@ -333,13 +388,17 @@ function runEnemyPhase(state: BattleState, rng: Rng, events: BattleEvent[]): voi
     const living = state.allies.filter(isAlive);
     switch (intent.kind) {
       case 'attack': {
-        let target = living.find((a) => a.uid === intent.targetId);
+        const taunter = living.find((a) => hasStatus(a, 'taunt'));
+        let target = taunter ?? living.find((a) => a.uid === intent.targetId);
         if (!target && living.length) target = rng.pick(living);
-        if (target) dealDamage(state, target, enemyHitAmount(e, intent.power, target), 'enemy', events);
+        if (target) hitAlly(state, e, target, intent.power, events);
         break;
       }
       case 'attackAll':
-        for (const a of living) dealDamage(state, a, enemyHitAmount(e, intent.power, a), 'enemy', events);
+        for (const a of living) {
+          if (!isAlive(e)) break;
+          hitAlly(state, e, a, intent.power, events);
+        }
         break;
       case 'defend':
         e.shield += intent.shield;
@@ -364,6 +423,8 @@ function runEnemyPhase(state: BattleState, rng: Rng, events: BattleEvent[]): voi
 
 function endRound(state: BattleState, events: BattleEvent[]): void {
   for (const e of state.enemies) {
+    const doom = e.statuses.find((s) => s.id === 'doom');
+    if (doom && isAlive(e)) dealDamage(state, e, doom.value ?? 0, 'doom', events);
     const burn = e.statuses.find((s) => s.id === 'burn');
     if (burn && isAlive(e)) dealDamage(state, e, burn.value ?? 0, 'burn', events);
   }
@@ -376,7 +437,7 @@ function endRound(state: BattleState, events: BattleEvent[]): void {
 }
 
 /**
- * 한 라운드를 진행한다: 아군 시전 → 적 행동 → 라운드 정리 → 다음 라운드 준비.
+ * 한 라운드를 진행한다: 아군 시전 → 적 행동 → 라운드 정리 → 다음 라운드 준비(손패 뽑기, 적 예고).
  * state를 직접 변경하고, 화면 연출용 이벤트 목록을 돌려준다.
  */
 export function executeRound(state: BattleState, plan: PlannedCast[]): BattleEvent[] {
@@ -396,6 +457,7 @@ export function executeRound(state: BattleState, plan: PlannedCast[]): BattleEve
   }
   state.round++;
   state.stardust = Math.min(state.maxStardust, state.stardust + state.mods.stardustPerTurn);
+  drawHands(state);
   rollIntents(state);
   events.push({ type: 'round', round: state.round });
   return events;

@@ -60,7 +60,7 @@ export const REACTIONS: ReactionDef[] = [
     from: 'comet',
     to: 'nebula',
     desc: '무작위 적에게 유성 3발을 떨어뜨린다.',
-    effects: [{ kind: 'damage', power: 6, target: 'random3' }],
+    effects: [{ kind: 'damage', power: 6, target: 'random', hits: 3 }],
   },
   {
     id: 'supernova',
@@ -110,4 +110,7 @@ export const STATUS_META: Record<string, { name: string; glyph: string; debuff: 
   expose: { name: '노출', glyph: '◎', debuff: true },
   atkUp: { name: '공격 상승', glyph: '↑', debuff: false },
   seal: { name: '성식', glyph: '⊘', debuff: true },
+  doom: { name: '폭격 예정', glyph: '◎', debuff: true },
+  taunt: { name: '도발', glyph: '⛨', debuff: false },
+  counter: { name: '반격', glyph: '⟲', debuff: false },
 };

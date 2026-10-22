@@ -6,7 +6,7 @@ const s = spellById;
 
 describe('linkStep', () => {
   it('starts a chain at 1 without a previous cast', () => {
-    const step = linkStep(null, 0, s('dawn_lance'), null);
+    const step = linkStep(null, 0, s('dawn_thrust'), null);
     expect(step).toMatchObject({ linked: false, chain: 1, mult: 1, outElement: 'sol', reactionId: null });
   });
 
@@ -21,7 +21,7 @@ describe('linkStep', () => {
   });
 
   it('starter spells never link even after a cast', () => {
-    expect(linkStep('sol', 2, s('meteor_dash'), null).linked).toBe(false);
+    expect(linkStep('sol', 2, s('meteor_snipe'), null).linked).toBe(false);
   });
 
   it('wild/echo spells link to anything and pass the element through without a reaction', () => {
@@ -37,7 +37,7 @@ describe('linkStep', () => {
 
 describe('previewChain', () => {
   it('reaches a full chain with reactions', () => {
-    const steps = previewChain(['dawn_lance', 'crescent_edge', 'void_touch', 'tail_shot'].map(s));
+    const steps = previewChain(['dawn_thrust', 'crescent_edge', 'void_touch', 'tail_volley'].map(s));
     expect(steps.map((x) => x.chain)).toEqual([1, 2, 3, 4]);
     expect(steps.map((x) => x.reactionId)).toEqual([null, 'eclipse', 'moonset', 'blackhole']);
     expect(steps[3].mult).toBe(chainMult(4));
