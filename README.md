@@ -18,14 +18,14 @@ WebGL이 필요합니다. 배경, 바닥 반사, 블룸, VFX는 three.js로 그�
 - `src/core/`: 전투 규칙(DOM 의존 없음). 링크·체인, 전투 상태머신, 손패 뽑기, 팀 궁합 분석, 런 진행과 저장
 - `src/data/`: 성속·반응, 스킬 30종, 술사 6명, 적, 층 구성, 보상
 - `src/render/three/`: 2.5D 무대
-  - `environment.ts`: 층별 배경(하늘·도시·비·안개·오로라·일식)
+  - `environment.ts`: 층별 배경. 노을 해안, 안개 초원, 네온 운하, 사구, 오로라 설원, 하늘섬. 하늘, 해·달·일식, 능선, 지형지물, 바닥, 날씨
   - `fx.ts`: 스킬 VFX
   - `stage.ts`: 카메라, 후처리, 캐릭터 판
 - `src/render/characters.ts`, `figures.ts`: 캐릭터와 적의 2D 일러스트(SVG)
 - `src/ui/`: 화면. 메인 → 편성 → 성도(지도) → 전투 → 보상 → 결과
 - `tests/core/`: Vitest 테스트
 
-기획과 로드맵은 [docs/PLAN.md](docs/PLAN.md)에 있습니다.
+기획과 로드맵은 [docs/PLAN.md](docs/PLAN.md)에, UI/UX 분석과 개편안은 [docs/UI_UX.md](docs/UI_UX.md)에 있습니다.
 
 ## 사용한 외부 자원
 

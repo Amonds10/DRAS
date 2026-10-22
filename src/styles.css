@@ -410,24 +410,23 @@ p {
 /* ───────── 스킬 카드 ───────── */
 .skill-card {
   --el: #fff;
-  --w: 124px;
+  --w: 132px;
   position: relative;
   width: var(--w);
-  min-height: 168px;
   flex: none;
   font: inherit;
   color: var(--text);
-  padding: 8px 9px 9px;
+  padding: 7px 8px 8px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 4px;
+  gap: 5px;
   text-align: left;
   cursor: pointer;
   border: 1px solid var(--line-strong);
   border-top: 3px solid var(--el);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--el) 10%, #17181c), #121317 70%);
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--el) 10%, #17181c), #121317 80%);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%);
   transition:
     transform 0.15s ease,
     border-color 0.15s,
@@ -435,20 +434,20 @@ p {
 }
 
 button.skill-card:hover:not(:disabled) {
-  transform: translateY(-4px);
+  transform: translateY(-3px);
   border-color: color-mix(in srgb, var(--el) 70%, #fff);
 }
 
 .skill-card.chosen {
-  transform: translateY(-10px);
+  transform: translateY(-6px);
   border-color: var(--accent);
   border-top-color: var(--accent);
-  background: linear-gradient(180deg, rgba(255, 198, 64, 0.16), #121317 70%);
+  background: linear-gradient(180deg, rgba(255, 198, 64, 0.18), #121317 80%);
 }
 
 .skill-card:disabled {
   cursor: not-allowed;
-  opacity: 0.35;
+  opacity: 0.32;
 }
 
 .sc-head {
@@ -471,22 +470,30 @@ button.skill-card:hover:not(:disabled) {
   background: var(--accent);
 }
 
+.sc-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+}
+
 .sc-icon {
-  width: 34px;
-  height: 34px;
+  width: 26px;
+  height: 26px;
+  flex: none;
   display: grid;
   place-items: center;
-  font-size: 18px;
+  font-size: 14px;
   color: var(--el);
   border: 1px solid color-mix(in srgb, var(--el) 55%, transparent);
   background: rgba(0, 0, 0, 0.35);
-  margin: 2px 0;
 }
 
 .sc-name {
   font-weight: 900;
   font-size: 14px;
-  line-height: 1.25;
+  line-height: 1.2;
+  word-break: keep-all;
 }
 
 .sc-owner {
@@ -495,58 +502,105 @@ button.skill-card:hover:not(:disabled) {
 }
 
 .sc-flow .spell-flow {
+  font-size: 12px;
+}
+
+/* 이 카드를 지금 넣으면: 링크/반응/끊김 */
+.sc-link {
+  align-self: stretch;
+  font-family: var(--font-num);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 18px;
+  padding: 0 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.05);
+  border-left: 2px solid var(--line-strong);
+}
+
+.sc-link.link {
+  color: var(--accent);
+  border-left-color: var(--accent);
+  background: rgba(255, 198, 64, 0.1);
+}
+
+.sc-link.reaction {
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  border-left-color: #fff;
+  background: linear-gradient(90deg, rgba(255, 198, 64, 0.35), rgba(63, 200, 228, 0.25));
+}
+
+.sc-link.break {
+  color: #ff9a92;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  border-left-color: var(--danger);
+  background: rgba(255, 81, 72, 0.08);
+}
+
+.sc-link.start {
+  font-family: var(--font-ui);
   font-size: 11px;
 }
 
-.sc-desc {
+.sc-key {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: none;
+  font-family: var(--font-num);
   font-size: 11px;
-  line-height: 1.4;
+  line-height: 15px;
+  min-width: 15px;
+  text-align: center;
   color: var(--muted);
+  border: 1px solid var(--line-strong);
+}
+
+.skill-card .sc-key + .sc-order,
+.skill-card.chosen .sc-key {
+  display: none;
+}
+
+@media (hover: none) {
+  .cast-btn small {
+    display: none;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .sc-key {
+    display: block;
+  }
+
+  .sc-head .skill-tag {
+    margin-right: 20px;
+  }
 }
 
 .sc-order {
   position: absolute;
-  bottom: 6px;
-  right: 14px;
-  width: 20px;
-  height: 20px;
-  display: grid;
+  top: -1px;
+  right: 0;
+  width: 22px;
+  height: 22px;
+  display: grid !important;
   place-items: center;
   font-family: var(--font-num);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--accent-ink);
   background: var(--accent);
 }
 
-.skill-card.mini {
-  --w: 74px;
-  min-height: 0;
-  padding: 5px 6px 6px;
-  gap: 2px;
-  cursor: default;
-  border-top-width: 2px;
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%);
-}
-
-.skill-card.mini .sc-icon {
-  width: 22px;
-  height: 22px;
-  font-size: 12px;
-  margin: 1px 0;
-}
-
-.skill-card.mini .sc-name {
-  font-size: 11px;
-}
-
-.skill-card.mini .sc-cost i {
-  width: 5px;
-  height: 5px;
-}
-
-.skill-card.mini .sc-flow .spell-flow {
-  font-size: 9px;
+.skill-card.chosen .sc-head .skill-tag {
+  margin-right: 24px;
 }
 
 /* ───────── 헤더 ───────── */
@@ -819,19 +873,30 @@ button.skill-card:hover:not(:disabled) {
 }
 
 .team-layout {
-  max-width: 1320px;
+  max-width: 1400px;
   margin: 0 auto;
   padding: 12px 28px;
   display: grid;
-  grid-template-columns: 1fr 330px;
-  gap: 20px;
+  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr) 320px;
+  gap: 18px;
   align-items: start;
 }
 
-.unit-grid {
+/* 로스터: 초상 타일 3×2 */
+.roster {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-  gap: 12px;
+  gap: 8px;
+}
+
+.roster-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.roster-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .unit-card {
@@ -842,23 +907,30 @@ button.skill-card:hover:not(:disabled) {
   text-align: left;
   padding: 0;
   cursor: pointer;
-  display: grid;
-  grid-template-columns: 112px 1fr;
-  background: var(--panel);
   border: 1px solid var(--line);
-  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
   transition:
     border-color 0.15s,
-    opacity 0.15s;
+    opacity 0.15s,
+    transform 0.15s;
 }
 
-.unit-card:hover:not(:disabled) {
-  border-color: var(--line-strong);
+.roster-tile {
+  aspect-ratio: 3 / 4.4;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, transparent 55%, rgba(0, 0, 0, 0.85)),
+    radial-gradient(ellipse at 50% 30%, color-mix(in srgb, var(--el) 26%, #15161a), #0d0e11 75%);
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
 }
 
-.unit-card.selected {
+.roster-tile:hover:not(:disabled),
+.roster-tile.inspecting {
+  border-color: color-mix(in srgb, var(--el) 70%, #fff);
+}
+
+.roster-tile.selected {
   border-color: var(--accent);
-  box-shadow: inset 3px 0 0 var(--accent);
+  box-shadow: inset 0 -3px 0 var(--accent);
 }
 
 .unit-card:disabled {
@@ -866,44 +938,67 @@ button.skill-card:hover:not(:disabled) {
   cursor: not-allowed;
 }
 
-.unit-portrait {
-  position: relative;
-  background:
-    linear-gradient(180deg, transparent 60%, rgba(0, 0, 0, 0.6)),
-    radial-gradient(ellipse at 50% 30%, color-mix(in srgb, var(--el) 22%, #15161a), #0d0e11 75%);
-  border-right: 1px solid var(--line);
-  overflow: hidden;
-}
-
-.portrait-fig {
+.tile-fig {
   position: absolute;
-  inset: 10px 0 0;
+  inset: 8px 0 30px;
   display: grid;
   place-items: end center;
 }
 
-.portrait-fig .fig {
+.tile-fig .fig,
+.detail-fig .fig {
   height: 100%;
-  max-height: 230px;
   filter: drop-shadow(0 0 6px color-mix(in srgb, var(--el) 70%, transparent));
 }
 
-.portrait-code {
+.tile-role {
   position: absolute;
-  left: 8px;
-  bottom: 6px;
+  right: 6px;
+  top: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--el);
+  border: 1px solid color-mix(in srgb, var(--el) 50%, transparent);
+  background: rgba(0, 0, 0, 0.4);
+  padding: 0 5px;
+}
+
+.tile-foot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 7px 6px;
+}
+
+.tile-foot b {
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.tile-foot b {
+  white-space: nowrap;
+}
+
+.squad-bar {
+  display: none;
+}
+
+.portrait-code {
   font-family: var(--font-num);
   font-weight: 700;
-  font-size: 18px;
-  letter-spacing: 0.06em;
-  color: #fff;
-  text-shadow: 0 1px 4px #000;
+  font-size: 14px;
+  letter-spacing: 0.2em;
+  color: var(--el);
 }
 
 .order-seal {
   position: absolute;
-  left: 8px;
-  top: 8px;
+  left: 6px;
+  top: 6px;
   width: 24px;
   height: 24px;
   display: grid;
@@ -915,69 +1010,113 @@ button.skill-card:hover:not(:disabled) {
   background: var(--accent);
 }
 
-.unit-body {
-  padding: 10px 12px 12px;
+/* 상세 패널 */
+.unit-detail {
+  --el: #fff;
+  padding: 0 0 14px;
+  display: grid;
+  gap: 12px;
+  border-top: 3px solid var(--el);
+  animation: fade-in 0.15s ease;
+}
+
+.detail-hero {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 16px;
+  padding: 0 18px 0 0;
+}
+
+.detail-fig {
+  position: relative;
+  height: 230px;
+  display: grid;
+  place-items: end center;
+  padding-top: 10px;
+  background: radial-gradient(ellipse at 50% 35%, color-mix(in srgb, var(--el) 26%, transparent), transparent 70%);
+}
+
+.detail-id {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 6px;
+  padding-top: 16px;
   min-width: 0;
 }
 
-.unit-head {
+.detail-id h2 {
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.detail-sub {
   display: flex;
   align-items: center;
-  gap: 8px;
-}
-
-.unit-head h3 {
-  font-size: 17px;
-  font-weight: 900;
-}
-
-.role-tag {
-  margin-left: auto;
-  font-size: 11px;
-  font-weight: 700;
+  gap: 6px;
+  font-size: 13px;
   color: var(--el);
-  border: 1px solid color-mix(in srgb, var(--el) 50%, transparent);
-  padding: 0 6px;
 }
 
 .unit-concept {
-  font-size: 12px;
+  font-size: 13px;
   color: #bfc1c8;
 }
 
-.unit-stats {
+.detail-stats {
+  margin: 4px 0 0;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  margin: 0;
   gap: 4px;
 }
 
-.unit-stats div {
-  background: var(--panel-2);
-  padding: 1px 7px;
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
+.stat-bar {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  align-items: center;
   font-size: 11px;
 }
 
-.unit-stats dt {
+.stat-bar dt {
   color: var(--muted);
 }
 
-.unit-stats dd {
+.stat-bar dd {
   margin: 0;
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  align-items: center;
+  gap: 6px;
+}
+
+.stat-bar b {
   font-family: var(--font-num);
   font-size: 15px;
-  font-weight: 700;
+  text-align: right;
+}
+
+.stat-track {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.stat-track i {
+  display: block;
+  height: 100%;
+  background: var(--el);
+}
+
+.detail-toggle {
+  align-self: flex-start;
+  margin-top: 6px;
+}
+
+.unit-detail .unit-spells {
+  padding: 0 18px;
 }
 
 .unit-spells {
   display: grid;
-  gap: 5px;
+  gap: 6px;
 }
 
 .unit-spells-head {
@@ -998,7 +1137,7 @@ button.skill-card:hover:not(:disabled) {
 
 .spell-name {
   font-weight: 700;
-  font-size: 13px;
+  font-size: 14px;
   white-space: nowrap;
 }
 
@@ -1007,8 +1146,9 @@ button.skill-card:hover:not(:disabled) {
 }
 
 .spell-desc {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
+  margin-top: 2px;
 }
 
 .side-panel {
@@ -1742,7 +1882,7 @@ button.skill-card:hover:not(:disabled) {
   display: none;
 }
 
-/* HUD */
+/* HUD: 얇은 상단 막대 */
 .hud-slot {
   position: absolute;
   inset: 0 0 auto;
@@ -1751,12 +1891,12 @@ button.skill-card:hover:not(:disabled) {
 }
 
 .hud {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: start;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   gap: 12px;
-  padding: 12px 16px;
-  background: linear-gradient(180deg, rgba(6, 7, 9, 0.75), transparent);
+  padding: 10px 16px;
+  background: linear-gradient(180deg, rgba(6, 7, 9, 0.7), transparent);
 }
 
 .hud > * {
@@ -1770,13 +1910,9 @@ button.skill-card:hover:not(:disabled) {
   gap: 8px;
 }
 
-.hud-right {
-  justify-content: flex-end;
-}
-
 .btn-hud {
-  height: 34px;
-  min-width: 34px;
+  height: 32px;
+  min-width: 32px;
   padding: 0 10px;
   font-family: var(--font-num);
   font-size: 14px;
@@ -1793,38 +1929,56 @@ button.skill-card:hover:not(:disabled) {
 
 .plaque-sub {
   font-size: 12px;
-  color: #c9cad0;
+  color: #d9dade;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
 }
 
 .plaque b {
   font-family: var(--font-num);
-  font-size: 24px;
+  font-size: 22px;
   letter-spacing: 0.08em;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
 }
 
+.seal-banner {
+  position: absolute;
+  left: 50%;
+  top: 14px;
+  translate: -50% 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #d8cff5;
+  padding: 4px 12px;
+  border-left: 3px solid #b9a8ea;
+  background: rgba(12, 13, 16, 0.9);
+  white-space: nowrap;
+}
+
+/* 성진 */
 .gauge {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 10px;
-  background: rgba(12, 13, 16, 0.85);
-  border: 1px solid var(--line);
+  padding: 0 4px 0 14px;
   position: relative;
+  flex: none;
 }
 
 .gauge-label {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 
 .pips {
   display: flex;
-  gap: 3px;
+  gap: 4px;
 }
 
 .pips i {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   rotate: 45deg;
   background: var(--line-strong);
 }
@@ -1840,73 +1994,123 @@ button.skill-card:hover:not(:disabled) {
 
 .gauge-num {
   font-family: var(--font-num);
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 700;
   color: var(--accent);
   min-width: 14px;
   text-align: right;
+  line-height: 1;
 }
 
-.seal-banner {
-  position: absolute;
-  left: 50%;
-  top: 158px;
-  translate: -50% 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: #d8cff5;
-  padding: 4px 12px;
-  border-left: 3px solid #b9a8ea;
-  background: rgba(12, 13, 16, 0.9);
-  white-space: nowrap;
+.gauge-max {
+  font-family: var(--font-num);
+  font-size: 14px;
+  color: var(--muted);
+  margin-left: -6px;
 }
 
-/* 행동 대기열 */
-.queue {
+/* 체인 트랙: 손패 바로 위 */
+.chain-track {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
-  padding: 20px 8px 22px;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 
 .q-slot {
+  --el: var(--line-strong);
   position: relative;
-  width: 74px;
-  min-height: 102px;
-  display: grid;
-  place-items: center;
-}
-
-.q-slot.empty {
-  border: 1px dashed var(--line-strong);
-  background: rgba(12, 13, 16, 0.5);
-  font-family: var(--font-num);
-  font-size: 18px;
-  color: var(--dim);
-}
-
-.q-slot .skill-card {
-  min-height: 102px;
+  flex: 0 1 168px;
+  min-width: 0;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 8px 0 0;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--el);
   animation: rise 0.2s ease both;
 }
 
-.q-slot.active .skill-card {
-  border-color: var(--accent);
-  box-shadow: 0 0 18px rgba(255, 198, 64, 0.35);
+.q-slot.empty {
+  border-style: dashed;
+  border-left-width: 1px;
+  background: none;
+  color: var(--dim);
+  animation: none;
 }
 
-.q-slot.spent .skill-card {
+.q-num {
+  width: 22px;
+  align-self: stretch;
+  display: grid;
+  place-items: center;
+  flex: none;
+  font-family: var(--font-num);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--muted);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.q-slot:not(.empty) .q-num {
+  color: var(--accent-ink);
+  background: var(--accent);
+}
+
+.q-hint {
+  font-size: 12px;
+  color: var(--dim);
+  white-space: nowrap;
+}
+
+.q-icon {
+  color: var(--el);
+  font-size: 15px;
+  flex: none;
+}
+
+.q-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.15;
+}
+
+.q-text b {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.q-text small {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.q-slot.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 14px rgba(255, 198, 64, 0.35);
+}
+
+.q-slot.spent {
   opacity: 0.35;
 }
 
 .q-ctrl {
   position: absolute;
-  bottom: -20px;
+  right: 2px;
+  top: 50%;
+  translate: 0 -50%;
   display: flex;
-  gap: 2px;
+  gap: 1px;
   opacity: 0;
   transition: opacity 0.15s;
+  background: rgba(12, 13, 16, 0.95);
 }
 
 .q-slot:hover .q-ctrl,
@@ -1916,9 +2120,9 @@ button.skill-card:hover:not(:disabled) {
 
 .btn-q {
   width: 22px;
-  height: 18px;
+  height: 26px;
   padding: 0;
-  font-size: 10px;
+  font-size: 11px;
   clip-path: none;
 }
 
@@ -1928,9 +2132,12 @@ button.skill-card:hover:not(:disabled) {
 
 .q-link {
   position: relative;
-  width: 30px;
+  flex: none;
+  width: 64px;
   height: 2px;
   background: var(--line);
+  display: flex;
+  justify-content: center;
 }
 
 .q-link.ok {
@@ -1941,16 +2148,21 @@ button.skill-card:hover:not(:disabled) {
   background: repeating-linear-gradient(90deg, var(--danger) 0 3px, transparent 3px 6px);
 }
 
-.q-link-mark {
+.q-link-mark,
+.q-link .reaction-chip {
   position: absolute;
-  left: 50%;
-  top: 5px;
-  translate: -50% 0;
+  top: 50%;
+  translate: 0 -50%;
+  white-space: nowrap;
+}
+
+.q-link-mark {
   font-family: var(--font-num);
   font-size: 13px;
   font-weight: 700;
   color: var(--accent);
-  white-space: nowrap;
+  background: #101115;
+  padding: 0 4px;
 }
 
 .q-link.broken .q-link-mark {
@@ -1960,13 +2172,146 @@ button.skill-card:hover:not(:disabled) {
 }
 
 .q-link .reaction-chip {
-  position: absolute;
-  left: 50%;
-  bottom: 58px;
-  translate: -50% 0;
   font-size: 10px;
-  padding: 0 6px;
+  padding: 0 5px;
   z-index: 2;
+}
+
+.next-in {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 14px;
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+}
+
+.next-in small {
+  font-family: var(--font-num);
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  color: var(--muted);
+}
+
+.next-none {
+  color: var(--dim);
+}
+
+/* 설명 패널 */
+.peek-slot {
+  position: absolute;
+  left: 56%;
+  translate: -50% 0;
+  bottom: 14px;
+  z-index: 11;
+  pointer-events: none;
+}
+
+.peek {
+  width: 300px;
+  padding: 12px 14px 13px;
+  display: grid;
+  gap: 6px;
+  border-left: 3px solid var(--el);
+  animation: rise 0.15s ease both;
+}
+
+.peek-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.peek-owner {
+  font-family: var(--font-num);
+  letter-spacing: 0.08em;
+  color: var(--el);
+  margin-right: auto;
+}
+
+.peek-cost {
+  color: var(--accent);
+}
+
+.peek h3 {
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.peek-flow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #c9cad0;
+}
+
+.peek-desc {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.peek-link {
+  font-size: 12px;
+  padding: 3px 8px;
+  border-left: 2px solid var(--line-strong);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+}
+
+.peek-link.link,
+.peek-link.reaction {
+  color: var(--accent);
+  border-left-color: var(--accent);
+}
+
+.peek-link.break {
+  color: #ff9a92;
+  border-left-color: var(--danger);
+}
+
+.peek-reaction {
+  font-size: 12px;
+  color: #d3d4d9;
+}
+
+.peek-reaction b {
+  color: #fff;
+}
+
+/* HP 예측 */
+.hp-ghost {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.75) 0 2px, rgba(255, 255, 255, 0.35) 2px 4px);
+  animation: ghost 1s ease-in-out infinite alternate;
+}
+
+@keyframes ghost {
+  to {
+    opacity: 0.45;
+  }
+}
+
+.hp-forecast {
+  color: #ffd0cc;
+  font-weight: 700;
+}
+
+.ally .hp-forecast {
+  color: #ff9a92;
+}
+
+.hp-forecast.kill {
+  color: var(--accent);
+}
+
+.plate .hp-track {
+  height: 5px;
 }
 
 /* 떠오르는 숫자 */
@@ -2183,30 +2528,43 @@ button.skill-card:hover:not(:disabled) {
   color: var(--danger);
 }
 
-/* 손패 */
-.hand-slot {
+/* 하단 독: 체인 트랙 + 손패 + 시전 */
+.dock-slot {
   flex: none;
   position: relative;
   z-index: 2;
 }
 
-.hand {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  padding: 14px 18px 16px;
-  background: linear-gradient(180deg, #121317, #0c0d10);
+.dock {
+  display: grid;
+  gap: 10px;
+  padding: 10px 18px 14px;
+  background: linear-gradient(180deg, rgba(16, 17, 21, 0.97), #0b0c0f);
   border-top: 1px solid var(--line);
 }
 
-.hand-cards {
-  flex: 1;
+.dock-top {
   display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.dock-main {
+  display: flex;
+  align-items: stretch;
   gap: 16px;
-  justify-content: center;
+  min-width: 0;
+}
+
+.hand {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 14px;
   overflow-x: auto;
-  padding: 12px 4px 4px;
-  margin-top: -12px;
+  padding-top: 8px;
+  margin-top: -8px;
 }
 
 .hand-group {
@@ -2229,21 +2587,18 @@ button.skill-card:hover:not(:disabled) {
   border-left: 2px solid var(--el);
 }
 
-.hand-code {
-  font-family: var(--font-num);
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  color: var(--muted);
+.hand-group.has-pick .hand-owner b {
+  color: var(--accent);
 }
 
 .hand-pair {
   display: flex;
   gap: 6px;
+  flex: 1;
 }
 
 .hand-down {
-  width: 254px;
-  min-height: 168px;
+  width: 270px;
   display: grid;
   place-items: center;
   border: 1px dashed var(--line);
@@ -2252,10 +2607,11 @@ button.skill-card:hover:not(:disabled) {
 }
 
 .cast-zone {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 14px;
-  padding-left: 18px;
+  padding-left: 16px;
   border-left: 1px solid var(--line);
 }
 
@@ -2263,7 +2619,7 @@ button.skill-card:hover:not(:disabled) {
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-width: 84px;
+  min-width: 64px;
   text-align: center;
 }
 
@@ -2285,14 +2641,19 @@ button.skill-card:hover:not(:disabled) {
 }
 
 .chain-readout small {
-  font-size: 11px;
-  color: var(--muted);
-  max-width: 96px;
+  font-family: var(--font-num);
+  font-size: 15px;
+  color: var(--accent);
+}
+
+.cast-col {
+  display: grid;
+  gap: 6px;
 }
 
 .cast-btn {
-  width: 120px;
-  height: 92px;
+  width: 132px;
+  height: 84px;
   border: none;
   cursor: pointer;
   font: inherit;
@@ -2315,9 +2676,9 @@ button.skill-card:hover:not(:disabled) {
 
 .cast-btn small {
   font-family: var(--font-num);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.3em;
+  letter-spacing: 0.2em;
 }
 
 .cast-btn:hover:not(:disabled) {
@@ -2329,8 +2690,17 @@ button.skill-card:hover:not(:disabled) {
   cursor: wait;
 }
 
+.btn-reset {
+  width: 100%;
+}
+
 .busy .hand .skill-card {
   pointer-events: none;
+}
+
+.busy .dock-main {
+  opacity: 0.55;
+  transition: opacity 0.2s;
 }
 
 /* 결과 오버레이 */
@@ -2375,12 +2745,21 @@ button.skill-card:hover:not(:disabled) {
 
 /* ───────── 반응형 ───────── */
 @media (max-width: 1180px) {
-  .skill-card {
-    --w: 110px;
+  .team-layout {
+    grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
   }
 
-  .hand-cards {
-    justify-content: flex-start;
+  .team-layout .side-panel {
+    grid-column: 1 / -1;
+    position: static;
+  }
+
+  .skill-card {
+    --w: 112px;
+  }
+
+  .q-link {
+    width: 44px;
   }
 }
 
@@ -2395,16 +2774,60 @@ button.skill-card:hover:not(:disabled) {
     order: -1;
   }
 
-  .hand {
-    flex-direction: column;
-    align-items: stretch;
+  .team-layout .side-panel {
+    order: 3;
   }
 
-  .cast-zone {
-    border-left: none;
+  .team-wrap {
+    padding-bottom: 90px;
+  }
+
+  .squad-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    background: rgba(11, 12, 15, 0.96);
     border-top: 1px solid var(--line);
-    padding: 10px 0 0;
-    justify-content: center;
+  }
+
+  .squad-dots {
+    flex: 1;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .squad-dot {
+    height: 34px;
+    display: grid;
+    place-items: center;
+    font-size: 11px;
+    font-family: var(--font-num);
+    color: var(--dim);
+    border: 1px dashed var(--line);
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .squad-dot.on {
+    font-family: var(--font-ui);
+    font-weight: 700;
+    color: var(--text);
+    border: none;
+    border-bottom: 2px solid var(--el);
+    background: var(--panel-2);
+  }
+
+  .squad-bar .btn {
+    height: 40px;
+    padding: 0 18px;
   }
 
   .battle-wrap {
@@ -2414,7 +2837,120 @@ button.skill-card:hover:not(:disabled) {
 
   .scene {
     flex: none;
-    height: 60vh;
+    height: 56vh;
+    min-height: 340px;
+  }
+
+  .dock {
+    padding: 8px 10px 0;
+    gap: 8px;
+  }
+
+  .dock-main {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  /* 손패는 2열 격자로 접고, 시전 버튼은 엄지가 닿는 화면 아래에 붙인다 */
+  .hand {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 8px;
+    overflow: visible;
+  }
+
+  .hand-pair .skill-card {
+    --w: auto;
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .hand-down {
+    width: auto;
+    flex: 1;
+    min-height: 90px;
+  }
+
+  .cast-zone {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    margin: 0 -10px;
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+    border-left: none;
+    border-top: 1px solid var(--line);
+    background: rgba(11, 12, 15, 0.96);
+  }
+
+  .chain-readout {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .chain-readout b {
+    font-size: 34px;
+  }
+
+  .cast-col {
+    flex: 1;
+    grid-template-columns: 1fr auto;
+    align-items: stretch;
+  }
+
+  .cast-btn {
+    width: 100%;
+    height: 58px;
+  }
+
+  .cast-btn b {
+    font-size: 22px;
+  }
+
+  .btn-reset {
+    width: auto;
+  }
+
+  .peek-slot {
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    translate: none;
+  }
+
+  .peek {
+    width: auto;
+    padding: 8px 10px 9px;
+    gap: 3px;
+  }
+
+  .peek h3 {
+    font-size: 15px;
+  }
+
+  .peek-desc {
+    font-size: 12px;
+  }
+
+  .peek-flow,
+  .peek-reaction {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  /* 좁은 화면에서는 이름과 설명만: 링크 정보는 카드 배지에 있다 */
+  .peek-head,
+  .peek-link {
+    display: none;
+  }
+
+  .peek {
+    grid-template-columns: auto 1fr;
+    align-items: baseline;
+    column-gap: 8px;
+    background: rgba(12, 13, 16, 0.92);
   }
 }
 
@@ -2432,25 +2968,51 @@ button.skill-card:hover:not(:disabled) {
     padding: 8px 16px 32px;
   }
 
-  .unit-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .scene {
-    height: 560px;
-  }
-
-  .hud {
-    grid-template-columns: auto 1fr;
-    padding: 8px;
+  .roster-grid {
     gap: 6px;
   }
 
-  .hud .queue {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    justify-content: center;
-    padding: 18px 0 16px;
+  .roster-hint {
+    display: none;
+  }
+
+  .tile-role {
+    display: none;
+  }
+
+  .tile-foot b {
+    font-size: 13px;
+  }
+
+  .detail-hero {
+    grid-template-columns: 96px 1fr;
+    gap: 10px;
+    padding-right: 12px;
+  }
+
+  .detail-fig {
+    height: 170px;
+  }
+
+  .detail-id h2 {
+    font-size: 22px;
+  }
+
+  .unit-detail .unit-spells {
+    padding: 0 12px;
+  }
+
+  .spell-line-head {
+    flex-wrap: wrap;
+  }
+
+  .scene {
+    height: 50vh;
+  }
+
+  .hud {
+    padding: 8px;
+    gap: 6px;
   }
 
   .hud-right {
@@ -2465,8 +3027,12 @@ button.skill-card:hover:not(:disabled) {
   }
 
   .gauge {
-    padding: 3px 7px;
+    padding: 0 0 0 8px;
     gap: 5px;
+  }
+
+  .gauge-num {
+    font-size: 22px;
   }
 
   .gauge-label {
@@ -2492,21 +3058,58 @@ button.skill-card:hover:not(:disabled) {
   }
 
   .q-slot {
-    width: 58px;
-    min-height: 84px;
+    flex: 1 1 0;
+    height: 34px;
+    gap: 4px;
+    padding-right: 4px;
   }
 
-  .q-slot .skill-card {
-    --w: 58px;
-    min-height: 84px;
+  .q-num {
+    width: 16px;
+    font-size: 12px;
+  }
+
+  .q-slot {
+    justify-content: flex-start;
+  }
+
+  .q-icon {
+    font-size: 16px;
+    margin: 0 auto;
+  }
+
+  .q-text,
+  .q-hint,
+  .next-in small {
+    display: none;
   }
 
   .q-link {
-    width: 14px;
+    width: 26px;
   }
 
-  .q-link .reaction-chip,
   .q-link-mark {
+    font-size: 11px;
+    padding: 0 2px;
+  }
+
+  .q-link .reaction-chip {
+    font-size: 0;
+    padding: 0 3px;
+  }
+
+  .q-link .reaction-chip::after {
+    content: '★';
+    font-size: 10px;
+    color: var(--accent);
+  }
+
+  .next-in {
+    margin-left: 6px;
+    padding-left: 6px;
+  }
+
+  .q-ctrl {
     display: none;
   }
 
@@ -2578,25 +3181,37 @@ button.skill-card:hover:not(:disabled) {
     font-size: 30px;
   }
 
-  .hand {
-    padding: 12px 10px 16px;
-  }
-
   .skill-card {
-    --w: 100px;
+    padding: 6px 6px 7px;
+    gap: 4px;
   }
 
-  .sc-desc {
+  .sc-head .skill-tag {
+    font-size: 9px;
+    padding: 0 3px;
+  }
+
+  .sc-icon {
     display: none;
   }
 
-  .skill-card {
-    min-height: 130px;
+  .sc-name {
+    font-size: 12px;
   }
 
-  .hand-down {
-    width: 206px;
-    min-height: 130px;
+  .sc-link {
+    font-size: 10px;
+    padding: 0 4px;
+  }
+
+  .sc-link.reaction,
+  .sc-link.break,
+  .sc-link.start {
+    font-size: 10px;
+  }
+
+  .hand-owner {
+    font-size: 12px;
   }
 
   .map-board {

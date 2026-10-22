@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { executeRound, getFocus, isAlive, planCost, setFocus } from '../../core/battle';
+import { cloneBattle, executeRound, getFocus, isAlive, planCost, setFocus } from '../../core/battle';
 import { previewChain } from '../../core/link';
 import { finishBattle } from '../../core/run';
 import type { Ally, BattleEvent, BattleState, Element, Enemy, PlannedCast, SkillTag } from '../../core/types';
@@ -13,7 +13,8 @@ import { getStage } from '../../render/three/stage';
 import type { App } from '../app';
 import { h, sleep } from '../dom';
 import { showHelp } from '../help';
-import { NUM, allyName, button, elBadge, elColor, hpBar, intentView, modal, reactionChip, spellCard, statusRow, updateHpBar } from '../widgets';
+import type { LinkHint } from '../widgets';
+import { NUM, allyName, button, elBadge, elColor, hpBar, intentView, modal, reactionChip, spellCard, spellFlow, statusRow, tagLabel, updateHpBar } from '../widgets';
 
 function unitLabel(state: BattleState, uid: string): string {
   const ally = state.allies.find((a) => a.uid === uid);
@@ -62,19 +63,24 @@ export function battleScreen(app: App): HTMLElement {
   let busy = false;
   const log: string[] = [`— ${battle.round} 라운드 —`];
 
+  const place = floor.name;
+
   const root = h('main', { class: 'battle-wrap' });
   const scene = h('section', { class: `scene floor-${floor.kind}`, 'aria-label': '전장' });
   const actorLayer = h('div', { class: 'actor-layer' });
   const callout = h('div', { class: 'callout-layer', 'aria-live': 'polite' });
   const hudSlot = h('div', { class: 'hud-slot' });
-  const handSlot = h('div', { class: 'hand-slot' });
-  scene.append(actorLayer, hudSlot, callout);
-  root.append(scene, handSlot);
+  const peekSlot = h('div', { class: 'peek-slot', 'aria-live': 'polite' });
+  const dockSlot = h('div', { class: 'dock-slot' });
+  scene.append(actorLayer, hudSlot, peekSlot, callout);
+  root.append(scene, dockSlot);
 
   const actorEls = new Map<string, HTMLElement>();
   let previewArcs: THREE.Mesh[] = [];
   let queueEl: HTMLElement;
   let meter: HTMLElement;
+  /** 설명 패널에 띄울 카드(시전자 uid, 스킬 id) */
+  let peek: { uid: string; spellId: string } | null = null;
 
   const wait = (ms: number) => sleep(ms / app.speed);
   const remaining = () => battle.stardust - planCost(plan);
@@ -135,6 +141,39 @@ export function battleScreen(app: App): HTMLElement {
     });
   };
 
+  // ── 예측 ────────────────────────────────────────────────
+  /** 지금 계획대로 시전하면 각 시전이 어떻게 이어지는지 */
+  const steps = () => previewChain(plan.map((p) => spellById(p.spellId)), battle.seal);
+
+  /** 이 카드를 지금 계획에 넣었을 때의 링크 예고 */
+  const linkHint = (allyUid: string, spellId: string): LinkHint | undefined => {
+    const idx = plan.findIndex((p) => p.allyUid === allyUid);
+    const trial = plan.slice();
+    if (idx >= 0) trial[idx] = { allyUid, spellId };
+    else trial.push({ allyUid, spellId });
+    const at = idx >= 0 ? idx : trial.length - 1;
+    const st = previewChain(trial.map((p) => spellById(p.spellId)), battle.seal)[at];
+    if (at === 0) return plan.length ? { kind: 'start', text: '체인 시작' } : undefined;
+    if (st.reactionId) return { kind: 'reaction', text: `${reactionById(st.reactionId).name} ×${st.mult}` };
+    if (st.linked) return { kind: 'link', text: `LINK ${st.chain} ×${st.mult}` };
+    if (spellById(spellId).input === 'none') return { kind: 'start', text: '새 체인' };
+    return { kind: 'break', text: st.sealed ? '봉인됨' : '끊김' };
+  };
+
+  /** 계획을 복제한 전투에 실제로 돌려 본 결과. 적은 우리 차례 이후, 아군은 라운드 끝 HP. */
+  const forecast = (): Map<string, number> => {
+    const out = new Map<string, number>();
+    try {
+      const sim = cloneBattle(battle);
+      for (const ev of executeRound(sim, plan)) {
+        if (ev.type === 'damage' || ev.type === 'heal') out.set(ev.targetUid, ev.hpAfter);
+      }
+    } catch {
+      // 계획이 유효하지 않으면 예측을 생략한다.
+    }
+    return out;
+  };
+
   // ── 화면 구성 ────────────────────────────────────────────
   const stardustMeter = () => {
     const left = remaining();
@@ -144,13 +183,14 @@ export function battleScreen(app: App): HTMLElement {
       h('span', { class: 'gauge-label' }, '성진'),
       h('span', { class: 'pips' }, Array.from({ length: battle.maxStardust }, (_, i) => h('i', { class: i < left ? 'on' : i < battle.stardust ? 'planned' : '' }))),
       h('b', { class: 'gauge-num' }, `${left}`),
+      h('small', { class: 'gauge-max' }, `/${battle.stardust}`),
     );
   };
 
   const threatCount = (a: Ally) =>
     battle.enemies.filter((e) => isAlive(e) && e.intent && ((e.intent.kind === 'attack' && e.intent.targetId === a.uid) || e.intent.kind === 'attackAll')).length;
 
-  const allyActor = (a: Ally, i: number) => {
+  const allyActor = (a: Ally, i: number, fc: Map<string, number>) => {
     const unit = unitById(a.defId);
     const planIdx = plan.findIndex((p) => p.allyUid === a.uid);
     const el = h(
@@ -166,7 +206,7 @@ export function battleScreen(app: App): HTMLElement {
         'div',
         { class: 'plate' },
         h('div', { class: 'plate-name' }, h('span', { class: 'plate-num' }, NUM[i]), h('span', { class: 'plate-text' }, unit.name)),
-        hpBar(a.hp, a.maxHp, a.shield),
+        hpBar(a.hp, a.maxHp, a.shield, isAlive(a) ? fc.get(a.uid) : undefined),
         statusRow(a.statuses),
       ),
     );
@@ -174,7 +214,7 @@ export function battleScreen(app: App): HTMLElement {
     return el;
   };
 
-  const enemyActor = (e: Enemy, focusUid: string | null) => {
+  const enemyActor = (e: Enemy, focusUid: string | null, fc: Map<string, number>) => {
     const def = enemyById(e.defId);
     const alive = isAlive(e);
     const boss = !!def.traits?.length;
@@ -198,7 +238,7 @@ export function battleScreen(app: App): HTMLElement {
         'div',
         { class: 'plate' },
         h('div', { class: 'plate-name' }, focused ? h('span', { class: 'plate-target' }, 'TARGET') : null, h('span', { class: 'plate-text' }, def.name)),
-        hpBar(e.hp, e.maxHp, e.shield),
+        hpBar(e.hp, e.maxHp, e.shield, alive && plan.length ? fc.get(e.uid) : undefined),
         statusRow(e.statuses),
         boss ? def.traits!.map((t) => h('p', { class: 'trait' }, TRAIT_DESC[t])) : null,
       ),
@@ -207,11 +247,14 @@ export function battleScreen(app: App): HTMLElement {
     return el;
   };
 
-  const queueView = () => {
-    const steps = previewChain(plan.map((p) => spellById(p.spellId)), battle.seal);
+  /** 체인 트랙: 고른 순서, 링크 배율과 반응, 다음에 이어받을 성속 */
+  const chainTrack = () => {
+    const st = steps();
+    const last = st[st.length - 1];
+    const nextIn = last?.outElement ?? null;
     return h(
       'div',
-      { class: 'queue', 'aria-label': '시전 순서' },
+      { class: 'chain-track', 'aria-label': '시전 순서' },
       Array.from({ length: 4 }, (_, i) => {
         const p = plan[i];
         const connector =
@@ -219,100 +262,179 @@ export function battleScreen(app: App): HTMLElement {
             ? null
             : h(
                 'div',
-                { class: `q-link ${p ? (steps[i].linked ? 'ok' : 'broken') : ''}` },
-                p && steps[i].reactionId ? reactionChip(steps[i].reactionId!) : null,
-                h('span', { class: 'q-link-mark' }, p ? (steps[i].linked ? `×${steps[i].mult}` : steps[i].sealed ? '봉인' : '끊김') : ''),
+                { class: `q-link ${p ? (st[i].linked ? 'ok' : 'broken') : ''}` },
+                p && st[i].reactionId ? reactionChip(st[i].reactionId!) : h('span', { class: 'q-link-mark' }, p ? (st[i].linked ? `×${st[i].mult}` : st[i].sealed ? '봉인' : '끊김') : ''),
               );
-        if (!p) return [connector, h('div', { class: 'q-slot empty' }, h('span', {}, NUM[i]))];
+        if (!p) return [connector, h('div', { class: 'q-slot empty' }, h('span', { class: 'q-num' }, NUM[i]), i === plan.length ? h('span', { class: 'q-hint' }, plan.length ? '다음 스킬' : '스킬 선택') : null)];
         const ally = battle.allies.find((a) => a.uid === p.allyUid)!;
         const unit = unitById(ally.defId);
+        const sp = spellById(p.spellId);
         return [
           connector,
           h(
             'div',
-            { class: 'q-slot' },
-            spellCard(spellById(p.spellId), { element: unit.element, owner: unit.name, size: 'mini' }),
+            { class: 'q-slot', style: { '--el': elColor(unit.element) } },
+            h('span', { class: 'q-num' }, NUM[i]),
+            h('span', { class: 'q-icon' }, ELEMENTS[unit.element].glyph),
+            h('span', { class: 'q-text' }, h('b', {}, sp.name), h('small', {}, unit.name)),
             h(
-              'div',
+              'span',
               { class: 'q-ctrl' },
               button('‹', () => move(i, -1), { class: 'btn-q', disabled: i === 0 || busy, title: '앞으로' }),
+              button('›', () => move(i, 1), { class: 'btn-q', disabled: i === plan.length - 1 || busy, title: '뒤로' }),
               button('✕', () => {
                 plan.splice(i, 1);
                 render();
               }, { class: 'btn-q', disabled: busy, title: '빼기' }),
-              button('›', () => move(i, 1), { class: 'btn-q', disabled: i === plan.length - 1 || busy, title: '뒤로' }),
             ),
           ),
         ];
       }).flat(),
+      h(
+        'div',
+        { class: 'next-in', title: '다음 스킬이 이 성속을 받으면 링크가 이어집니다' },
+        h('small', {}, 'NEXT'),
+        nextIn ? elBadge(nextIn, 'sm') : h('span', { class: 'next-none' }, '—'),
+      ),
     );
   };
+
+  const hotkeys: { uid: string; spellId: string }[] = [];
 
   const handView = () => {
-    const steps = previewChain(plan.map((p) => spellById(p.spellId)), battle.seal);
-    const last = steps[steps.length - 1];
+    hotkeys.length = 0;
     return h(
-      'section',
-      { class: 'hand', 'aria-label': '이번 라운드 스킬' },
-      h(
-        'div',
-        { class: 'hand-cards' },
-        battle.allies.map((a, i) => {
-          const unit = unitById(a.defId);
-          const alive = isAlive(a);
-          const planIdx = plan.findIndex((p) => p.allyUid === a.uid);
-          const myCost = planIdx >= 0 ? spellById(plan[planIdx].spellId).cost : 0;
-          return h(
-            'div',
-            { class: `hand-group ${alive ? '' : 'dead'}`, style: { '--el': elColor(unit.element) } },
-            h('div', { class: 'hand-owner' }, h('span', { class: 'plate-num' }, NUM[i]), h('b', {}, unit.name), h('span', { class: 'hand-code' }, unit.code)),
-            h(
-              'div',
-              { class: 'hand-pair' },
-              alive
-                ? (battle.hands[a.uid] ?? []).map((id) => {
-                    const sp = spellById(id);
-                    const chosen = planIdx >= 0 && plan[planIdx].spellId === id;
-                    return spellCard(sp, {
-                      element: unit.element,
-                      chosen,
-                      order: chosen ? planIdx : undefined,
-                      disabled: busy || (!chosen && sp.cost > remaining() + myCost),
-                      onClick: () => pickSpell(a, id),
-                    });
-                  })
-                : h('div', { class: 'hand-down' }, '전투 불능'),
-            ),
-          );
-        }),
-      ),
-      h(
-        'div',
-        { class: 'cast-zone' },
-        h(
+      'div',
+      {
+        class: 'hand',
+        'aria-label': '이번 라운드 스킬',
+        onmouseleave: () => {
+          peek = null;
+          peekSlot.replaceChildren();
+        },
+      },
+      battle.allies.map((a, i) => {
+        const unit = unitById(a.defId);
+        const alive = isAlive(a);
+        const planIdx = plan.findIndex((p) => p.allyUid === a.uid);
+        const myCost = planIdx >= 0 ? spellById(plan[planIdx].spellId).cost : 0;
+        return h(
           'div',
-          { class: 'chain-readout' },
-          h('span', { class: 'chain-label' }, 'CHAIN'),
-          h('b', { class: last?.chain === 4 ? 'full' : '' }, plan.length ? last.chain : 0),
-          h('small', {}, last?.chain === 4 ? '성좌 완성' : plan.length ? `배율 ×${last.mult}` : '대기하면 성진만 모입니다'),
-        ),
-        h('button', { type: 'button', class: 'cast-btn', disabled: busy, onclick: () => void execute() }, h('b', {}, plan.length ? '시전' : '대기'), h('small', {}, plan.length ? 'EXECUTE' : 'PASS')),
-        button('초기화', () => {
-          plan = [];
-          render();
-        }, { class: 'btn-sm btn-reset', disabled: busy || plan.length === 0 }),
-      ),
+          { class: `hand-group ${alive ? '' : 'dead'} ${planIdx >= 0 ? 'has-pick' : ''}`, style: { '--el': elColor(unit.element) } },
+          h('div', { class: 'hand-owner' }, h('span', { class: 'plate-num' }, NUM[i]), h('b', {}, unit.name)),
+          h(
+            'div',
+            { class: 'hand-pair' },
+            alive
+              ? (battle.hands[a.uid] ?? []).map((id) => {
+                  const sp = spellById(id);
+                  const chosen = planIdx >= 0 && plan[planIdx].spellId === id;
+                  const tooCostly = !chosen && sp.cost > remaining() + myCost;
+                  hotkeys.push({ uid: a.uid, spellId: id });
+                  return spellCard(sp, {
+                    element: unit.element,
+                    chosen,
+                    order: chosen ? planIdx : undefined,
+                    disabled: busy || tooCostly,
+                    link: busy || tooCostly ? undefined : linkHint(a.uid, id),
+                    hotkey: `${hotkeys.length}`,
+                    onClick: () => pickSpell(a, id),
+                    onPeek: () => showPeek(a.uid, id),
+                  });
+                })
+              : h('div', { class: 'hand-down' }, '전투 불능'),
+          ),
+        );
+      }),
     );
   };
 
+  /** 설명 패널: 고르기 전에 스킬을 자세히 본다 */
+  const peekView = () => {
+    if (!peek || busy) return null;
+    const ally = battle.allies.find((a) => a.uid === peek!.uid);
+    if (!ally || !isAlive(ally) || !(battle.hands[ally.uid] ?? []).includes(peek.spellId)) return null;
+    const unit = unitById(ally.defId);
+    const sp = spellById(peek.spellId);
+    const hint = linkHint(ally.uid, sp.id);
+    const st = (() => {
+      const idx = plan.findIndex((p) => p.allyUid === ally.uid);
+      const trial = plan.slice();
+      if (idx >= 0) trial[idx] = { allyUid: ally.uid, spellId: sp.id };
+      else trial.push({ allyUid: ally.uid, spellId: sp.id });
+      return previewChain(trial.map((p) => spellById(p.spellId)), battle.seal)[idx >= 0 ? idx : trial.length - 1];
+    })();
+    const reaction = st.reactionId ? reactionById(st.reactionId) : null;
+    const idx = plan.findIndex((p) => p.allyUid === ally.uid);
+    const affordable = (idx >= 0 && plan[idx].spellId === sp.id) || sp.cost <= remaining() + (idx >= 0 ? spellById(plan[idx].spellId).cost : 0);
+    return h(
+      'aside',
+      { class: 'peek panel', style: { '--el': elColor(unit.element) } },
+      h('div', { class: 'peek-head' }, h('span', { class: 'peek-owner' }, `${unit.code} · ${unit.name}`), tagLabel(sp), h('span', { class: 'peek-cost' }, `성진 ${sp.cost}`)),
+      h('h3', {}, sp.name),
+      h('div', { class: 'peek-flow' }, spellFlow(sp), h('span', {}, flowText(sp.input, sp.output))),
+      h('p', { class: 'peek-desc' }, sp.desc),
+      !affordable ? h('p', { class: 'peek-link break' }, `성진이 부족합니다 (남은 성진 ${remaining()})`) : null,
+      affordable ? h('p', { class: `peek-link ${hint?.kind ?? 'start'}` }, !hint || hint.kind === 'start' ? (plan.length && sp.input === 'none' ? '기점 스킬: 앞의 체인을 닫고 새 체인을 엽니다.' : '첫 스킬로 체인을 엽니다.') : hint.kind === 'break' ? (st.sealed ? '성식에 막혀 링크가 끊깁니다.' : '앞 스킬과 성속이 맞지 않아 체인이 1로 돌아갑니다.') : `링크 ${st.chain} · 배율 ×${st.mult}`) : null,
+      reaction ? h('p', { class: 'peek-reaction' }, h('b', {}, `반응 「${reaction.name}」`), ` ${reaction.desc}`) : null,
+    );
+  };
+
+  const flowText = (input: string, output: string) => {
+    const name = (x: string) => (x === 'none' ? '없음(시작)' : x === 'wild' ? '아무 성속' : x === 'echo' ? '받은 그대로' : ELEMENTS[x as Element].name);
+    return `받음 ${name(input)} · 넘김 ${name(output)}`;
+  };
+
+  function showPeek(uid: string, spellId: string) {
+    peek = { uid, spellId };
+    peekSlot.replaceChildren(...[peekView()].filter((x): x is HTMLElement => !!x));
+  }
+
   const showLog = () => modal('전투 기록', h('ol', { class: 'log-list' }, log.slice(-60).reverse().map((l) => h('li', {}, l))), () => {});
+
+  const dockView = () => {
+    const st = steps();
+    const last = st[st.length - 1];
+    const full = last?.chain === 4;
+    return h(
+      'section',
+      { class: 'dock' },
+      h('div', { class: 'dock-top' }, queueEl, meter),
+      h(
+        'div',
+        { class: 'dock-main' },
+        handView(),
+        h(
+          'div',
+          { class: 'cast-zone' },
+          h(
+            'div',
+            { class: 'chain-readout' },
+            h('span', { class: 'chain-label' }, 'CHAIN'),
+            h('b', { class: full ? 'full' : '' }, plan.length ? last.chain : 0),
+            h('small', {}, full ? '성좌 완성' : plan.length ? `×${last.mult}` : '—'),
+          ),
+          h(
+            'div',
+            { class: 'cast-col' },
+            h('button', { type: 'button', class: 'cast-btn', disabled: busy, onclick: () => void execute() }, h('b', {}, plan.length ? '시전' : '대기'), h('small', {}, plan.length ? 'SPACE' : '성진만 모으기')),
+            button('초기화', () => {
+              plan = [];
+              render();
+            }, { class: 'btn-sm btn-reset', disabled: busy || plan.length === 0, title: '초기화 (R)' }),
+          ),
+        ),
+      ),
+    );
+  };
 
   function render() {
     actorEls.clear();
     const focus = getFocus(battle);
+    const fc = busy ? new Map<string, number>() : forecast();
     meter = stardustMeter();
-    queueEl = queueView();
-    actorLayer.replaceChildren(...battle.allies.map(allyActor), ...battle.enemies.map((e) => enemyActor(e, focus?.uid ?? null)));
+    queueEl = chainTrack();
+    actorLayer.replaceChildren(...battle.allies.map((a, i) => allyActor(a, i, fc)), ...battle.enemies.map((e) => enemyActor(e, focus?.uid ?? null, fc)));
     hudSlot.replaceChildren(
       h(
         'header',
@@ -325,26 +447,62 @@ export function battleScreen(app: App): HTMLElement {
             app.save();
             app.go('title');
           }, { class: 'btn-hud', title: '메인으로 (진행 상황은 저장됩니다)' }),
-          h('div', { class: 'plaque' }, h('span', { class: 'plaque-sub' }, `${run.floor + 1}-${battle.round} · ${floor.name}`), h('b', {}, `ROUND ${battle.round}`)),
+          h('div', { class: 'plaque' }, h('span', { class: 'plaque-sub' }, `${run.floor + 1}층 · ${place}`), h('b', {}, `ROUND ${battle.round}`)),
         ),
-        queueEl,
         h(
           'div',
           { class: 'hud-right' },
-          meter,
           button(app.speed > 1 ? '×2' : '×1', () => {
             app.setSpeed(app.speed > 1 ? 1 : 2);
             render();
           }, { class: 'btn-hud', title: '연출 속도' }),
-          button('LOG', showLog, { class: 'btn-hud', title: '전투 기록' }),
+          button('LOG', showLog, { class: 'btn-hud', title: '전투 기록 (L)' }),
           button('?', () => showHelp(), { class: 'btn-hud', title: '플레이 방법' }),
         ),
       ),
       ...(battle.seal ? [h('div', { class: 'seal-banner' }, '⊘ 성식 — ', elBadge(battle.seal, 'sm'), ` ${ELEMENTS[battle.seal].name}(으)로 가는 링크가 끊깁니다`)] : []),
     );
-    handSlot.replaceChildren(handView());
+    dockSlot.replaceChildren(dockView());
+    peekSlot.replaceChildren(...[peekView()].filter((x): x is HTMLElement => !!x));
     drawPreview();
   }
+
+  // ── 단축키: 1~8 카드, Space 시전, Backspace 마지막 취소, R 초기화, Tab 대상 전환 ──
+  const onKey = (e: KeyboardEvent) => {
+    if (!root.isConnected) {
+      document.removeEventListener('keydown', onKey);
+      return;
+    }
+    if (busy || document.querySelector('.modal-backdrop') || battle.outcome !== 'ongoing') return;
+    if (e.target instanceof HTMLElement && e.target.closest('input, textarea')) return;
+    const n = Number(e.key);
+    if (n >= 1 && n <= hotkeys.length) {
+      const k = hotkeys[n - 1];
+      const ally = battle.allies.find((a) => a.uid === k.uid)!;
+      const sp = spellById(k.spellId);
+      const idx = plan.findIndex((p) => p.allyUid === ally.uid);
+      const myCost = idx >= 0 ? spellById(plan[idx].spellId).cost : 0;
+      const chosen = idx >= 0 && plan[idx].spellId === sp.id;
+      if (chosen || sp.cost <= remaining() + myCost) {
+        showPeek(k.uid, k.spellId);
+        pickSpell(ally, k.spellId);
+      }
+      e.preventDefault();
+    } else if (e.key === ' ' || e.key === 'Enter') {
+      if (e.target instanceof HTMLButtonElement && e.key === 'Enter') return;
+      e.preventDefault();
+      void execute();
+    } else if (e.key === 'Backspace') {
+      plan.pop();
+      render();
+    } else if (e.key === 'r' || e.key === 'R') {
+      plan = [];
+      render();
+    } else if (e.key === 'l' || e.key === 'L') {
+      showLog();
+    }
+  };
+  document.addEventListener('keydown', onKey);
 
   // ── 연출 ────────────────────────────────────────────────
   const floatText = (uid: string, text: string, kind: string) => {
@@ -646,7 +804,7 @@ export function battleScreen(app: App): HTMLElement {
           'div',
           { class: 'outcome-card panel' },
           h('p', { class: 'eyebrow' }, won ? 'MISSION COMPLETE' : 'MISSION FAILED'),
-          h('h2', {}, won ? '성역 확보' : '작전 실패'),
+          h('h2', {}, won ? '전투 승리' : '작전 실패'),
           h('p', { class: 'muted' }, `최대 체인 ${battle.stats.maxChain} · 성좌 반응 ${battle.stats.reactions} · ${battle.round} 라운드`),
           button(won ? '계속' : '결과 보기', proceed, { variant: 'primary' }),
         ),

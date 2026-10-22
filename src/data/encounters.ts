@@ -8,9 +8,9 @@ export interface FloorDef {
 }
 
 export const FLOORS: FloorDef[] = [
-  { kind: 'battle', name: '희미한 성역', pools: [['stray_shard', 'stray_shard'], ['shadow_comet']] },
-  { kind: 'battle', name: '흐르는 성역', pools: [['shadow_comet', 'stray_shard'], ['dark_nebula']] },
-  { kind: 'battle', name: '일그러진 성역', pools: [['dark_nebula', 'eclipse_eye'], ['eclipse_eye', 'shadow_comet']] },
-  { kind: 'elite', name: '별지기의 제단', pools: [['fallen_keeper']] },
-  { kind: 'boss', name: '삼켜진 하늘', pools: [['star_devourer', 'stray_shard']] },
+  { kind: 'battle', name: '새벽 안개 초원', pools: [['stray_shard', 'stray_shard'], ['shadow_comet']] },
+  { kind: 'battle', name: '빗속 네온 운하', pools: [['shadow_comet', 'stray_shard'], ['dark_nebula']] },
+  { kind: 'battle', name: '모래바람 사구', pools: [['dark_nebula', 'eclipse_eye'], ['eclipse_eye', 'shadow_comet']] },
+  { kind: 'elite', name: '오로라 설원', pools: [['fallen_keeper']] },
+  { kind: 'boss', name: '부서진 하늘섬', pools: [['star_devourer', 'stray_shard']] },
 ];

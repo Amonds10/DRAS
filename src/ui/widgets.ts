@@ -33,19 +33,31 @@ export function costPips(cost: number): HTMLElement {
   return h('span', { class: 'cost', title: `성진 ${cost}` }, '✦'.repeat(cost) || '0');
 }
 
-export function hpBar(hp: number, maxHp: number, shield: number): HTMLElement {
+/**
+ * HP 막대. forecast를 주면 이번 라운드에 깎일 예상 구간을 흐린 막대로 겹쳐 보여 준다.
+ */
+export function hpBar(hp: number, maxHp: number, shield: number, forecast?: number): HTMLElement {
   const pct = Math.max(0, Math.min(100, (hp / maxHp) * 100));
   const shieldPct = Math.min(100 - pct, (shield / maxHp) * 100);
+  const loss = forecast !== undefined && forecast < hp;
+  const fPct = loss ? Math.max(0, (forecast / maxHp) * 100) : pct;
   return h(
     'div',
-    { class: 'hp' },
+    { class: `hp ${loss ? 'has-forecast' : ''}` },
     h(
       'div',
       { class: 'hp-track' },
-      h('div', { class: 'hp-fill', style: { width: `${pct}%` } }),
+      h('div', { class: 'hp-fill', style: { width: `${fPct}%` } }),
+      loss ? h('div', { class: 'hp-ghost', style: { left: `${fPct}%`, width: `${pct - fPct}%` } }) : null,
       h('div', { class: 'hp-shield', style: { left: `${pct}%`, width: `${shieldPct}%` } }),
     ),
-    h('div', { class: 'hp-text' }, h('span', { class: 'hp-num' }, `${hp}`), ` / ${maxHp}`, shield > 0 ? h('span', { class: 'hp-shield-num' }, ` ⛨${shield}`) : null),
+    h(
+      'div',
+      { class: 'hp-text' },
+      h('span', { class: 'hp-num' }, `${hp}`),
+      loss ? h('span', { class: `hp-forecast ${forecast <= 0 ? 'kill' : ''}`, title: '이번 라운드 예상' }, forecast <= 0 ? ' → 처치' : ` → ${forecast}`) : ` / ${maxHp}`,
+      shield > 0 ? h('span', { class: 'hp-shield-num' }, ` ⛨${shield}`) : null,
+    ),
   );
 }
 
@@ -152,14 +164,26 @@ export interface SpellCardOpts {
   chosen?: boolean;
   disabled?: boolean;
   onClick?: () => void;
+  /** 마우스를 올리거나 포커스했을 때(설명 패널용) */
+  onPeek?: () => void;
+  /** 지금 순서에 넣으면 어떻게 이어지는지 */
+  link?: LinkHint;
+  /** 단축키 표시 */
+  hotkey?: string;
   size?: 'hand' | 'mini';
+}
+
+/** 카드 위 링크 예고: 링크(배율), 반응, 끊김, 새 체인 */
+export interface LinkHint {
+  kind: 'link' | 'reaction' | 'break' | 'start';
+  text: string;
 }
 
 export function tagLabel(spell: SpellDef): HTMLElement {
   return h('span', { class: `skill-tag tag-${spell.tag}` }, TAG_NAMES[spell.tag]);
 }
 
-/** 스킬 카드: 비용, 유형, 성속 아이콘, 이름, 입출력 성속, 설명 */
+/** 스킬 카드: 비용, 유형, 성속 아이콘, 이름, 입출력 성속, 링크 예고. 긴 설명은 설명 패널에서 본다. */
 export function spellCard(spell: SpellDef, opts: SpellCardOpts): HTMLElement {
   const meta = ELEMENTS[opts.element];
   const tag = opts.onClick ? 'button' : 'div';
@@ -171,20 +195,22 @@ export function spellCard(spell: SpellDef, opts: SpellCardOpts): HTMLElement {
       class: `skill-card ${mini ? 'mini' : ''} ${opts.chosen ? 'chosen' : ''}`,
       style: { '--el': meta.color },
       disabled: opts.disabled,
-      title: `${spell.name} (${TAG_NAMES[spell.tag]}) — ${spell.desc}`,
+      'aria-label': `${spell.name}, ${TAG_NAMES[spell.tag]}, 성진 ${spell.cost}. ${spell.desc}${opts.link ? `. ${opts.link.text}` : ''}`,
       onclick: opts.onClick,
+      onmouseenter: opts.onPeek,
+      onfocus: opts.onPeek,
     },
     h(
       'span',
       { class: 'sc-head' },
-      h('span', { class: 'sc-cost', 'aria-label': `성진 ${spell.cost}` }, Array.from({ length: spell.cost }, () => h('i'))),
+      h('span', { class: 'sc-cost', 'aria-hidden': 'true' }, Array.from({ length: spell.cost }, () => h('i'))),
       mini ? null : tagLabel(spell),
     ),
-    h('span', { class: 'sc-icon' }, meta.glyph),
-    h('span', { class: 'sc-name' }, spell.name),
+    h('span', { class: 'sc-row' }, h('span', { class: 'sc-icon' }, meta.glyph), h('span', { class: 'sc-name' }, spell.name)),
     mini && opts.owner ? h('span', { class: 'sc-owner' }, opts.owner) : null,
     h('span', { class: 'sc-flow' }, spellFlow(spell)),
-    mini ? null : h('span', { class: 'sc-desc' }, spell.desc),
+    opts.link ? h('span', { class: `sc-link ${opts.link.kind}` }, opts.link.text) : null,
+    opts.hotkey ? h('kbd', { class: 'sc-key', 'aria-hidden': 'true' }, opts.hotkey) : null,
     opts.order !== undefined ? h('span', { class: 'sc-order' }, NUM[opts.order]) : null,
   );
 }

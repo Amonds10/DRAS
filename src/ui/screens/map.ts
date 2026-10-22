@@ -68,7 +68,7 @@ export function mapScreen(app: App): HTMLElement {
           { class: `next-floor panel kind-${floor.kind}` },
           h('p', { class: 'eyebrow' }, `${run.floor + 1}층 / ${FLOORS.length}층`),
           h('h2', {}, floor.name),
-          h('p', { class: 'muted' }, floor.kind === 'boss' ? '별을 삼키는 자가 기다립니다. 체인 3 미만의 공격은 절반만 통합니다.' : floor.kind === 'elite' ? '강한 적이 기다립니다. 충분히 대비하세요.' : '성역을 떠도는 적들을 물리치세요.'),
+          h('p', { class: 'muted' }, floor.kind === 'boss' ? '별을 삼키는 자가 기다립니다. 체인 3 미만의 공격은 절반만 통합니다.' : floor.kind === 'elite' ? '강한 적이 기다립니다. 충분히 대비하세요.' : '이곳을 떠도는 적들을 물리치세요.'),
           button('전투 시작', () => {
             startBattle(run);
             app.save();
