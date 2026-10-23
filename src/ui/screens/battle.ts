@@ -102,6 +102,26 @@ export function battleScreen(app: App): HTMLElement {
     return 0;
   };
   const SUPPORT_TAGS = new Set<SkillTag>(['heal', 'shield', 'buff', 'utility']);
+  /** 타격마다 한 번씩 연출하는 주문 유형(광역 베기·관통 광선·지연 폭격은 시전 때 한 번에) */
+  const PER_HIT_TAGS = new Set<SkillTag>(['strike', 'execute', 'multi', 'mark', 'drain', 'dot', 'finisher', 'resonance', 'debuff', 'aoe']);
+  /** 의성어: 무기마다 다른 소리를 화면에 크게 쓴다 */
+  const ONOMA: Record<string, [string, string]> = {
+    thrust: ['푸욱!', '꿰뚫는다!'],
+    slash: ['촤악!', '베어낸다!'],
+    bash: ['쿵!', '콰앙!'],
+    shoot: ['탕!', '타아앙!'],
+    raise: ['파앗!', '쏟아진다!'],
+  };
+  const onomatopoeia = (uid: string, motion: string, big: boolean) => {
+    const el = actorEls.get(uid);
+    if (!el) return;
+    const [small, large] = ONOMA[motion] ?? ONOMA.raise;
+    const n = h('span', { class: `onoma ${big ? 'big' : ''}` }, big ? large : small);
+    n.style.setProperty('--r', `${Math.round(Math.random() * 20 - 10)}deg`);
+    n.style.setProperty('--x', `${Math.round(Math.random() * 60 - 30)}px`);
+    el.append(n);
+    setTimeout(() => n.remove(), 900);
+  };
   /** 예열 오라를 지금 상태에 맞춘다 */
   const syncAuras = () => {
     for (const a of battle.allies) stage.setAura(a.uid, isAlive(a) ? statusStacks(a, 'kindle') : 0, elColor(unitById(a.defId).element), MAX_KINDLE);
@@ -683,7 +703,8 @@ export function battleScreen(app: App): HTMLElement {
     const out: string[] = [];
     for (let i = from + 1; i < events.length; i++) {
       const ev = events[i];
-      if (ev.type === 'cast' || ev.type === 'enemyAct' || ev.type === 'enemyStunned' || ev.type === 'fullChain' || ev.type === 'reaction') break;
+      // 성좌 반응은 시전과 피해 사이에 끼므로 건너뛰고 센다
+      if (ev.type === 'cast' || ev.type === 'enemyAct' || ev.type === 'enemyStunned' || ev.type === 'fullChain') break;
       if (ev.type === 'damage' && ev.source === 'ally') out.push(ev.targetUid);
     }
     return out;
@@ -950,6 +971,23 @@ export function battleScreen(app: App): HTMLElement {
       await wait(1000);
       clearCallout();
     };
+    /**
+     * 지금 진행 중인 시전의 연출 상태. 근접 술사는 대상 앞으로 돌진해 타격마다 다른 자세로 베고,
+     * 원거리 술사는 타격마다 한 발씩 쏜다. 시전이 끝나면 제자리로 돌아온다.
+     */
+    let choreo: { caster: string; color: string; motion: string; melee: boolean; dashed: boolean; hits: number; idx: number; tag: SkillTag } | null = null;
+    const endCast = async () => {
+      if (!choreo) return;
+      const c = choreo;
+      choreo = null;
+      if (c.dashed) {
+        stage.anim(c.caster, 'dash');
+        stage.dash(c.caster, null, 0.22);
+        await wait(230);
+      }
+      stage.anim(c.caster, 'recover');
+      stage.setBackdrop(null);
+    };
     /** 이번 시전이 예열을 터뜨렸는지(피해 숫자를 크게) */
     let unleashed = false;
     let lastElement: string = 'star';
@@ -959,6 +997,7 @@ export function battleScreen(app: App): HTMLElement {
       if (text) log.push(text);
       switch (ev.type) {
         case 'cast': {
+          await endCast();
           castIdx++;
           unleashed = false;
           stats.chain = Math.max(stats.chain, ev.chain);
@@ -981,8 +1020,22 @@ export function battleScreen(app: App): HTMLElement {
           stage.focus(chest(ev.allyUid), 0.7);
           stage.fx?.castCircle(chest(ev.allyUid), color, sp.cost >= 2 ? 3.8 : 3);
           stage.fx?.gather(chest(ev.allyUid).add(new THREE.Vector3(0.7, 0.1, 0)), color, sp.cost >= 2 ? 26 : 16, 0.42);
+          const motion = characterMotion(unit.id);
+          const hitCount = lastTargets.length;
+          const perHit = hitCount > 0 && PER_HIT_TAGS.has(sp.tag);
+          const melee = perHit && (motion === 'thrust' || motion === 'slash' || motion === 'bash');
+          // 연출 배경: 무대 뒤가 어두워지고 성속 색 무늬가 깔린다
+          stage.setBackdrop(color, SUPPORT_TAGS.has(sp.tag) || sp.tag === 'charge' ? 0.55 : sp.cost >= 2 ? 0.9 : 0.8);
           await wait(360);
-          stage.anim(ev.allyUid, sp.tag === 'charge' ? 'charge' : SUPPORT_TAGS.has(sp.tag) ? 'channel' : 'cast');
+          choreo = { caster: ev.allyUid, color, motion, melee, dashed: false, hits: hitCount, idx: 0, tag: sp.tag };
+          if (melee) {
+            // 대상 앞으로 돌진
+            stage.anim(ev.allyUid, 'dash');
+            stage.dash(ev.allyUid, lastTargets[0], 0.16);
+            stage.afterimage(ev.allyUid, color, 4);
+            sound.whoosh('sweep');
+            choreo.dashed = true;
+          } else stage.anim(ev.allyUid, sp.tag === 'charge' ? 'charge' : SUPPORT_TAGS.has(sp.tag) ? 'channel' : perHit ? (motion === 'shoot' ? 'fire' : 'cast1') : 'cast');
           sound.cast(unit.element, ev.chain, characterMotion(unit.id));
           if (ev.linked) sound.link(ev.chain, prevOut ?? unit.element);
           stage.fx?.magicCircle(feet(ev.allyUid), color, 2.6, 1.1, 'magic_01');
@@ -998,17 +1051,16 @@ export function battleScreen(app: App): HTMLElement {
             `${castIdx + 1} / ${castTotal}`,
           );
           stats.casts++;
-          await wait(260);
-          const motion = characterMotion(unit.id);
-          if (!SUPPORT_TAGS.has(sp.tag) && sp.tag !== 'charge' && (motion === 'thrust' || motion === 'slash' || motion === 'bash')) stage.afterimage(ev.allyUid, color);
+          await wait(melee ? 180 : 260);
           lastElement = unit.element;
-          castFx(sp.tag, ev.allyUid, lastTargets, color, focusAt(events, k), unit.element);
+          // 타격마다 따로 그리는 주문은 여기서 투사체를 날리지 않는다(피해 이벤트에서 한 타씩)
+          if (!perHit) castFx(sp.tag, ev.allyUid, lastTargets, color, focusAt(events, k), unit.element);
           // 시선이 대상으로 넘어간다
           const tgt = lastTargets[0] ?? focusAt(events, k);
           if (tgt && !SUPPORT_TAGS.has(sp.tag)) stage.focus(lastTargets.length > 1 && new Set(lastTargets).size > 1 ? enemyCenter() : chest(tgt), 0.55);
           else stage.focus(null);
-          stage.glowPulse(sp.cost >= 2 ? 0.22 : 0.12);
-          await wait(460);
+          if (!perHit) stage.glowPulse(sp.cost >= 2 ? 0.18 : 0.1);
+          await wait(perHit ? 120 : 460);
           prevCaster = ev.allyUid;
           prevOut = ev.outElement;
           break;
@@ -1030,6 +1082,7 @@ export function battleScreen(app: App): HTMLElement {
           break;
         }
         case 'fullChain': {
+          await endCast();
           stage.fx?.goldArcs();
           sound.fullChain();
           sound.duck(1.5);
@@ -1056,8 +1109,45 @@ export function battleScreen(app: App): HTMLElement {
           else if (ev.source !== 'burn' && ev.amount >= 12) stage.hitStop(0.06);
           const fx = stage.fx;
           const p = chest(ev.targetUid);
+          let finale = false;
+          if (ev.source === 'ally' && choreo && choreo.idx < choreo.hits) {
+            const c = choreo;
+            const i = c.idx++;
+            const last = i === c.hits - 1;
+            finale = last && (c.hits > 1 || ev.amount >= 12 || crit);
+            const col = c.color;
+            if (c.melee) {
+              // 근접: 타격마다 자세를 바꿔 벤다(내려베기 → 올려베기 → 찌르기 …, 마지막은 뛰어올라 내리꽂기)
+              const pose = last && c.hits > 1 ? 'finish' : (['combo1', 'combo2', 'combo3'] as const)[i % 3];
+              if (c.tag !== 'aoe') stage.dash(c.caster, ev.targetUid, 0.08);
+              stage.anim(c.caster, pose);
+              await wait(pose === 'finish' ? 200 : 75);
+              const roll = { combo1: -0.9, combo2: 2.3, combo3: 0.1, finish: -1.35 }[pose];
+              stage.toon.slash(p, col, pose === 'finish' ? 4.6 : 3.4, roll);
+              if (pose === 'finish') stage.toon.slash(p, '#ffffff', 3.8, roll + 0.5, 0.04);
+              stage.afterimage(c.caster, col, 2);
+            } else {
+              // 원거리: 타격마다 한 발
+              stage.anim(c.caster, c.motion === 'shoot' ? 'fire' : i % 2 ? 'cast2' : 'cast1');
+              stage.toon.shot(chest(c.caster).add(new THREE.Vector3(0.7, 0.15, 0)), p, col, 0.12);
+              sound.whoosh(c.motion === 'shoot' ? 'projectile' : 'mark');
+              await wait(115);
+            }
+            stage.toon.hit(p, col, last ? 1.3 : 1);
+            stage.kick((i % 2 ? 1 : -1) * (0.025 + 0.01 * Math.min(i, 3)), last ? 1.1 : 0.55);
+            stage.hitStop(last ? 0.09 : 0.045);
+            onomatopoeia(ev.targetUid, c.motion, finale);
+            if (finale) {
+              stage.toon.finale(p, col, crit ? 1.5 : 1.1);
+              stage.slowMo(0.35, 0.28);
+              if (c.hits >= 3 || crit) speedLines(col);
+            }
+          }
           if (fx) {
             if (ev.source === 'enemy') {
+              stage.toon.slash(p, '#e0584a', 2.8, Math.random() * 3);
+              stage.toon.hit(p, '#e0584a', 0.9);
+              stage.kick(-0.03, 0.4);
               fx.slash(p, '#ff5a4a', 2.2);
               stage.shake(0.18);
             } else if (ev.source === 'burn') fx.burn(p, '#ff8a3a');
@@ -1073,9 +1163,13 @@ export function battleScreen(app: App): HTMLElement {
             } else if (lastTag === 'dot') {
               fx.impact(p, lastColor, 0.8);
               fx.burn(p, lastColor);
-            } else fx.impact(p, lastColor, lastTag === 'multi' ? 0.7 : lastTag === 'aoe' ? 0.9 : 1);
-            // 성속마다 다른 타격 모양
-            if (ev.source === 'ally' && ev.amount > 0) fx.signature(lastElement, p, lastColor, lastTag === 'multi' ? 0.6 : crit ? 1.8 : 1);
+            } else {
+              fx.flare(p, lastColor, 1.3, 0.22);
+              fx.sparks(p, lastColor, 8, 6, 0.2);
+              fx.light(p, lastColor, 2.4, 0.35);
+            }
+            // 성속마다 다른 타격 모양(마무리와 큰 일격에만)
+            if (ev.source === 'ally' && ev.amount > 0 && (finale || crit)) fx.signature(lastElement, p, lastColor, crit ? 1.4 : 0.9);
           }
           if (crit && stage.fx) {
             stage.impactFrame(lastColor);
@@ -1092,8 +1186,8 @@ export function battleScreen(app: App): HTMLElement {
           }
           sound.hit(crit ? 'crit' : ev.amount === 0 && ev.absorbed ? 'blocked' : ev.source === 'ally' ? (lastTag === 'execute' || lastCaster.length && characterMotion(battle.allies.find((a) => a.uid === lastCaster)?.defId ?? '') === 'slash' ? 'slash' : 'ally') : ev.source);
           floatText(ev.targetUid, ev.amount > 0 ? `${ev.amount}` : `⛨${ev.absorbed}`, ev.source === 'enemy' ? 'dmg-ally' : ev.source === 'burn' ? 'dmg-burn' : crit ? 'dmg-crit' : big ? 'dmg-big' : 'dmg');
-          if (big) stage.glowPulse(crit ? 0.55 : 0.25);
-          await wait(lastTag === 'multi' ? 150 : crit ? 520 : 260);
+          if (big && !finale) stage.glowPulse(crit ? 0.35 : 0.15);
+          await wait(finale ? 420 : crit ? 520 : lastTag === 'multi' ? 170 : 230);
           break;
         }
         case 'heal': {
@@ -1168,6 +1262,7 @@ export function battleScreen(app: App): HTMLElement {
         case 'enemyAct':
         case 'enemyStunned': {
           if (!enemyPhase) {
+            await endCast();
             enemyPhase = true;
             stage.focus(null);
             stage.fx?.fadeArcs();
@@ -1234,6 +1329,7 @@ export function battleScreen(app: App): HTMLElement {
           break;
       }
     }
+    await endCast();
     if (!enemyPhase) await turnSummary();
     stage.fx?.fadeArcs();
     stage.focus(null);

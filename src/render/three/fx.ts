@@ -80,7 +80,12 @@ export class FxSystem {
     private staticLights: number,
   ) {}
 
+  /** 동시에 살아 있는 입자 상한. 느린 기기에서 효과가 쌓여 화면을 덮지 않게 한다. */
+  maxParts = 360;
+
   sprite(o: SpriteOpts): void {
+    // 상한을 넘으면 새 입자를 버린다(오래된 큰 빛무리가 남아 화면을 가리는 일을 막는다)
+    if (this.parts.length >= this.maxParts) return;
     const additive = o.additive ?? true;
     const s0 = Array.isArray(o.size) ? new THREE.Vector2(...o.size) : new THREE.Vector2(o.size, o.size);
     const to = o.to ?? o.size;

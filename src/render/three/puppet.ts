@@ -145,7 +145,30 @@ const CLIPS = {
   hit: clip([0, 0.05, 0.16, 0.45], [Z, { body: 0.2, head: 0.16, x: -20, armF: 0.14, tail: -0.2, sq: -0.06 }, { body: 0.12, head: 0.08, x: -14 }, Z]),
   die: clip([0, 0.25, 0.6], [Z, { body: 0.2, head: 0.2, x: -10 }, { body: -0.3, head: -0.35, armF: -0.4, armB: 0.3, y: -36, x: -6 }], true),
   victory: clip([0, 0.3, 1.2], [Z, { armF: 1.1, head: 0.12, y: 4 }, { armF: 1.0, head: 0.1, y: 3 }], true),
+
+  // ── 연속기(타격마다 자세가 바뀐다). 끝 자세를 유지하고, 다음 동작이 그 자세에서 이어 받는다 ──
+  // 돌진: 몸을 앞으로 숙이고 망토가 뒤로 날린다
+  dash: clip([0, 0.1], [Z, { body: -0.28, armF: -0.35, armB: 0.45, tail: 0.4, hair: 0.25, x: 8, sq: -0.04 }], true),
+  // 내려베기
+  combo1: clip([0, 0.06, 0.13, 0.26], [Z, { armF: 1.35, body: 0.1, x: -4, sq: 0.05 }, { armF: -0.75, body: -0.22, x: 16, tail: 0.25, sq: -0.06 }, { armF: -0.6, body: -0.16, x: 12 }], true),
+  // 올려베기(반대 방향)
+  combo2: clip([0, 0.06, 0.13, 0.26], [{ armF: -0.6, body: -0.16 }, { armF: -0.9, body: 0.08, x: 4, sq: -0.05 }, { armF: 1.4, body: -0.18, x: 18, y: 6, tail: -0.2, sq: 0.06 }, { armF: 1.2, body: -0.1, x: 14, y: 4 }], true),
+  // 찌르기
+  combo3: clip([0, 0.07, 0.13, 0.26], [Z, { armF: 0.3, body: 0.14, x: -10, sq: -0.06 }, { armF: -0.25, body: -0.26, x: 34, tail: 0.3, sq: 0.07 }, { armF: -0.2, body: -0.2, x: 28 }], true),
+  // 마무리: 뛰어올라 내리꽂는다
+  finish: clip([0, 0.1, 0.18, 0.26, 0.42], [Z, { y: 34, armF: 1.6, body: 0.16, x: 6, sq: 0.08, tail: -0.3, hair: -0.3 }, { y: 30, armF: 1.7, body: 0.2, x: 10 }, { y: -10, armF: -0.9, body: -0.32, x: 26, sq: -0.1, tail: 0.35 }, { y: -6, armF: -0.75, body: -0.26, x: 22 }], true),
+  // 원거리 한 발: 짧은 반동
+  fire: clip([0, 0.04, 0.16], [{ armF: 0.05 }, { armF: 0.38, body: 0.12, x: -12, head: 0.08, sq: 0.04 }, { armF: 0.1, body: 0.03, x: -3 }], true),
+  // 주문 내밀기
+  cast1: clip([0, 0.07, 0.2], [Z, { armF: 0.7, body: -0.12, x: 10, y: 4, sq: 0.04, tail: -0.15 }, { armF: 0.55, body: -0.08, x: 8, y: 3 }], true),
+  // 주문 높이 들기
+  cast2: clip([0, 0.07, 0.2], [Z, { armF: 1.3, head: 0.18, body: 0.08, y: 10, sq: 0.06, hair: -0.2 }, { armF: 1.1, head: 0.12, y: 8 }], true),
+  // 제자리로(유지하던 자세를 풀고 대기로)
+  recover: clip([0, 0.3], [Z, Z]),
 };
+
+/** 새 동작이 직전 자세에서 이어지는 시간(초). 제자리로 돌아올 때는 길게. */
+const BLEND: Partial<Record<string, number>> = { recover: 0.3, dash: 0.1 };
 
 export type PuppetAnim = 'attack' | keyof typeof CLIPS;
 
@@ -283,9 +306,16 @@ export class Puppet {
   }
 
   play(kind: PuppetAnim): void {
+    // 직전 자세에서 부드럽게 이어 받는다(연속기 사이가 툭 끊기지 않게)
+    this.blendFrom = { ...this.lastPose };
+    this.blendTime = BLEND[kind] ?? 0.06;
     this.anim = { kind, t: 0 };
     if (kind !== 'die' && kind !== 'victory') this.held = null;
   }
+
+  private lastPose: Pose = {};
+  private blendFrom: Pose | null = null;
+  private blendTime = 0.06;
 
   revive(): void {
     this.anim = null;
@@ -303,11 +333,20 @@ export class Puppet {
       this.anim.t += dt;
       const c = this.anim.kind === 'attack' ? ATTACK[this.motion] : CLIPS[this.anim.kind];
       act = sample(c, this.anim.t);
+      if (this.blendFrom && this.anim.t < this.blendTime) {
+        const u = smooth(this.anim.t / this.blendTime);
+        const from = this.blendFrom;
+        const mixed: Pose = {};
+        for (const ch of new Set([...Object.keys(from), ...Object.keys(act)]) as Set<Channel>) mixed[ch] = (from[ch] ?? 0) * (1 - u) + (act[ch] ?? 0) * u;
+        act = mixed;
+      }
       if (this.anim.t >= c.keys[c.keys.length - 1].t) {
         if (c.hold) this.held = act;
         this.anim = null;
+        this.blendFrom = null;
       }
     }
+    this.lastPose = act;
     const t = time + phase;
     const calm = this.held && this.anim === null && this.held.y !== undefined && this.held.y < -20 ? 0.2 : 1;
     const v = (ch: Channel) => act[ch] ?? 0;

@@ -11,10 +11,11 @@ import { FxSystem } from './fx';
 import { guessTier, loadPref, qualityFor, savePref, type GfxPref, type Quality, type Tier } from './quality';
 import { clipLength, Puppet } from './puppet';
 import { fxTexture, svgTexture } from './textures';
+import { Backdrop, ToonFx } from './toonfx';
 
 export type Framing = 'menu' | 'battle';
 export type ActorPart = 'feet' | 'chest' | 'head' | 'top';
-export type ActorAnim = 'cast' | 'channel' | 'charge' | 'act' | 'hit' | 'die';
+export type ActorAnim = 'cast' | 'channel' | 'charge' | 'act' | 'hit' | 'die' | 'dash' | 'combo1' | 'combo2' | 'combo3' | 'finish' | 'fire' | 'cast1' | 'cast2' | 'recover';
 
 export interface ActorSpec {
   uid: string;
@@ -37,6 +38,9 @@ interface Aura {
 
 interface Actor {
   spec: ActorSpec;
+  /** 돌진으로 제자리에서 벗어난 거리(월드 x) */
+  travelX: number;
+  travel: { from: number; to: number; t: number; dur: number } | null;
   /** 장면에 놓인 물체: 술사는 인형 뿌리, 적은 판 */
   obj: THREE.Object3D;
   mesh?: THREE.Mesh;
@@ -343,6 +347,12 @@ export class Stage {
   private camInit = false;
   private camFraming: Framing | null = null;
   private bloomBase = 0.5;
+  private toonFx: ToonFx;
+  private backdrop: Backdrop;
+  private kickRoll = 0;
+  private kickRollV = 0;
+  private kickZoom = 0;
+  private kickZoomV = 0;
   private bloomBoost = 0;
   private size = new THREE.Vector2(1, 1);
   /** 세로 화면에서는 진영 간격을 좁혀 카메라를 당긴다 */
@@ -370,6 +380,9 @@ export class Stage {
       this.applyRendererQuality();
     }
     this.scene.add(this.actorGroup);
+    this.toonFx = new ToonFx(this.camera);
+    this.backdrop = new Backdrop(this.camera);
+    this.scene.add(this.toonFx.group, this.backdrop.mesh);
     this.loop = this.loop.bind(this);
     requestAnimationFrame(this.loop);
   }
@@ -452,6 +465,9 @@ export class Stage {
     this.scene.add(this.env.group);
     this.scene.fog = this.env.fog;
     this.fx = new FxSystem(this.camera, this.env.lights, this.env.staticLightCount);
+    this.fx.maxParts = this.quality.tier === 'high' ? 420 : 220;
+    this.toonFx.dispose();
+    this.backdrop.set(null);
     this.scene.add(this.fx.group);
     const p = this.env.preset;
     const g = p.grade;
@@ -640,6 +656,8 @@ export class Stage {
         dead: !!spec.dead,
         aura: null,
         order,
+        travelX: 0,
+        travel: null,
       };
       if (puppet && spec.dead) puppet.play('die');
       this.actors.set(spec.uid, actor);
@@ -655,6 +673,7 @@ export class Stage {
     if (!a) return new THREE.Vector3();
     const p = a.base.clone().add(a.offset);
     if (a.puppet) p.x += a.puppet.reach;
+    p.x += a.travelX;
     const y = a.hover + (part === 'feet' ? 0 : part === 'chest' ? a.height * 0.55 : part === 'head' ? a.height * 0.85 : a.height);
     p.y += y;
     if (part === 'feet') p.y = 0;
@@ -689,6 +708,7 @@ export class Stage {
     if (kind === 'charge') a.flash = 0.6;
     if (kind === 'die') a.dead = true;
     if (a.puppet) a.puppet.play(kind === 'cast' || kind === 'act' ? 'attack' : kind);
+    if (kind === 'die') this.dash(uid, null, 0.2);
   }
 
   /** 동작 길이(초): 연출 대기 시간 맞추기용 */
@@ -761,6 +781,35 @@ export class Stage {
   /** 잠깐 빛 번짐을 키운다(큰 타격의 화려함) */
   glowPulse(amount = 0.6): void {
     this.bloomBoost = Math.min(0.6, Math.max(this.bloomBoost, amount));
+  }
+
+  /** 돌진: 대상 바로 앞(gap만큼 떨어진 곳)으로. null이면 제자리로 돌아온다. */
+  dash(uid: string, targetUid: string | null, dur = 0.18, gap = 1.5): void {
+    const a = this.actors.get(uid);
+    if (!a) return;
+    let to = 0;
+    if (targetUid) {
+      const t = this.actors.get(targetUid);
+      if (!t) return;
+      to = t.base.x - gap - a.base.x;
+    }
+    a.travel = { from: a.travelX, to, t: 0, dur };
+  }
+
+  /** 셀 셰이딩 효과(베기 호·충격파·폭발) */
+  get toon(): ToonFx {
+    return this.toonFx;
+  }
+
+  /** 연출 배경: 색을 주면 무대 뒤가 어두워지며 그 색 무늬가 깔리고, null이면 걷힌다 */
+  setBackdrop(color: THREE.ColorRepresentation | null, strength = 0.82): void {
+    this.backdrop.set(color, strength);
+  }
+
+  /** 타격 반동: roll(라디안)만큼 기울이고 zoom만큼 앞으로 튕긴다 */
+  kick(roll: number, zoom = 0.6): void {
+    this.kickRoll += roll;
+    this.kickZoom += zoom;
   }
 
   /** 역경직(초) */
@@ -849,15 +898,15 @@ export class Stage {
     pos.y += Math.sin(this.t * 0.11) * 0.12;
     // 연출 카메라: 시전자 → 대상 순서로 다가갔다가 돌아온다. 세로 화면에서는 약하게.
     // 바라보는 점과 다가가는 정도 모두 스프링으로 따라가서, 대상이 바뀌어도 화면이 튀지 않는다.
-    if (this.focusGoal > 0) smoothDampV(this.focusCur, this.focusPt, this.focusVel, 0.5, dt);
-    [this.focusK, this.focusKV] = smoothDamp(this.focusK, this.focusGoal, this.focusKV, 0.55, dt);
+    if (this.focusGoal > 0) smoothDampV(this.focusCur, this.focusPt, this.focusVel, 0.16, dt);
+    [this.focusK, this.focusKV] = smoothDamp(this.focusK, this.focusGoal, this.focusKV, 0.2, dt);
     if (this.focusK > 0.002) {
       const k = this.focusK * (cam.aspect < 1 ? 0.45 : 1);
       pos.lerp(this.focusCur.clone().add(new THREE.Vector3(0, 0.9, 9)), 0.3 * k);
       look.lerp(this.focusCur, 0.38 * k);
     }
     // 반응·컷인의 짧은 당김도 스프링으로
-    [this.punchK, this.punchKV] = smoothDamp(this.punchK, this.punchAmt, this.punchKV, 0.22, dt);
+    [this.punchK, this.punchKV] = smoothDamp(this.punchK, this.punchAmt, this.punchKV, 0.08, dt);
     this.punchAmt = Math.max(0, this.punchAmt - dt * 1.2);
     if (this.punchK > 0.002) {
       pos.lerp(this.punchTarget.clone().add(new THREE.Vector3(0, 1, 6)), 0.12 * this.punchK);
@@ -872,16 +921,21 @@ export class Stage {
       this.camInit = true;
       this.camFraming = this.framing;
     } else {
-      smoothDampV(this.camPos, pos, this.camVel, 0.2, dt);
-      smoothDampV(this.camLook, look, this.lookVel, 0.2, dt);
+      smoothDampV(this.camPos, pos, this.camVel, 0.07, dt);
+      smoothDampV(this.camLook, look, this.lookVel, 0.07, dt);
     }
     // 흔들림: 프레임마다 무작위로 튀지 않게 겹친 사인파로 부드럽게 떤다
     const sh = this.shakeAmt;
     this.shakeAmt = Math.max(0, this.shakeAmt - dt * 1.3);
     const st = this.rt * 31;
     const shake = new THREE.Vector3(Math.sin(st) * 0.6 + Math.sin(st * 1.7 + 1.3) * 0.4, Math.sin(st * 1.3 + 0.7) * 0.6 + Math.sin(st * 2.3) * 0.4, 0).multiplyScalar(sh * 0.45);
-    cam.position.copy(this.camPos).add(shake);
+    // 타격 반동: 화면이 잠깐 기울고 앞으로 튄 뒤 빠르게 돌아온다
+    [this.kickRoll, this.kickRollV] = smoothDamp(this.kickRoll, 0, this.kickRollV, 0.09, dt);
+    [this.kickZoom, this.kickZoomV] = smoothDamp(this.kickZoom, 0, this.kickZoomV, 0.09, dt);
+    const fwd = this.camLook.clone().sub(this.camPos).normalize();
+    cam.position.copy(this.camPos).add(shake).addScaledVector(fwd, this.kickZoom);
     cam.lookAt(this.camLook.clone().add(shake.multiplyScalar(0.4)));
+    if (this.kickRoll) cam.rotateZ(this.kickRoll);
     if (this.bloom) {
       this.bloomBoost = Math.max(0, this.bloomBoost - dt * 2.2);
       this.bloom.strength = this.bloomBase + this.bloomBoost;
@@ -907,6 +961,13 @@ export class Stage {
     this.updateRimDir();
     for (const a of this.actors.values()) {
       a.base.x = a.slotX * this.xScale;
+      if (a.travel) {
+        a.travel.t += dt;
+        const k = Math.min(1, a.travel.t / a.travel.dur);
+        const e = 1 - Math.pow(1 - k, 3);
+        a.travelX = a.travel.from + (a.travel.to - a.travel.from) * e;
+        if (k >= 1) a.travel = null;
+      }
       const isAlly = a.spec.side === 'ally';
       a.offset.set(0, 0, 0);
       let roll = 0;
@@ -963,7 +1024,7 @@ export class Stage {
       const tone = a.dead && isAlly ? 0.45 : 1;
       if (a.puppet) {
         a.puppet.update(this.t, dt, a.phase);
-        a.obj.position.set(a.base.x + a.offset.x, a.hover + a.offset.y, a.base.z);
+        a.obj.position.set(a.base.x + a.offset.x + a.travelX, a.hover + a.offset.y, a.base.z);
         a.obj.rotation.y = yaw;
         a.puppet.caster.rotation.y = lightYaw - yaw;
         a.puppet.setColor(tone + a.flash * 2.2, a.alpha);
@@ -983,7 +1044,7 @@ export class Stage {
         a.mat!.color.setScalar(tone + a.flash * 2.2);
         a.mat!.opacity = a.alpha;
       }
-      const reach = a.puppet ? a.puppet.reach : 0;
+      const reach = (a.puppet ? a.puppet.reach : 0) + a.travelX;
       a.shadow.position.set(a.base.x + a.offset.x + reach, 0.02, a.base.z);
       (a.shadow.material as THREE.MeshBasicMaterial).opacity = a.alpha * (a.hover > 0 ? 0.6 : 1) * (this.quality.shadows && this.env?.preset.scenery !== 'neon' ? 0.6 : 1);
       this.updateAura(a, dt);
@@ -997,7 +1058,7 @@ export class Stage {
     const k = au.shown / au.max;
     const ready = au.level >= Math.min(3, au.max);
     const pulse = 0.8 + 0.2 * Math.sin(this.t * (4 + k * 6));
-    const reach = a.puppet ? a.puppet.reach : 0;
+    const reach = (a.puppet ? a.puppet.reach : 0) + a.travelX;
     const x = a.base.x + reach;
     const col = au.color.clone().lerp(new THREE.Color(0xffffff), ready ? 0.25 : 0);
     au.glow.position.set(x, a.height * 0.5, a.base.z - 0.05);
@@ -1036,7 +1097,9 @@ export class Stage {
       this.last = now;
       return;
     }
-    const raw = Math.min(0.05, (now - this.last) / 1000);
+    // 인물·카메라는 한 프레임에 최대 0.1초씩, 효과는 느린 기기에서도 실제 시간대로(최대 0.25초) 흘러 쌓이지 않게 한다
+    const real = Math.min(0.25, (now - this.last) / 1000);
+    const raw = Math.min(0.1, real);
     this.last = now;
     if (this.slowLeft > 0) {
       this.slowLeft -= raw;
@@ -1044,9 +1107,11 @@ export class Stage {
     }
     // 역경직(히트스톱): 아주 잠깐 인물과 효과를 멈춰 타격에 무게를 싣는다. 카메라는 계속 흔들린다.
     let dt = raw * this.timeScale;
+    let fxDt = real * this.timeScale;
     if (this.stopLeft > 0) {
       this.stopLeft -= raw;
       dt = 0;
+      fxDt = 0;
     }
     this.t += dt;
     this.rt += raw;
@@ -1054,7 +1119,9 @@ export class Stage {
     this.updateCamera(raw);
     this.updateActors(dt);
     this.env?.update(this.t, dt);
-    this.fx?.update(dt, this.t);
+    this.fx?.update(fxDt, this.t);
+    this.toonFx.update(fxDt);
+    this.backdrop.update(raw, this.rt);
     this.screenFlash = Math.max(0, this.screenFlash - dt * 3);
     if (this.probe && this.canvas.isConnected && now > this.probe.start) {
       this.probe.frames++;
