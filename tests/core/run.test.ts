@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bestPlan } from '../../src/core/autoplan';
-import { executeRound } from '../../src/core/battle';
+import { autoplay } from './helpers';
 import { chooseReward, clearRun, finishBattle, loadRun, newRun, saveRun, startBattle, type KeyValueStore } from '../../src/core/run';
 import { FLOORS } from '../../src/data/encounters';
 
@@ -25,7 +24,7 @@ describe('run', () => {
     const run = newRun(TEAM, 3);
     const battle = startBattle(run);
     expect(run.phase).toBe('battle');
-    for (let i = 0; i < 30 && battle.outcome === 'ongoing'; i++) executeRound(battle, bestPlan(battle));
+    autoplay(battle);
     expect(battle.outcome).toBe('victory');
     finishBattle(run);
     expect(run.phase).toBe('reward');
@@ -58,7 +57,7 @@ describe('run', () => {
     while (run.phase !== 'victory' && run.phase !== 'defeat') {
       if (run.phase === 'map') {
         const b = startBattle(run);
-        for (let i = 0; i < 60 && b.outcome === 'ongoing'; i++) executeRound(b, bestPlan(b));
+        autoplay(b);
         finishBattle(run);
       } else if (run.phase === 'reward') {
         chooseReward(run, run.rewardChoices![0]);

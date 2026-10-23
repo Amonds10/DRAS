@@ -1,18 +1,18 @@
 import type { EnemyDef } from '../core/types';
 
 const list: EnemyDef[] = [
-  { id: 'stray_shard', name: '떠도는 별부스러기', glyph: '✧', maxHp: 66, atk: 12, def: 2, pattern: [{ kind: 'attack', power: 10 }, { kind: 'attack', power: 10 }, { kind: 'defend', shield: 8 }] },
-  { id: 'shadow_comet', name: '그림자 혜성', glyph: '☄', maxHp: 80, atk: 13, def: 3, pattern: [{ kind: 'attack', power: 12 }, { kind: 'attackAll', power: 6 }] },
-  { id: 'dark_nebula', name: '어둠 성운체', glyph: '❂', maxHp: 103, atk: 12, def: 5, pattern: [{ kind: 'buff', atk: 3 }, { kind: 'attack', power: 11 }, { kind: 'attackAll', power: 7 }] },
-  { id: 'eclipse_eye', name: '성식의 눈', glyph: '◐', maxHp: 89, atk: 12, def: 4, pattern: [{ kind: 'seal' }, { kind: 'attack', power: 12 }, { kind: 'attack', power: 10 }] },
-  { id: 'fallen_keeper', name: '타락한 별지기', glyph: '♆', maxHp: 257, atk: 15, def: 6, pattern: [{ kind: 'attack', power: 14 }, { kind: 'defend', shield: 14 }, { kind: 'charge' }, { kind: 'attackAll', power: 15 }] },
+  { id: 'stray_shard', name: '떠도는 별부스러기', glyph: '✧', maxHp: 119, atk: 14, def: 2, spd: 95, toughness: 30, weak: ['sol', 'comet'], pattern: [{ kind: 'attack', power: 10 }, { kind: 'attack', power: 10 }, { kind: 'defend', shield: 8 }] },
+  { id: 'shadow_comet', name: '그림자 혜성', glyph: '☄', maxHp: 144, atk: 15, def: 3, spd: 110, toughness: 30, weak: ['luna', 'void'], pattern: [{ kind: 'attack', power: 12 }, { kind: 'attackAll', power: 6 }] },
+  { id: 'dark_nebula', name: '어둠 성운체', glyph: '❂', maxHp: 185, atk: 14, def: 5, spd: 90, toughness: 40, weak: ['sol', 'star'], pattern: [{ kind: 'buff', atk: 3 }, { kind: 'attack', power: 11 }, { kind: 'attackAll', power: 7 }] },
+  { id: 'eclipse_eye', name: '성식의 눈', glyph: '◐', maxHp: 160, atk: 14, def: 4, spd: 100, toughness: 30, weak: ['comet', 'nebula'], pattern: [{ kind: 'seal' }, { kind: 'attack', power: 12 }, { kind: 'attack', power: 10 }] },
+  { id: 'fallen_keeper', name: '타락한 별지기', glyph: '♆', maxHp: 463, atk: 17, def: 6, spd: 96, toughness: 90, weak: ['luna', 'void', 'star'], pattern: [{ kind: 'attack', power: 14 }, { kind: 'defend', shield: 14 }, { kind: 'charge' }, { kind: 'attackAll', power: 15 }] },
   {
     id: 'star_devourer',
     name: '별을 삼키는 자',
     glyph: '✹',
-    maxHp: 629,
-    atk: 16,
-    def: 6,
+    maxHp: 1132,
+    atk: 18,
+    def: 6, spd: 100, toughness: 120, weak: ['sol', 'comet', 'void'],
     traits: ['starShield'],
     pattern: [
       { kind: 'seal' },
@@ -34,5 +34,5 @@ export function enemyById(id: string): EnemyDef {
 }
 
 export const TRAIT_DESC: Record<string, string> = {
-  starShield: '별 삼킴: 체인 3 미만의 마법 피해를 절반으로 줄인다.',
+  starShield: '별 삼킴: 격파되지 않은 동안 받는 피해가 30% 줄어든다.',
 };

@@ -6,7 +6,7 @@ import { Rng } from './rng';
 import { TEAM_SIZE } from './team';
 import type { Ally, BattleMods, BattleState } from './types';
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 export const REVIVE_RATIO = 0.25;
 export const POST_BATTLE_HEAL = 0.1;
 
@@ -23,25 +23,15 @@ export interface RunState {
   mods: BattleMods;
   battle: BattleState | null;
   rewardChoices: string[] | null;
-  stats: { battlesWon: number; maxChain: number; reactions: number; fullChains: number; rounds: number };
+  stats: { battlesWon: number; breaks: number; ultimates: number; turns: number };
 }
 
-/** 장착 주문 검사: 술사의 주문 목록 안에서 서로 다른 5개 */
-export const LOADOUT_SIZE = 5;
-
-export function validLoadout(unitId: string, spells: string[]): boolean {
-  const pool = unitById(unitId).pool;
-  return spells.length === LOADOUT_SIZE && new Set(spells).size === LOADOUT_SIZE && spells.every((s) => pool.includes(s));
-}
-
-export function newRun(unitIds: string[], seed: number, loadouts: Record<string, string[]> = {}): RunState {
+export function newRun(unitIds: string[], seed: number): RunState {
   if (unitIds.length !== TEAM_SIZE) throw new Error(`팀은 ${TEAM_SIZE}명이어야 합니다.`);
   if (new Set(unitIds).size !== unitIds.length) throw new Error('같은 술사를 두 번 편성할 수 없습니다.');
   const team: Ally[] = unitIds.map((id, i) => {
     const def = unitById(id);
-    const chosen = loadouts[id];
-    if (chosen && !validLoadout(id, chosen)) throw new Error(`${def.name}의 장착 주문이 올바르지 않습니다.`);
-    return { uid: `a${i}`, defId: id, hp: def.maxHp, maxHp: def.maxHp, atk: def.atk, def: def.def, shield: 0, statuses: [], spells: [...(chosen ?? def.spells)] };
+    return { uid: `a${i}`, defId: id, hp: def.maxHp, maxHp: def.maxHp, atk: def.atk, def: def.def, shield: 0, statuses: [], energy: 0 };
   });
   return {
     version: SAVE_VERSION,
@@ -53,7 +43,7 @@ export function newRun(unitIds: string[], seed: number, loadouts: Record<string,
     mods: { ...DEFAULT_MODS },
     battle: null,
     rewardChoices: null,
-    stats: { battlesWon: 0, maxChain: 0, reactions: 0, fullChains: 0, rounds: 0 },
+    stats: { battlesWon: 0, breaks: 0, ultimates: 0, turns: 0 },
   };
 }
 
@@ -77,10 +67,9 @@ export function startBattle(run: RunState): BattleState {
 export function finishBattle(run: RunState): void {
   const battle = run.battle;
   if (run.phase !== 'battle' || !battle || battle.outcome === 'ongoing') throw new Error('끝난 전투가 없습니다.');
-  run.stats.maxChain = Math.max(run.stats.maxChain, battle.stats.maxChain);
-  run.stats.reactions += battle.stats.reactions;
-  run.stats.fullChains += battle.stats.fullChains;
-  run.stats.rounds += battle.round;
+  run.stats.breaks += battle.stats.breaks;
+  run.stats.ultimates += battle.stats.ultimates;
+  run.stats.turns += battle.stats.turns;
   run.battle = null;
 
   if (battle.outcome === 'defeat') {

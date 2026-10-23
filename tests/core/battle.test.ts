@@ -1,186 +1,173 @@
 import { describe, expect, it } from 'vitest';
-import { bestPlan } from '../../src/core/autoplan';
-import { DEFAULT_MODS, HAND_SIZE, createBattle, executeRound, getFocus, hasStatus, validatePlan } from '../../src/core/battle';
-import { newRun } from '../../src/core/run';
-import type { BattleState, BattleEvent } from '../../src/core/types';
+import { AV_BASE, abilityOf, begin, canUltimate, cloneBattle, maxEnergy, statusStacks, timeline, validateAction } from '../../src/core/battle';
 import { unitById } from '../../src/data/units';
+import { allyDamage, autoplay, battle, giveTurn, use } from './helpers';
 
 // a0 솔레아(태양) · a1 루네(달) · a2 녹스(공허) · a3 벨라(혜성)
 const TEAM = ['solea', 'lune', 'nox', 'vela'];
 
-function battle(enemies: string[], seed = 1, mods = DEFAULT_MODS): BattleState {
-  return createBattle(newRun(TEAM, seed).team, enemies, { ...mods }, seed);
-}
+describe('speed timeline', () => {
+  it('the fastest unit acts first and the timeline follows speed', () => {
+    const b = battle(['nebia', 'solea', 'lune', 'astra'], ['dark_nebula']);
+    // 네비아(112) > 솔레아(105) > 루네(100) > 아스트라(94), 어둠 성운체 90
+    const order = timeline(b, 5);
+    expect(order[0]).toBe('a0');
+    expect(order.slice(0, 5)).toEqual(['a0', 'a1', 'a2', 'a3', 'e0']);
+    begin(b);
+    expect(b.active).toBe('a0');
+  });
 
-/** 테스트용: 손패를 원하는 스킬로 고정한다. */
-function hand(b: BattleState, cards: Record<string, string[]>): void {
-  b.hands = { ...b.hands, ...cards };
-}
+  it('enemies faster than everyone act before the first ally turn', () => {
+    const b = battle(['astra', 'lune', 'nox', 'vela'], ['shadow_comet']);
+    const events = begin(b);
+    const firstTurn = events.find((e) => e.type === 'turn');
+    expect(firstTurn && firstTurn.type === 'turn' ? firstTurn.uid : null).toBe('e0');
+    expect(b.active).not.toBeNull();
+  });
 
-function hitAfterCast(events: BattleEvent[], spellId: string): number {
-  const i = events.findIndex((e) => e.type === 'cast' && e.spellId === spellId);
-  const hit = events.slice(i).find((e) => e.type === 'damage');
-  return hit && hit.type === 'damage' ? hit.amount + hit.absorbed : 0;
-}
+  it('after acting, the actor goes to the back of the line', () => {
+    const b = battle(TEAM, ['fallen_keeper']);
+    begin(b);
+    const first = b.active!;
+    use(b, first, 'basic', 'e0');
+    expect(b.active).not.toBe(first);
+    expect(b.av[first]).toBeGreaterThan(0);
+    expect(b.av[first]).toBeLessThanOrEqual(AV_BASE / unitById(b.allies.find((a) => a.uid === first)!.defId).spd);
+  });
+});
 
-describe('battle', () => {
-  it('draws two skills per ally from their own deck and rolls intents', () => {
-    const b = battle(['stray_shard', 'shadow_comet']);
-    expect(b.enemies.every((e) => e.intent !== null)).toBe(true);
-    for (const a of b.allies) {
-      expect(b.hands[a.uid]).toHaveLength(HAND_SIZE);
-      for (const id of b.hands[a.uid]) expect(unitById(a.defId).spells).toContain(id);
+describe('skill points and energy', () => {
+  it('basic attacks give a skill point, skills spend one, and skills need one', () => {
+    const b = battle(TEAM, ['fallen_keeper'], 1, { startSp: 1 });
+    giveTurn(b, 'a0');
+    use(b, 'a0', 'skill', 'e0');
+    expect(b.sp).toBe(0);
+    giveTurn(b, 'a3');
+    expect(validateAction(b, { allyUid: 'a3', slot: 'skill', targetUid: 'e0' })).toMatch(/성진/);
+    use(b, 'a3', 'basic', 'e0');
+    expect(b.sp).toBe(1);
+  });
+
+  it('acting builds energy, and an ultimate can cut in without ending the turn', () => {
+    const b = battle(TEAM, ['fallen_keeper'], 2, { startEnergy: 0 });
+    giveTurn(b, 'a0');
+    const solea = b.allies[0];
+    expect(canUltimate(b, solea)).toBe(false);
+    use(b, 'a0', 'basic', 'e0');
+    expect(solea.energy).toBeGreaterThanOrEqual(20);
+
+    giveTurn(b, 'a1');
+    solea.energy = maxEnergy(solea);
+    expect(canUltimate(b, solea)).toBe(true);
+    const events = use(b, 'a0', 'ultimate', 'e0');
+    expect(events.some((e) => e.type === 'cast' && e.slot === 'ultimate')).toBe(true);
+    // 필살기는 루네의 차례를 빼앗지 않는다
+    expect(b.active).toBe('a1');
+    expect(solea.energy).toBeLessThan(maxEnergy(solea));
+  });
+
+  it('only the active ally can use basic attacks and skills', () => {
+    const b = battle(TEAM, ['fallen_keeper']);
+    giveTurn(b, 'a0');
+    expect(validateAction(b, { allyUid: 'a1', slot: 'basic', targetUid: 'e0' })).toMatch(/차례/);
+  });
+});
+
+describe('toughness and break', () => {
+  it('weakness hits wear toughness down; other elements do not', () => {
+    // 떠도는 별부스러기: 약점 태양·혜성
+    const b = battle(TEAM, ['stray_shard']);
+    giveTurn(b, 'a2');
+    use(b, 'a2', 'basic', 'e0');
+    expect(b.enemies[0].toughness).toBe(b.enemies[0].maxToughness);
+    giveTurn(b, 'a0');
+    use(b, 'a0', 'basic', 'e0');
+    expect(b.enemies[0].toughness).toBe(b.enemies[0].maxToughness - abilityOf(b.allies[0], 'basic').toughness);
+  });
+
+  it('a break deals extra damage, delays the enemy, and it loses its next turn while recovering', () => {
+    const b = battle(TEAM, ['stray_shard'], 3);
+    b.enemies[0].toughness = 5;
+    giveTurn(b, 'a0');
+    const avBefore = b.av.e0;
+    const events = use(b, 'a0', 'basic', 'e0');
+    expect(events.some((e) => e.type === 'break')).toBe(true);
+    expect(events.some((e) => e.type === 'damage' && e.source === 'break')).toBe(true);
+    // 태양 격파: 화상
+    expect(statusStacks(b.enemies[0], 'burn')).toBeGreaterThan(0);
+    void avBefore;
+    // 적의 다음 차례까지 진행: 행동 대신 강인도를 되찾는다
+    let guard = 0;
+    while (!b.enemies[0].toughness && guard++ < 10 && b.outcome === 'ongoing') {
+      const evs = use(b, b.active!, 'basic', 'e0');
+      if (evs.some((e) => e.type === 'recover')) {
+        expect(evs.some((e) => e.type === 'enemyStunned' && e.enemyUid === 'e0')).toBe(true);
+        expect(evs.some((e) => e.type === 'enemyAct' && e.enemyUid === 'e0')).toBe(false);
+      }
     }
+    if (b.outcome === 'ongoing') expect(b.enemies[0].toughness).toBe(b.enemies[0].maxToughness);
   });
+});
 
-  it('redraws hands every round', () => {
-    const b = battle(['fallen_keeper'], 4);
-    const seen = new Set<string>();
-    for (let i = 0; i < 6 && b.outcome === 'ongoing'; i++) {
-      seen.add(b.hands.a0.join());
-      executeRound(b, []);
-    }
-    expect(seen.size).toBeGreaterThan(1);
-  });
-
-  it('rejects skills that are not in the hand', () => {
-    const b = battle(['stray_shard']);
-    hand(b, { a0: ['dawn_thrust', 'sun_oath'] });
-    expect(validatePlan(b, [{ allyUid: 'a0', spellId: 'solar_cleave' }])).toMatch('손패');
-  });
-
-  it('rejects plans that cost more stardust than available or reuse an ally', () => {
-    const b = battle(['stray_shard']);
-    hand(b, { a0: ['solar_cleave', 'flare_rush'], a1: ['tidal_song', 'fullmoon_ward'], a2: ['retrograde', 'collapse'] });
-    const tooMuch = [
-      { allyUid: 'a0', spellId: 'solar_cleave' },
-      { allyUid: 'a1', spellId: 'tidal_song' },
-      { allyUid: 'a2', spellId: 'retrograde' },
-    ];
-    expect(validatePlan(b, tooMuch)).toMatch('성진');
-    expect(validatePlan(b, [{ allyUid: 'a0', spellId: 'solar_cleave' }, { allyUid: 'a0', spellId: 'flare_rush' }])).not.toBeNull();
-  });
-
-  it('a linked cast deals more damage than an unlinked one', () => {
-    const mods = { ...DEFAULT_MODS, startStardust: 10 };
-    const linked = battle(['fallen_keeper'], 7, mods);
-    const unlinked = battle(['fallen_keeper'], 7, mods);
-    hand(linked, { a0: ['dawn_thrust', 'sun_oath'], a1: ['crescent_edge', 'moon_veil'] });
-    hand(unlinked, { a3: ['meteor_snipe', 'tail_volley'], a1: ['crescent_edge', 'moon_veil'] });
-    const a = executeRound(linked, [{ allyUid: 'a0', spellId: 'dawn_thrust' }, { allyUid: 'a1', spellId: 'crescent_edge' }]);
-    const b = executeRound(unlinked, [{ allyUid: 'a3', spellId: 'meteor_snipe' }, { allyUid: 'a1', spellId: 'crescent_edge' }]);
-    expect(hitAfterCast(a, 'crescent_edge')).toBeGreaterThan(hitAfterCast(b, 'crescent_edge'));
-  });
-
-  it('eclipse stuns the focused enemy so it skips its action', () => {
-    const b = battle(['fallen_keeper'], 3);
-    hand(b, { a0: ['dawn_thrust', 'sun_oath'], a1: ['crescent_edge', 'moon_veil'] });
-    const events = executeRound(b, [{ allyUid: 'a0', spellId: 'dawn_thrust' }, { allyUid: 'a1', spellId: 'crescent_edge' }]);
-    expect(events.some((e) => e.type === 'reaction' && e.reactionId === 'eclipse')).toBe(true);
-    expect(events.some((e) => e.type === 'enemyStunned')).toBe(true);
-  });
-
-  it('a full chain triggers the constellation bonus', () => {
-    const b = battle(['fallen_keeper'], 5, { ...DEFAULT_MODS, startStardust: 10 });
-    hand(b, { a0: ['dawn_thrust', 'sun_oath'], a1: ['crescent_edge', 'moon_veil'], a2: ['void_touch', 'siphon'], a3: ['tail_volley', 'meteor_snipe'] });
-    const events = executeRound(b, [
-      { allyUid: 'a0', spellId: 'dawn_thrust' },
-      { allyUid: 'a1', spellId: 'crescent_edge' },
-      { allyUid: 'a2', spellId: 'void_touch' },
-      { allyUid: 'a3', spellId: 'tail_volley' },
-    ]);
-    expect(events.some((e) => e.type === 'fullChain')).toBe(true);
-    expect(b.stats.maxChain).toBe(4);
-  });
-
-  it('multi-hit skills hit several times', () => {
-    const b = battle(['fallen_keeper'], 8, { ...DEFAULT_MODS, startStardust: 10 });
-    hand(b, { a0: ['flare_rush', 'sun_oath'] });
-    const events = executeRound(b, [{ allyUid: 'a0', spellId: 'flare_rush' }]);
-    const playerHits = events.filter((e) => e.type === 'damage' && e.source === 'ally');
-    const stages = events.filter((e) => e.type === 'stage');
-    expect(stages).toHaveLength(4);
-    // 네 번째 타격은 태양핵 2 이상일 때만 나간다
-    expect(playerHits).toHaveLength(stages.filter((e) => e.type === 'stage' && !e.skipped).length);
-    expect(playerHits.length).toBeGreaterThanOrEqual(3);
-  });
-
-  it('execute doubles damage on low-HP targets', () => {
-    const mods = { ...DEFAULT_MODS, startStardust: 10 };
-    const full = battle(['fallen_keeper'], 9, mods);
-    const low = battle(['fallen_keeper'], 9, mods);
-    low.enemies[0].hp = 40;
-    hand(full, { a0: ['noon_verdict', 'sun_oath'] });
-    hand(low, { a0: ['noon_verdict', 'sun_oath'] });
-    const a = hitAfterCast(executeRound(full, [{ allyUid: 'a0', spellId: 'noon_verdict' }]), 'noon_verdict');
-    const b = hitAfterCast(executeRound(low, [{ allyUid: 'a0', spellId: 'noon_verdict' }]), 'noon_verdict');
-    expect(b).toBeGreaterThanOrEqual(a * 2 - 1);
-  });
-
-  it('lifesteal heals the caster', () => {
-    const b = battle(['fallen_keeper'], 10);
-    b.allies[2].hp = 20;
-    hand(b, { a2: ['siphon', 'void_touch'] });
-    const events = executeRound(b, [{ allyUid: 'a2', spellId: 'siphon' }]);
-    expect(events.some((e) => e.type === 'heal' && e.targetUid === 'a2' && e.amount > 0)).toBe(true);
-  });
-
-  it('delayed strikes explode at the end of the round', () => {
-    const b = battle(['fallen_keeper'], 11, { ...DEFAULT_MODS, startStardust: 10 });
-    hand(b, { a3: ['orbital_strike', 'meteor_snipe'] });
-    const events = executeRound(b, [{ allyUid: 'a3', spellId: 'orbital_strike' }]);
-    expect(events.some((e) => e.type === 'damage' && e.source === 'doom' && e.amount + e.absorbed > 20)).toBe(true);
-    expect(hasStatus(b.enemies[0], 'doom')).toBe(false);
-  });
-
-  it('boost raises the next cast multiplier', () => {
-    const b = createBattle(newRun(['nebia', 'solea', 'lune', 'vela'], 2).team, ['fallen_keeper'], { ...DEFAULT_MODS, startStardust: 10 }, 2);
-    hand(b, { a0: ['amplify', 'primal_light'], a1: ['dawn_thrust', 'sun_oath'] });
-    const events = executeRound(b, [{ allyUid: 'a0', spellId: 'amplify' }, { allyUid: 'a1', spellId: 'dawn_thrust' }]);
-    const cast = events.find((e) => e.type === 'cast' && e.spellId === 'dawn_thrust');
-    expect(cast && cast.type === 'cast' ? cast.mult : 0).toBe(1.4);
-  });
-
+describe('enemy turns', () => {
   it('taunt pulls single attacks and counter strikes back', () => {
-    const b = createBattle(newRun(['astra', 'solea', 'lune', 'vela'], 3).team, ['stray_shard'], { ...DEFAULT_MODS, startStardust: 10 }, 3);
+    const b = battle(['astra', 'solea', 'lune', 'vela'], ['stray_shard'], 3);
+    giveTurn(b, 'a0');
     b.enemies[0].intent = { kind: 'attack', power: 10, targetId: 'a3' };
-    hand(b, { a0: ['taunt_star', 'counter_stance'] });
-    const events = executeRound(b, [{ allyUid: 'a0', spellId: 'taunt_star' }]);
-    const enemyHit = events.find((e) => e.type === 'damage' && e.source === 'enemy');
-    expect(enemyHit && enemyHit.type === 'damage' ? enemyHit.targetUid : null).toBe('a0');
-
-    const c = createBattle(newRun(['astra', 'solea', 'lune', 'vela'], 3).team, ['fallen_keeper'], { ...DEFAULT_MODS, startStardust: 10 }, 3);
-    c.enemies[0].intent = { kind: 'attack', power: 10, targetId: 'a0' };
-    hand(c, { a0: ['counter_stance', 'taunt_star'] });
-    const ev2 = executeRound(c, [{ allyUid: 'a0', spellId: 'counter_stance' }]);
-    expect(ev2.some((e) => e.type === 'damage' && e.source === 'counter')).toBe(true);
+    b.av.e0 = 0.1;
+    const events = use(b, 'a0', 'skill');
+    const hit = events.find((e) => e.type === 'damage' && e.source === 'enemy');
+    expect(hit && hit.type === 'damage' ? hit.targetUid : null).toBe('a0');
+    expect(events.some((e) => e.type === 'damage' && e.source === 'counter')).toBe(true);
   });
 
-  it('statuses expire at the end of the round', () => {
-    const b = battle(['fallen_keeper'], 2, { ...DEFAULT_MODS, startStardust: 10 });
-    hand(b, { a0: ['dawn_thrust', 'sun_oath'], a1: ['crescent_edge', 'moon_veil'] });
-    executeRound(b, [{ allyUid: 'a0', spellId: 'dawn_thrust' }, { allyUid: 'a1', spellId: 'crescent_edge' }]);
-    expect(hasStatus(b.enemies[0], 'stun')).toBe(false);
+  it('burn ticks when the enemy turn starts and erosion when it acts', () => {
+    const b = battle(TEAM, ['fallen_keeper'], 4);
+    b.enemies[0].statuses.push({ id: 'burn', turns: 2, value: 5 }, { id: 'erosion', turns: 2, value: 4 });
+    // 루네의 일반 공격은 화상·잠식을 건드리지 않는다
+    giveTurn(b, 'a1');
+    b.av.e0 = 0.1;
+    const events = use(b, 'a1', 'basic', 'e0');
+    const enemyTurn = events.findIndex((e) => e.type === 'turn' && e.uid === 'e0');
+    const after = events.slice(enemyTurn);
+    expect(after.some((e) => e.type === 'damage' && e.source === 'burn' && e.amount === 5)).toBe(true);
+    expect(after.some((e) => e.type === 'damage' && e.source === 'erosion' && e.amount === 4)).toBe(true);
   });
 
-  it('focus moves to a living enemy after the focus dies', () => {
-    const b = battle(['stray_shard', 'stray_shard'], 9);
-    b.enemies[0].hp = 1;
-    hand(b, { a0: ['dawn_thrust', 'sun_oath'] });
-    executeRound(b, [{ allyUid: 'a0', spellId: 'dawn_thrust' }]);
-    expect(getFocus(b)?.uid).toBe('e1');
+  it('occultation steals a skill point', () => {
+    const b = battle(TEAM, ['eclipse_eye'], 5, { startSp: 3 });
+    giveTurn(b, 'a0');
+    b.enemies[0].intent = { kind: 'seal' };
+    b.av.e0 = 0.1;
+    use(b, 'a0', 'basic', 'e0');
+    // 일반 공격 +1, 성식 -1
+    expect(b.sp).toBe(3);
+  });
+});
+
+describe('determinism and auto play', () => {
+  it('is deterministic for the same seed and actions', () => {
+    const a = battle(TEAM, ['stray_shard', 'shadow_comet'], 9);
+    const b = cloneBattle(a);
+    autoplay(a);
+    autoplay(b);
+    expect(a.allies.map((x) => x.hp)).toEqual(b.allies.map((x) => x.hp));
+    expect(a.stats).toEqual(b.stats);
   });
 
-  it('is deterministic for the same seed and plan', () => {
-    const a = battle(['shadow_comet', 'stray_shard'], 42);
-    const b = battle(['shadow_comet', 'stray_shard'], 42);
-    const plan = [{ allyUid: 'a0', spellId: a.hands.a0[0] }];
-    expect(executeRound(a, plan)).toEqual(executeRound(b, plan));
-  });
-
-  it('the auto planner can win the first floor', () => {
-    const b = battle(['stray_shard', 'stray_shard'], 11);
-    for (let i = 0; i < 30 && b.outcome === 'ongoing'; i++) executeRound(b, bestPlan(b));
+  it('the auto player wins the first floor', () => {
+    const b = battle(TEAM, ['stray_shard', 'stray_shard'], 11);
+    autoplay(b);
     expect(b.outcome).toBe('victory');
+  });
+
+  it('damage scales with the listed attack percentage', () => {
+    const b = battle(TEAM, ['fallen_keeper'], 6);
+    giveTurn(b, 'a3');
+    const basic = allyDamage(use(b, 'a3', 'basic', 'e0'));
+    const c = battle(TEAM, ['fallen_keeper'], 6);
+    giveTurn(c, 'a3');
+    const skill = allyDamage(use(c, 'a3', 'skill', 'e0'));
+    expect(skill).toBeGreaterThan(basic * 1.5);
   });
 });

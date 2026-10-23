@@ -4934,3 +4934,1033 @@ button.spell-line.equip:disabled {
     font-size: 44px;
   }
 }
+
+/* ═══════════ 전투 화면 v3: 속도 순서·발밑 정보판·상세 정보 ═══════════ */
+.bx .actor.bx-unit {
+  pointer-events: auto;
+  cursor: pointer;
+  border-radius: 6px;
+  outline: none;
+  transition: filter 0.2s, opacity 0.2s;
+}
+
+.bx .actor.bx-unit:disabled {
+  cursor: default;
+}
+
+.bx .actor.bx-unit:focus-visible {
+  box-shadow: 0 0 0 2px var(--gold);
+}
+
+/* 상세 보기 중: 고른 캐릭터만 또렷하게, 나머지 정보판은 흐리게 */
+.bx.inspecting .bx-unit:not(.inspected) .bx-foot {
+  opacity: 0.45;
+}
+
+.bx .bx-unit.inspected::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 120%;
+  height: 22px;
+  translate: -50% 0;
+  border: 2px solid var(--el, var(--gold));
+  border-radius: 50%;
+  box-shadow: 0 0 18px var(--el, var(--gold));
+  animation: bx-ring 1.4s ease-in-out infinite;
+}
+
+.bx .enemy.bx-unit.inspected::before {
+  --el: #ff7a6a;
+}
+
+@keyframes bx-ring {
+  50% {
+    opacity: 0.55;
+    transform: scale(1.08);
+  }
+}
+
+/* 발밑 정보판 */
+.bx-foot {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  translate: -50% 6px;
+  width: max(128px, 100%);
+  max-width: 220px;
+  padding: 5px 7px 6px;
+  display: grid;
+  gap: 3px;
+  text-align: left;
+  background: rgba(8, 8, 11, 0.86);
+  border-top: 2px solid var(--el, var(--danger));
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+  transition: opacity 0.2s;
+}
+
+.bx .enemy .bx-foot {
+  --el: #e0685a;
+  width: max(150px, 100%);
+}
+
+.bx .enemy.boss .bx-foot {
+  max-width: 280px;
+  width: 260px;
+}
+
+.bx-name {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.bx-name b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bx-name .weak-row {
+  margin-left: auto;
+}
+
+.weak-row {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.bx-foot .hp-text {
+  font-size: 11px;
+}
+
+.bx-energy {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.bx-energy i {
+  display: block;
+  height: 100%;
+  background: color-mix(in srgb, var(--el) 70%, #fff);
+  transition: width 0.3s;
+}
+
+.bx-energy.full i {
+  background: #fff2c2;
+  box-shadow: 0 0 8px #ffd27a;
+}
+
+.bx-tough {
+  position: relative;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.bx-tough i {
+  display: block;
+  height: 100%;
+  background: #f4f1ea;
+  transition: width 0.3s;
+}
+
+.bx-tough.broken {
+  height: 12px;
+  background: rgba(255, 210, 120, 0.2);
+}
+
+.bx-tough b {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-num);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: #ffd27a;
+}
+
+.bx-stack {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  font-size: 10px;
+  color: color-mix(in srgb, var(--el) 60%, #fff);
+}
+
+.bx-pips {
+  display: flex;
+  gap: 2px;
+}
+
+.bx-pips i {
+  width: 6px;
+  height: 6px;
+  transform: rotate(45deg);
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.bx-pips i.on {
+  background: var(--el);
+  box-shadow: 0 0 5px var(--el);
+}
+
+.bx-stack.ready span:first-child {
+  color: #fff2c2;
+  font-weight: 700;
+}
+
+.bx-foot .status-row {
+  flex-wrap: wrap;
+}
+
+.bx-turn-tag {
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 900;
+  color: #111;
+  background: var(--el, var(--gold));
+  clip-path: polygon(0 0, 100% 0, 100% 70%, 50% 100%, 0 70%);
+  animation: bx-bob 1s ease-in-out infinite;
+}
+
+@keyframes bx-bob {
+  50% {
+    translate: 0 -4px;
+  }
+}
+
+.bx .ally.turn .bx-foot {
+  border-top-width: 3px;
+  box-shadow: 0 0 14px color-mix(in srgb, var(--el) 60%, transparent);
+}
+
+.target-bracket.ally i {
+  border-color: #8fe0a5;
+}
+
+.bx .ally-target .bx-foot {
+  outline: 1px solid #8fe0a5;
+}
+
+.bx .side-target .bx-foot,
+.bx .all-target .bx-foot {
+  outline: 1px dashed rgba(255, 120, 106, 0.8);
+}
+
+/* 행동 순서: 왼쪽 */
+.bx-line-slot {
+  position: absolute;
+  left: 12px;
+  top: 72px;
+  z-index: 11;
+}
+
+.bx-line {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bx-line-item {
+  position: relative;
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  background: rgba(8, 8, 11, 0.86);
+  border: 1.5px solid color-mix(in srgb, var(--el) 70%, transparent);
+  clip-path: polygon(0 0, 100% 0, 100% 78%, 78% 100%, 0 100%);
+  transition: transform 0.25s, opacity 0.25s;
+}
+
+.bx-line-item.now {
+  width: 60px;
+  height: 60px;
+  border-width: 2px;
+  box-shadow: inset 0 0 18px color-mix(in srgb, var(--el) 50%, transparent);
+}
+
+.bx-line-item.gone {
+  opacity: 0.2;
+  transform: translateX(-16px);
+}
+
+.bx-line-item.enemy {
+  border-color: rgba(224, 104, 90, 0.85);
+}
+
+.bx-line-face {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  color: #ff8d7e;
+}
+
+.bx-line-face svg {
+  width: 100%;
+  height: 100%;
+}
+
+.bx-line-item small {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  padding: 0 4px;
+  font-family: var(--font-num);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: #111;
+  background: var(--el);
+}
+
+/* 상세 정보: 오른쪽 */
+.bx-info-slot {
+  position: absolute;
+  right: 12px;
+  top: 64px;
+  bottom: 190px;
+  z-index: 15;
+  display: flex;
+  align-items: flex-start;
+  pointer-events: none;
+}
+
+.bx-info {
+  --el: #fff;
+  position: relative;
+  width: 340px;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 14px 16px;
+  display: grid;
+  gap: 10px;
+  font-size: 12.5px;
+  color: #ece6da;
+  background: rgba(7, 7, 9, 0.94);
+  border-left: 3px solid var(--el);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6);
+  pointer-events: auto;
+  animation: plate-in 0.25s cubic-bezier(0.2, 1, 0.3, 1) both;
+}
+
+.bx-info-close {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+
+.bx-info header {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 12px;
+  align-items: center;
+  padding-right: 28px;
+}
+
+.bx-info-bust {
+  width: 64px;
+  height: 64px;
+  border: 2px solid var(--el);
+  background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--el) 35%, #15131c), #0b0a10);
+  overflow: hidden;
+}
+
+.bx-info-bust svg {
+  width: 100%;
+  height: 100%;
+}
+
+.bx-info-bust.glyph {
+  display: grid;
+  place-items: center;
+  font-size: 34px;
+  color: #ff8d7e;
+}
+
+.bx-info h3 {
+  margin: 2px 0;
+  font-size: 22px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bx-info header small {
+  font-family: var(--font-num);
+  letter-spacing: 0.12em;
+  color: color-mix(in srgb, var(--el) 70%, #fff);
+}
+
+.bx-info header p {
+  margin: 0;
+  color: #b9b1a3;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bx-info h4 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--gold);
+}
+
+.bx-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  margin: 0;
+}
+
+.bx-stats div {
+  padding: 4px 6px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.bx-stats dt {
+  font-size: 10px;
+  color: #9f988c;
+}
+
+.bx-stats dd {
+  margin: 0;
+  font-weight: 700;
+  font-family: var(--font-num);
+}
+
+.bx-status-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bx-status-list li {
+  display: grid;
+  gap: 1px;
+  padding: 4px 7px;
+  border-left: 2px solid;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.bx-status-list li.buff {
+  border-color: #7fd68a;
+}
+
+.bx-status-list li.debuff {
+  border-color: #ff6f6a;
+}
+
+.bx-status-list li.buff b {
+  color: #9be8a6;
+}
+
+.bx-status-list li.debuff b {
+  color: #ff9a92;
+}
+
+.bx-status-list small {
+  color: #ece6da;
+  font-weight: 500;
+}
+
+.bx-status-list span {
+  color: #b9b1a3;
+  font-size: 11.5px;
+}
+
+.bx-empty {
+  margin: 0;
+  color: #8c857a;
+}
+
+.bx-ab {
+  padding: 7px 9px;
+  margin-bottom: 5px;
+  background: rgba(255, 255, 255, 0.04);
+  border-left: 2px solid rgba(255, 255, 255, 0.25);
+}
+
+.bx-ab.slot-skill {
+  border-color: color-mix(in srgb, var(--el) 70%, #fff);
+}
+
+.bx-ab.slot-ultimate {
+  border-color: #ffd27a;
+}
+
+.bx-ab-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.bx-ab-head small {
+  color: #9f988c;
+}
+
+.bx-ab-head b {
+  font-size: 14px;
+}
+
+.bx-ab-head span {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--gold);
+}
+
+.ab-desc {
+  margin: 3px 0 0;
+  line-height: 1.6;
+  color: #ddd6c9;
+}
+
+.ab-desc .hl-num {
+  color: #fff;
+  font-weight: 700;
+}
+
+.bx-break-list {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 3px;
+}
+
+/* 필살기 초상: 왼쪽 아래 */
+.bx-ult-slot {
+  position: absolute;
+  left: 12px;
+  bottom: 14px;
+  z-index: 12;
+}
+
+.bx-ults {
+  display: flex;
+  gap: 10px;
+}
+
+.bx-ult {
+  --fill: 0%;
+  position: relative;
+  width: 64px;
+  height: 64px;
+  padding: 3px;
+  border: none;
+  border-radius: 50%;
+  cursor: default;
+  background: conic-gradient(var(--el) var(--fill), rgba(255, 255, 255, 0.12) 0);
+  transition: transform 0.15s, box-shadow 0.2s;
+}
+
+.bx-ult-face {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--el) 30%, #15131c), #0b0a10);
+}
+
+.bx-ult-face svg {
+  width: 100%;
+  height: 100%;
+}
+
+.bx-ult kbd {
+  position: absolute;
+  right: -2px;
+  top: -2px;
+  font-size: 10px;
+  padding: 0 4px;
+  background: rgba(0, 0, 0, 0.8);
+  color: #ddd;
+}
+
+.bx-ult small {
+  position: absolute;
+  left: 50%;
+  bottom: -8px;
+  translate: -50% 0;
+  padding: 0 6px;
+  font-family: var(--font-num);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: #111;
+  background: #ffd27a;
+}
+
+.bx-ult.ready {
+  cursor: pointer;
+  box-shadow: 0 0 16px var(--el), 0 0 4px #fff;
+  animation: bx-ult-glow 1.2s ease-in-out infinite;
+}
+
+.bx-ult.ready:hover {
+  transform: scale(1.08);
+}
+
+.bx-ult.on {
+  transform: scale(1.12);
+  box-shadow: 0 0 0 3px #fff, 0 0 22px var(--el);
+}
+
+.bx-ult.dead {
+  filter: grayscale(1) brightness(0.5);
+}
+
+.bx-ult.turn {
+  outline: 2px solid var(--el);
+  outline-offset: 3px;
+}
+
+@keyframes bx-ult-glow {
+  50% {
+    box-shadow: 0 0 26px var(--el), 0 0 8px #fff;
+  }
+}
+
+/* 행동 패널: 오른쪽 아래 */
+.bx-act-slot {
+  position: absolute;
+  right: 12px;
+  bottom: 14px;
+  z-index: 12;
+  width: min(520px, calc(100% - 24px));
+}
+
+.bx-act {
+  --el: #fff;
+  display: grid;
+  gap: 8px;
+}
+
+.bx-act.idle {
+  min-height: 0;
+}
+
+.bx-act.idle small {
+  justify-self: end;
+  font-size: 12px;
+  color: #b9b1a3;
+}
+
+.bx-card {
+  padding: 10px 14px;
+  background: rgba(7, 7, 9, 0.9);
+  border-left: 3px solid var(--el);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.5);
+}
+
+.bx-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+
+.bx-card-head small {
+  width: 100%;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--el) 70%, #fff);
+}
+
+.bx-card-head b {
+  font-size: 20px;
+}
+
+.bx-card-target {
+  margin-left: auto;
+  font-size: 12px;
+  color: #ff9a8e;
+}
+
+.bx-card .ab-desc {
+  font-size: 12.5px;
+}
+
+.bx-card-err {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #ff8a80;
+}
+
+.bx-act-row {
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.bx-sp {
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  padding: 0 8px;
+  margin-right: auto;
+}
+
+.bx-sp small {
+  font-size: 10px;
+  color: #b9b1a3;
+}
+
+.bx-sp span {
+  display: flex;
+  gap: 4px;
+}
+
+.bx-sp i {
+  width: 12px;
+  height: 12px;
+  transform: rotate(45deg);
+  border: 1.5px solid var(--gold);
+  background: transparent;
+}
+
+.bx-sp i.on {
+  background: var(--gold);
+  box-shadow: 0 0 6px var(--gold);
+}
+
+.bx-slot {
+  position: relative;
+  min-width: 112px;
+  padding: 8px 12px 7px;
+  display: grid;
+  gap: 1px;
+  text-align: left;
+  color: #ece6da;
+  cursor: pointer;
+  background: rgba(10, 10, 13, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  clip-path: polygon(0 0, 100% 0, 100% 75%, 88% 100%, 0 100%);
+  transition: transform 0.12s, background 0.15s, border-color 0.15s;
+}
+
+.bx-slot b {
+  font-size: 15px;
+}
+
+.bx-slot small {
+  font-size: 10.5px;
+  color: #a39b8e;
+}
+
+.bx-slot kbd {
+  position: absolute;
+  right: 8px;
+  top: 6px;
+  font-size: 10px;
+  color: #8c857a;
+}
+
+.bx-slot:hover:not(:disabled) {
+  border-color: var(--el);
+}
+
+.bx-slot.on {
+  background: color-mix(in srgb, var(--el) 26%, rgba(10, 10, 13, 0.95));
+  border-color: var(--el);
+  transform: translateY(-3px);
+}
+
+.bx-slot:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.bx-go {
+  min-width: 96px;
+  padding: 0 14px;
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  font-weight: 900;
+  color: #111;
+  cursor: pointer;
+  background: var(--el);
+  border: none;
+  clip-path: polygon(10% 0, 100% 0, 100% 100%, 0 100%);
+}
+
+.bx-go kbd {
+  font-size: 10px;
+  font-weight: 500;
+  opacity: 0.7;
+}
+
+.bx-go:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.executing .bx-act-slot,
+.busy .bx-act-slot .bx-act:not(.idle) {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+
+/* 연출 글자 */
+.float.tough {
+  font-size: 14px;
+  color: #f4f1ea;
+  top: 92%;
+}
+
+.float.turn-pop {
+  font-size: 16px;
+  color: #111;
+  -webkit-text-stroke: 0;
+  text-shadow: none;
+  padding: 1px 8px;
+  background: var(--el, var(--gold));
+  top: -6%;
+}
+
+.break-banner b {
+  color: var(--el);
+  font-size: clamp(34px, 6vw, 60px);
+  letter-spacing: 0.1em;
+}
+
+.break-banner small {
+  letter-spacing: 0.4em;
+}
+
+.syn-foes {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.syn-foes li {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  opacity: 0.45;
+}
+
+.syn-foes li.on {
+  opacity: 1;
+}
+
+.kit-slot {
+  font-size: 11px;
+  padding: 1px 6px;
+  color: #111;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.kit-line.slot-skill .kit-slot {
+  background: var(--el);
+}
+
+.kit-line.slot-ultimate .kit-slot {
+  background: #ffd27a;
+}
+
+.kit-cost {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--gold);
+}
+
+.kit-line .ab-desc {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+@media (max-width: 760px) {
+  .bx-line-slot {
+    top: 58px;
+    left: 6px;
+  }
+
+  .bx-line-item {
+    width: 34px;
+    height: 34px;
+  }
+
+  .bx-line-item.now {
+    width: 42px;
+    height: 42px;
+  }
+
+  .bx-info-slot {
+    left: 8px;
+    right: 8px;
+    top: auto;
+    bottom: 8px;
+    max-height: 62vh;
+    z-index: 30;
+  }
+
+  .bx-info {
+    width: 100%;
+    max-height: 62vh;
+  }
+
+  .bx-ult-slot {
+    left: 8px;
+    bottom: auto;
+    top: calc(100% - 236px);
+  }
+
+  .bx-ults {
+    gap: 6px;
+  }
+
+  .bx-ult {
+    width: 46px;
+    height: 46px;
+  }
+
+  .bx-act-slot {
+    right: 8px;
+    left: 8px;
+    width: auto;
+    bottom: 8px;
+  }
+
+  .bx-card {
+    padding: 8px 10px;
+  }
+
+  .bx-card .ab-desc {
+    font-size: 11.5px;
+    max-height: 5.4em;
+    overflow-y: auto;
+  }
+
+  .bx-slot {
+    min-width: 0;
+    flex: 1;
+    padding: 6px 8px;
+  }
+
+  .bx-slot b {
+    font-size: 13px;
+  }
+
+  .bx-go {
+    min-width: 64px;
+  }
+
+  .bx-foot {
+    width: max(96px, 100%);
+    max-width: 140px;
+    padding: 3px 5px 4px;
+  }
+
+  .bx .enemy.boss .bx-foot {
+    width: 170px;
+  }
+
+  .bx-name {
+    font-size: 10.5px;
+  }
+}
+
+/* 아군 정보판은 좁게: 이웃과 겹치지 않도록 */
+.bx .ally .bx-foot {
+  width: 112px;
+  max-width: 112px;
+}
+
+.bx-stack {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.bx-pips {
+  gap: 1px;
+}
+
+.bx-pips i {
+  width: 5px;
+  height: 5px;
+}
+
+@media (max-width: 760px) {
+  .bx .ally .bx-foot {
+    width: 84px;
+    max-width: 84px;
+  }
+
+  .bx-stack span:first-child {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  /* 좁은 화면: 행동 순서는 위쪽 가로줄, 아군 정보판은 이름·체력만 엇갈려 놓는다 */
+  .bx-line-slot {
+    top: 50px;
+    left: 8px;
+    right: 8px;
+  }
+
+  .bx-line {
+    display: flex;
+    gap: 4px;
+  }
+
+  .bx .ally .bx-foot {
+    width: 70px;
+    max-width: 70px;
+    padding: 2px 4px 3px;
+    gap: 2px;
+  }
+
+  .bx .ally .bx-foot .bx-stack,
+  .bx .ally .bx-foot .status-row,
+  .bx .ally .bx-foot .el-badge {
+    display: none;
+  }
+
+  .bx .ally.bx-i1 .bx-foot {
+    translate: -50% 40px;
+  }
+
+  .bx-foot .hp-text {
+    font-size: 9.5px;
+  }
+}
+
+@media (max-width: 760px) {
+  .bx .enemy .bx-foot {
+    width: 104px;
+    max-width: 104px;
+    padding: 2px 4px 3px;
+  }
+
+  .bx .enemy.bx-i1 .bx-foot {
+    translate: -50% 46px;
+  }
+
+  .bx .enemy .bx-foot .plate-target {
+    display: none;
+  }
+}

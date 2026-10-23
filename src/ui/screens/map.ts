@@ -41,9 +41,9 @@ export function mapScreen(app: App): HTMLElement {
   const floor = FLOORS[run.floor];
   const mods = run.mods;
   const modLines = [
-    mods.stardustPerTurn !== DEFAULT_MODS.stardustPerTurn && `턴당 성진 ${mods.stardustPerTurn}`,
-    mods.startStardust !== DEFAULT_MODS.startStardust && `시작 성진 ${mods.startStardust}`,
-    mods.fullChainBonus !== DEFAULT_MODS.fullChainBonus && `성좌 완성 피해 ×${mods.fullChainBonus}`,
+    mods.maxSp !== DEFAULT_MODS.maxSp && `성진 최대 ${mods.maxSp}`,
+    mods.startSp !== DEFAULT_MODS.startSp && `시작 성진 ${mods.startSp}`,
+    mods.startEnergy !== DEFAULT_MODS.startEnergy && `시작 에너지 ${Math.round(mods.startEnergy * 100)}%`,
   ].filter(Boolean) as string[];
 
   return h(
@@ -68,7 +68,7 @@ export function mapScreen(app: App): HTMLElement {
           { class: `next-floor panel kind-${floor.kind}` },
           h('p', { class: 'eyebrow' }, `${run.floor + 1}층 / ${FLOORS.length}층`),
           h('h2', {}, floor.name),
-          h('p', { class: 'muted' }, floor.kind === 'boss' ? '별을 삼키는 자가 기다립니다. 체인 3 미만의 공격은 절반만 통합니다.' : floor.kind === 'elite' ? '강한 적이 기다립니다. 충분히 대비하세요.' : '이곳을 떠도는 적들을 물리치세요.'),
+          h('p', { class: 'muted' }, floor.kind === 'boss' ? '별을 삼키는 자가 기다립니다. 격파되기 전에는 받는 피해가 줄어드니, 약점(태양·혜성·공허)을 찔러 강인도를 깎으세요.' : floor.kind === 'elite' ? '강한 적이 기다립니다. 충분히 대비하세요.' : '이곳을 떠도는 적들을 물리치세요.'),
           button('전투 시작', () => {
             startBattle(run);
             app.save();
