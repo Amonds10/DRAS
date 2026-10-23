@@ -62,6 +62,7 @@ export function guessTier(renderer: THREE.WebGLRenderer): Tier {
   const mem = nav.deviceMemory ?? 8;
   const cores = nav.hardwareConcurrency ?? 8;
   if (mem <= 3 || cores <= 3) return 'low';
-  if (mobile && (mem <= 4 || cores <= 6)) return 'low';
+  // 휴대폰 GPU는 반사·그림자·다중 표본을 감당하지 못하고 그래픽이 통째로 꺼지는 일이 있어 기본은 낮음
+  if (mobile) return 'low';
   return 'high';
 }

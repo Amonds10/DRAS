@@ -319,17 +319,25 @@ function buildLamps(ctx: BuildCtx, signs: Sign[]): number {
 /** 젖은 아스팔트: 실시간 반사 위에 웅덩이, 빗방울 파문, 운하, 무대 표식, 동적 조명 */
 function buildGround(ctx: BuildCtx): void {
   const p = ctx.p;
-  const size = ctx.renderer.getDrawingBufferSize(new THREE.Vector2());
-  const mirror = new Reflector(ctx.track(new THREE.PlaneGeometry(320, 320)), {
-    textureWidth: Math.max(256, Math.round(size.x * ctx.q.reflect)),
-    textureHeight: Math.max(256, Math.round(size.y * ctx.q.reflect)),
-    color: 0x8a8f99,
-    clipBias: 0.003,
-  });
-  mirror.rotation.x = -Math.PI / 2;
-  mirror.position.y = -0.002;
-  ctx.track({ dispose: () => mirror.dispose() });
-  ctx.group.add(mirror);
+  // 실시간 반사는 장면을 한 번 더 그리므로 높음 등급에서만. 낮음(모바일)에서는 어두운 젖은 바닥 한 장으로 대신한다.
+  if (ctx.q.tier === 'high') {
+    const size = ctx.renderer.getDrawingBufferSize(new THREE.Vector2());
+    const mirror = new Reflector(ctx.track(new THREE.PlaneGeometry(320, 320)), {
+      textureWidth: Math.max(256, Math.round(size.x * ctx.q.reflect)),
+      textureHeight: Math.max(256, Math.round(size.y * ctx.q.reflect)),
+      color: 0x8a8f99,
+      clipBias: 0.003,
+    });
+    mirror.rotation.x = -Math.PI / 2;
+    mirror.position.y = -0.002;
+    ctx.track({ dispose: () => mirror.dispose() });
+    ctx.group.add(mirror);
+  } else {
+    const base = new THREE.Mesh(ctx.track(new THREE.PlaneGeometry(320, 320)), ctx.track(new THREE.MeshBasicMaterial({ color: 0x0c0f16 })));
+    base.rotation.x = -Math.PI / 2;
+    base.position.y = -0.002;
+    ctx.group.add(base);
+  }
 
   const mat = ctx.track(
     new THREE.ShaderMaterial({

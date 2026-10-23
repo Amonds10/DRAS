@@ -348,6 +348,12 @@ export class Stage {
   private camFraming: Framing | null = null;
   private bloomBase = 0.5;
   private toonFx: ToonFx;
+  /** 그래픽이 끊겼다 돌아오면 다시 세우기 위해 기억하는 배우 목록 */
+  private lastSpecs: ActorSpec[] = [];
+  /** 안전 모드: 후처리 없이 장면만 바로 그린다(후처리가 이 기기에서 실패할 때) */
+  private safe = false;
+  private blackStrikes = 0;
+  private nextCheck = 3;
   private backdrop: Backdrop;
   private kickRoll = 0;
   private kickRollV = 0;
@@ -370,6 +376,15 @@ export class Stage {
       renderer = null;
     }
     this.ok = !!renderer;
+    // 휴대폰에서 메모리가 모자라면 브라우저가 WebGL을 끊는다. 끊김을 막고, 돌아오면 낮은 등급으로 다시 세운다.
+    this.canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      console.warn('[stage] WebGL context lost');
+    });
+    this.canvas.addEventListener('webglcontextrestored', () => {
+      console.warn('[stage] WebGL context restored');
+      this.recover();
+    });
     if (renderer) {
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.05;
@@ -416,6 +431,42 @@ export class Stage {
       if (caster) caster.castShadow = q.shadows;
     }
     this.resize();
+  }
+
+  /** 그래픽이 끊겼다 돌아왔을 때: 낮은 등급으로 후처리·장면·배우를 다시 만든다 */
+  private recover(): void {
+    if (!this.renderer) return;
+    this.quality = qualityFor('low');
+    this.applyRendererQuality();
+    if (this.presetId) this.setScene(this.presetId, true);
+    if (this.lastSpecs.length) this.setActors(this.lastSpecs);
+  }
+
+  /**
+   * 검은 화면 감시: 몇 초마다 화면 몇 점을 읽어 완전히 검으면(하늘도 안 그려짐) 후처리가 이 기기에서
+   * 실패한 것으로 보고, 낮은 등급과 안전 모드(후처리 없이 바로 그리기)로 바꾼다.
+   */
+  private watchBlack(): void {
+    const r = this.renderer;
+    if (!r || this.safe) return;
+    const gl = r.getContext();
+    if (gl.isContextLost()) return;
+    // 셰이더 컴파일에 실패한 프로그램이 있으면 바로 안전 모드
+    const failed = (r.info.programs ?? []).some((pr) => (pr as unknown as { diagnostics?: { runnable: boolean } }).diagnostics?.runnable === false);
+    const w = gl.drawingBufferWidth;
+    const h = gl.drawingBufferHeight;
+    const px = new Uint8Array(4);
+    let lit = 0;
+    for (const [fx, fy] of [[0.5, 0.75], [0.2, 0.6], [0.8, 0.4], [0.5, 0.3]]) {
+      gl.readPixels(Math.floor(w * fx), Math.floor(h * fy), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      if (px[0] + px[1] + px[2] > 0) lit++;
+    }
+    this.blackStrikes = lit === 0 ? this.blackStrikes + 1 : 0;
+    if (failed || this.blackStrikes >= 2) {
+      console.warn('[stage] black frame or failed shader, switching to safe mode');
+      this.safe = true;
+      if (this.quality.tier !== 'low') this.setTier('low');
+    }
   }
 
   /** 그래픽 설정: 자동/높음/낮음 */
@@ -584,6 +635,7 @@ export class Stage {
   }
 
   setActors(specs: ActorSpec[]): void {
+    this.lastSpecs = specs;
     this.clearActors();
     const allies = specs.filter((s) => s.side === 'ally');
     const enemies = specs.filter((s) => s.side === 'enemy');
@@ -1137,7 +1189,14 @@ export class Stage {
       this.grade!.uniforms.uTime.value = this.t;
       this.grade!.uniforms.uFlash.value = this.screenFlash;
       this.grade!.uniforms.uImpact.value = this.impact > 0.5 ? 1 : 0;
-      this.composer.render(dt);
+      if (this.safe) {
+        this.renderer!.setRenderTarget(null);
+        this.renderer!.render(this.scene, this.camera);
+      } else this.composer.render(dt);
+      if (this.rt > this.nextCheck) {
+        this.nextCheck = this.rt + 3;
+        this.watchBlack();
+      }
     }
     for (const cb of this.frameCbs) cb();
   }
