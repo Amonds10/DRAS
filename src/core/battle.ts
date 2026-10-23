@@ -15,7 +15,9 @@ import type {
   Element,
   Enemy,
   Intent,
+  Keyword,
   PlannedCast,
+  Stack,
   Status,
   StatusId,
 } from './types';
@@ -28,13 +30,20 @@ const EXPOSE_FACTOR = 1.3;
 const STAR_SHIELD_FACTOR = 0.5;
 const STAR_SHIELD_CHAIN = 3;
 const EXECUTE_THRESHOLD = 0.35;
-const DEBUFFS: StatusId[] = ['stun', 'weaken', 'burn', 'expose', 'doom', 'starmark'];
-export const MAX_KINDLE = 6;
-export const MAX_MARKS = 10;
+export const KEYWORDS: Keyword[] = ['burn', 'rupture', 'erosion', 'tremor', 'moonshade'];
+const DEBUFFS: StatusId[] = ['stun', 'weaken', 'expose', 'doom', ...KEYWORDS];
+/** 각인 위력·횟수 상한 */
+export const KEYWORD_MAX_VALUE = 20;
+export const KEYWORD_MAX_TURNS = 10;
+/** 술사 고유 중첩 상한 */
+export const STACK_MAX: Record<Stack, number> = { solarCore: 6, aim: 6, tide: 10, hunger: 10, fortitude: 8, wave: 3 };
 export const MAX_ATTUNE = 10;
-export const MAX_BURN = 30;
-/** 별흔 1중첩당 타격마다 더해지는 고정 피해(방어 무시) */
-export const MARK_DAMAGE = 0.4;
+/** 조준 1당 벨라 피해, 허기 1당 녹스 피해, 공명파동 1당 다음 시전 */
+const AIM_STEP = 0.06;
+const HUNGER_STEP = 0.05;
+const WAVE_STEP = 0.2;
+/** 진동 폭발이 기절을 거는 위력 */
+export const TREMOR_STUN = 8;
 const ATTUNE_STEP = 0.12;
 const RELEASE_STEP = 0.25;
 
@@ -168,23 +177,72 @@ export function validatePlan(state: BattleState, plan: PlannedCast[]): string | 
   return null;
 }
 
+const isKeyword = (id: StatusId): id is Keyword => (KEYWORDS as StatusId[]).includes(id);
+const isStack = (id: StatusId): id is Stack => id in STACK_MAX;
+
 function addStatus(u: Unit, id: StatusId, turns: number, value?: number): void {
   const existing = u.statuses.find((s) => s.id === id);
+  if (isKeyword(id)) {
+    // 각인: 위력과 횟수가 모두 더해진다
+    if (existing) {
+      existing.value = Math.min(KEYWORD_MAX_VALUE, (existing.value ?? 0) + (value ?? 0));
+      existing.turns = Math.min(KEYWORD_MAX_TURNS, existing.turns + turns);
+    } else u.statuses.push({ id, turns: Math.min(KEYWORD_MAX_TURNS, turns), value: Math.min(KEYWORD_MAX_VALUE, value ?? 0) });
+    return;
+  }
+  if (isStack(id)) {
+    if (existing) existing.value = Math.min(STACK_MAX[id], (existing.value ?? 0) + (value ?? 0));
+    else u.statuses.push({ id, turns: 99, value: Math.min(STACK_MAX[id], value ?? 0) });
+    return;
+  }
   if (existing) {
     existing.turns = Math.max(existing.turns, turns);
     if (value !== undefined) {
-      // 적의 영구 강화·지연 폭격·연소·예열·별흔은 누적, 나머지는 큰 값을 남긴다.
-      const stacks = (id === 'atkUp' && turns >= 99) || id === 'doom' || id === 'burn' || id === 'kindle' || id === 'starmark';
+      // 적의 영구 강화·지연 폭격은 누적, 나머지는 큰 값을 남긴다.
+      const stacks = (id === 'atkUp' && turns >= 99) || id === 'doom';
       existing.value = stacks ? (existing.value ?? 0) + value : Math.max(existing.value ?? 0, value);
-      if (id === 'burn') existing.value = Math.min(MAX_BURN, existing.value);
-      if (id === 'kindle') existing.value = Math.min(MAX_KINDLE, existing.value);
-      if (id === 'starmark') existing.value = Math.min(MAX_MARKS, existing.value);
     }
   } else {
     const s: Status = { id, turns };
     if (value !== undefined) s.value = value;
     u.statuses.push(s);
   }
+}
+
+function keyword(u: Unit, id: Keyword): Status | undefined {
+  return u.statuses.find((s) => s.id === id && s.turns > 0 && (s.value ?? 0) > 0);
+}
+
+/** 각인 횟수를 하나 줄이고, 다 쓰면 지운다 */
+function spendKeyword(u: Unit, id: Keyword): void {
+  const s = u.statuses.find((x) => x.id === id);
+  if (!s) return;
+  s.turns--;
+  if (s.turns <= 0) u.statuses = u.statuses.filter((x) => x !== s);
+}
+
+/** 술사에게 중첩을 쌓고 알린다 */
+function gainStack(ally: Ally, stack: Stack, amount: number, events: BattleEvent[]): void {
+  if (!isAlive(ally) || amount <= 0) return;
+  const before = statusStacks(ally, stack);
+  addStatus(ally, stack, 99, amount);
+  const now = statusStacks(ally, stack);
+  if (now !== before) events.push({ type: 'status', targetUid: ally.uid, status: stack, turns: 99, stacks: now });
+}
+
+/** 적에게 각인을 건다. 네비아의 패시브: 네비아가 거는 각인은 위력 +1. */
+function inflict(target: Enemy, kw: Keyword, value: number, turns: number, caster: Ally | null, events: BattleEvent[]): void {
+  if (!isAlive(target)) return;
+  const v = value + (caster?.defId === 'nebia' ? 1 : 0);
+  addStatus(target, kw, turns, v);
+  const s = keyword(target, kw);
+  events.push({ type: 'status', targetUid: target.uid, status: kw, turns: s?.turns ?? turns, stacks: s?.value ?? v });
+}
+
+/** 녹스의 패시브: 적이 화상·잠식 피해를 받을 때마다 허기 +1 */
+function feedHunger(state: BattleState, events: BattleEvent[]): void {
+  const nox = state.allies.find((a) => a.defId === 'nox' && isAlive(a));
+  if (nox) gainStack(nox, 'hunger', 1, events);
 }
 
 function dealDamage(state: BattleState, target: Unit, amount: number, source: DamageSource, events: BattleEvent[]): number {
@@ -219,21 +277,38 @@ export function statusStacks(u: Unit, id: StatusId): number {
   return u.statuses.find((s) => s.id === id)?.value ?? 0;
 }
 
+/** 대상 각인을 집어삼킬 때 더해지는 위력: 각 각인의 (위력 × 횟수) × per */
+function devourPower(target: Enemy, eff: DamageEffect): number {
+  if (!eff.devour) return 0;
+  return eff.devour.keywords.reduce((sum, k) => {
+    const st = keyword(target, k);
+    return sum + (st ? (st.value ?? 0) * st.turns * eff.devour!.per : 0);
+  }, 0);
+}
+
+function hasAnyKeyword(u: Unit): boolean {
+  return KEYWORDS.some((k) => !!keyword(u, k));
+}
+
 function allyHitAmount(state: BattleState, ctx: CastContext, eff: DamageEffect, target: Enemy): number {
-  let raw = ((eff.power + (ctx.extraPower ?? 0) + (eff.consumeMarks ? eff.consumeMarks * statusStacks(target, 'starmark') : 0)) * effectiveAtk(ctx.caster)) / 10;
+  let raw = ((eff.power + (ctx.extraPower ?? 0) + devourPower(target, eff)) * effectiveAtk(ctx.caster)) / 10;
   raw += eff.fromShield ? ctx.caster.shield * eff.fromShield : 0;
   raw *= ctx.mult * ctx.damageMult * (ctx.extraMult ?? 1);
   if (eff.attune) raw *= 1 + state.attune[eff.attune] * ATTUNE_STEP;
   if (eff.scaleWithChain) raw *= ctx.chain;
   if (eff.execute && target.hp / target.maxHp <= EXECUTE_THRESHOLD) raw *= eff.execute;
   if (eff.vsDebuffed && DEBUFFS.some((d) => hasStatus(target, d))) raw *= eff.vsDebuffed;
+  for (const b of eff.bonusVs ?? []) if (b.keyword === 'any' ? hasAnyKeyword(target) : keyword(target, b.keyword)) raw *= b.mult;
+  // 패시브: 벨라는 조준, 녹스는 허기만큼 강해진다
+  if (ctx.caster.defId === 'vela') raw *= 1 + statusStacks(ctx.caster, 'aim') * AIM_STEP;
+  if (ctx.caster.defId === 'nox') raw *= 1 + statusStacks(ctx.caster, 'hunger') * HUNGER_STEP;
   if (!ctx.pierce && !eff.pierce) raw *= defFactor(target.def);
   if (hasStatus(target, 'expose')) raw *= EXPOSE_FACTOR;
-  // 성좌 방패: 체인 3 미만이면 절반. 예열·공명을 모아 쏘는 일격(배율 2배 이상)은 방패를 뚫는다.
+  // 성좌 방패: 체인 3 미만이면 절반. 중첩을 모아 쏘는 일격(배율 2배 이상)은 방패를 뚫는다.
   const charged = (ctx.extraMult ?? 1) >= 2;
   if (enemyById(target.defId).traits?.includes('starShield') && ctx.chain < STAR_SHIELD_CHAIN && !charged) raw *= STAR_SHIELD_FACTOR;
-  // 별흔은 마지막에 고정 피해로 더한다(방어와 성좌 방패를 무시)
-  raw += statusStacks(target, 'starmark') * MARK_DAMAGE;
+  // 균열: 맞을 때마다 위력만큼 고정 피해(방어·방패 무시)
+  raw += keyword(target, 'rupture')?.value ?? 0;
   return Math.max(1, Math.round(raw));
 }
 
@@ -245,27 +320,44 @@ function allyTargets(state: BattleState, caster: Ally, target: 'lowestAlly' | 'a
   return lowest ? [lowest] : [];
 }
 
-function healAlly(a: Ally, amount: number, events: BattleEvent[]): void {
+function healAlly(state: BattleState, a: Ally, amount: number, events: BattleEvent[]): void {
+  if (!isAlive(a)) return;
   const healed = Math.min(a.maxHp - a.hp, amount);
   a.hp += healed;
   events.push({ type: 'heal', targetUid: a.uid, amount: healed, hpAfter: a.hp });
+  // 루네의 패시브: 아군이 회복할 때마다 만조 +1
+  const lune = state.allies.find((x) => x.defId === 'lune' && isAlive(x));
+  if (lune && healed > 0) gainStack(lune, 'tide', 1, events);
+}
+
+function enemyTargets(state: BattleState, target: 'focus' | 'allEnemies'): Enemy[] {
+  return target === 'focus' ? [getFocus(state)].filter((x): x is Enemy => !!x) : state.enemies.filter(isAlive);
+}
+
+/** 효과 조건: 집중 대상의 각인, 시전자의 중첩, 체인 */
+function condMet(state: BattleState, ctx: CastContext, c: NonNullable<Effect['when']>): boolean {
+  const focus = getFocus(state);
+  if (c.targetHas && !(focus && (c.targetHas === 'any' ? hasAnyKeyword(focus) : keyword(focus, c.targetHas)))) return false;
+  if (c.casterHas && statusStacks(ctx.caster, c.casterHas) < (c.min ?? 1)) return false;
+  if (c.chain && ctx.chain < c.chain) return false;
+  return true;
 }
 
 /** 효과를 적용한다. 다음 마법에 넘길 배율 보너스(boost)를 돌려준다. */
 function applyEffects(state: BattleState, effects: Effect[], ctx: CastContext, rng: Rng, events: BattleEvent[]): number {
   let boost = 0;
   for (const eff of effects) {
+    if (eff.when && !condMet(state, ctx, eff.when)) continue;
     switch (eff.kind) {
       case 'damage': {
-        const hits = eff.hits ?? 1;
-        let dealt = 0;
         const hctx: CastContext = { ...ctx };
-        // 예열 소모: 시전자의 예열 중첩만큼 배율을 올리고 비운다
-        if (eff.kindleMult) {
-          const k = statusStacks(ctx.caster, 'kindle');
-          hctx.extraMult = (hctx.extraMult ?? 1) * (1 + k * eff.kindleMult);
-          ctx.caster.statuses = ctx.caster.statuses.filter((s) => s.id !== 'kindle');
-          if (k > 0) events.push({ type: 'unleash', allyUid: ctx.caster.uid, stacks: k, mult: Math.round((1 + k * eff.kindleMult) * 100) / 100 });
+        // 자기 중첩 소모: 1중첩당 배율을 올리고 비운다
+        if (eff.consume) {
+          const k = statusStacks(ctx.caster, eff.consume.stack);
+          const mult = 1 + k * eff.consume.per;
+          hctx.extraMult = (hctx.extraMult ?? 1) * mult;
+          ctx.caster.statuses = ctx.caster.statuses.filter((s) => s.id !== eff.consume!.stack);
+          if (k > 0) events.push({ type: 'unleash', allyUid: ctx.caster.uid, stack: eff.consume.stack, stacks: k, mult: Math.round(mult * 100) / 100 });
         }
         // 공명 해방: 그 성속 각인을 모두 소모
         if (eff.releaseAttune) {
@@ -281,6 +373,10 @@ function applyEffects(state: BattleState, effects: Effect[], ctx: CastContext, r
           hctx.extraPower = spent * eff.fromStardust;
           if (spent) events.push({ type: 'stardust', amount: -spent });
         }
+        const focus = getFocus(state);
+        const extra = eff.hitsFrom && focus ? Math.min(eff.hitsFrom.max, keyword(focus, eff.hitsFrom.keyword)?.turns ?? 0) : 0;
+        const hits = (eff.hits ?? 1) + extra;
+        let dealt = 0;
         for (let i = 0; i < hits; i++) {
           let targets: Enemy[];
           if (eff.target === 'focus') targets = [getFocus(state)].filter((x): x is Enemy => !!x);
@@ -290,25 +386,39 @@ function applyEffects(state: BattleState, effects: Effect[], ctx: CastContext, r
             targets = living.length ? [rng.pick(living)] : [];
           }
           for (const t of targets) {
+            const had = { burn: !!keyword(t, 'burn'), rupture: !!keyword(t, 'rupture'), moon: keyword(t, 'moonshade') };
             dealt += dealDamage(state, t, allyHitAmount(state, hctx, eff, t), 'ally', events);
-            if (eff.consumeMarks) t.statuses = t.statuses.filter((s) => s.id !== 'starmark');
-            if (eff.mark && isAlive(t)) {
-              addStatus(t, 'starmark', 99, eff.mark);
-              events.push({ type: 'status', targetUid: t.uid, status: 'starmark', turns: 99 });
+            if (had.rupture) spendKeyword(t, 'rupture');
+            // 집어삼킨 각인은 첫 타에 사라진다
+            if (eff.devour) t.statuses = t.statuses.filter((s) => !eff.devour!.keywords.includes(s.id as Keyword));
+            // 월영: 때린 술사가 위력만큼 회복
+            if (had.moon && isAlive(ctx.caster)) {
+              healAlly(state, ctx.caster, had.moon.value ?? 0, events);
+              spendKeyword(t, 'moonshade');
+            }
+            // 패시브: 솔레아는 화상 걸린 적을, 벨라는 균열 걸린 적을 때리면 고유 중첩이 쌓인다
+            if (ctx.caster.defId === 'solea' && had.burn) gainStack(ctx.caster, 'solarCore', 1, events);
+            if (ctx.caster.defId === 'vela' && had.rupture) gainStack(ctx.caster, 'aim', 1, events);
+            for (const o of eff.onHit ?? []) {
+              if (o.ifHas && !keyword(t, o.ifHas)) continue;
+              if ('inflict' in o) inflict(t, o.inflict, o.value, o.turns, ctx.caster, events);
+              else gainStack(ctx.caster, o.gain, o.amount, events);
             }
           }
         }
-        if (eff.lifesteal && dealt > 0 && isAlive(ctx.caster)) healAlly(ctx.caster, Math.round(dealt * eff.lifesteal), events);
+        if (eff.lifesteal && dealt > 0 && isAlive(ctx.caster)) healAlly(state, ctx.caster, Math.round(dealt * eff.lifesteal), events);
         break;
       }
       case 'heal':
-        for (const a of allyTargets(state, ctx.caster, eff.target)) healAlly(a, Math.round(eff.power * ctx.mult), events);
+        for (const a of allyTargets(state, ctx.caster, eff.target)) healAlly(state, a, Math.round(eff.power * ctx.mult * (ctx.extraMult ?? 1)), events);
         break;
       case 'shield':
         for (const a of allyTargets(state, ctx.caster, eff.target)) {
-          const amount = Math.round(eff.power * ctx.mult);
+          const amount = Math.round(eff.power * ctx.mult * (ctx.extraMult ?? 1));
           a.shield += amount;
           events.push({ type: 'shield', targetUid: a.uid, amount, shieldAfter: a.shield });
+          // 아스트라의 패시브: 보호막을 얻을 때마다 불굴 +1
+          if (a.defId === 'astra') gainStack(a, 'fortitude', 1, events);
         }
         break;
       case 'enemyStatus': {
@@ -345,20 +455,45 @@ function applyEffects(state: BattleState, effects: Effect[], ctx: CastContext, r
       case 'boost':
         boost += eff.amount;
         break;
-      case 'kindle':
-        for (const a of allyTargets(state, ctx.caster, eff.target)) {
-          addStatus(a, 'kindle', 99, eff.amount);
-          events.push({ type: 'status', targetUid: a.uid, status: 'kindle', turns: 99, stacks: statusStacks(a, 'kindle') });
+      case 'gain':
+        for (const a of allyTargets(state, ctx.caster, eff.target)) gainStack(a, eff.stack, eff.amount, events);
+        break;
+      case 'inflict':
+        for (const t of enemyTargets(state, eff.target)) inflict(t, eff.keyword, eff.value, eff.turns, ctx.caster, events);
+        break;
+      case 'amplify':
+        for (const t of enemyTargets(state, eff.target)) {
+          for (const st of t.statuses) {
+            if (!isKeyword(st.id)) continue;
+            st.value = Math.min(KEYWORD_MAX_VALUE, (st.value ?? 0) + eff.value);
+            st.turns = Math.min(KEYWORD_MAX_TURNS, st.turns + eff.turns);
+            events.push({ type: 'status', targetUid: t.uid, status: st.id, turns: st.turns, stacks: st.value });
+          }
         }
         break;
-      case 'mark': {
-        const targets = eff.target === 'focus' ? [getFocus(state)].filter((x): x is Enemy => !!x) : state.enemies.filter(isAlive);
-        for (const t of targets) {
-          addStatus(t, 'starmark', 99, eff.amount);
-          events.push({ type: 'status', targetUid: t.uid, status: 'starmark', turns: 99 });
+      case 'burst':
+        for (const t of enemyTargets(state, eff.target)) {
+          const st = keyword(t, eff.keyword);
+          if (!st) continue;
+          const v = st.value ?? 0;
+          t.statuses = t.statuses.filter((x) => x !== st);
+          const dmg = Math.round((eff.keyword === 'tremor' ? v : v * st.turns) * eff.mult);
+          dealDamage(state, t, Math.max(1, dmg), 'burst', events);
+          if (eff.keyword === 'burn' || eff.keyword === 'erosion') feedHunger(state, events);
+          if (eff.keyword === 'tremor' && v >= TREMOR_STUN && isAlive(t)) {
+            addStatus(t, 'stun', 1);
+            events.push({ type: 'status', targetUid: t.uid, status: 'stun', turns: 1 });
+          }
         }
         break;
-      }
+      case 'convert':
+        for (const t of enemyTargets(state, eff.target)) {
+          const st = keyword(t, eff.from);
+          if (!st) continue;
+          t.statuses = t.statuses.filter((x) => x !== st);
+          inflict(t, eff.to, Math.round((st.value ?? 0) * eff.mult), st.turns, null, events);
+        }
+        break;
       case 'attune':
         state.attune[eff.element] = Math.min(MAX_ATTUNE, state.attune[eff.element] + eff.amount);
         events.push({ type: 'attune', element: eff.element, total: state.attune[eff.element] });
@@ -413,12 +548,16 @@ function runPlayerPhase(state: BattleState, plan: PlannedCast[], rng: Rng, event
     boost = 0;
     events.push({ type: 'cast', allyUid: ally.uid, spellId: spell.id, linked: step.linked, chain: step.chain, mult, outElement: step.outElement, sealed: step.sealed });
     const reaction = step.reactionId ? reactionById(step.reactionId) : null;
+    // 공명파동: 쌓인 만큼 이번 시전을 강화하고 사라진다
+    const wave = statusStacks(ally, 'wave');
+    if (wave) ally.statuses = ally.statuses.filter((s) => s.id !== 'wave');
     const ctx: CastContext = {
       caster: ally,
       mult,
       chain: step.chain,
       damageMult: reaction?.damageMult ?? 1,
       pierce: reaction?.pierce ?? false,
+      extraMult: wave ? 1 + wave * WAVE_STEP : undefined,
     };
     if (reaction) events.push({ type: 'reaction', reactionId: reaction.id, allyUid: ally.uid });
     boost += applyEffects(state, spell.effects, ctx, rng, events);
@@ -455,8 +594,11 @@ export function enemyHitAmount(enemy: Enemy, power: number, target: Ally): numbe
 
 function hitAlly(state: BattleState, enemy: Enemy, ally: Ally, power: number, events: BattleEvent[]): void {
   dealDamage(state, ally, enemyHitAmount(enemy, power, ally), 'enemy', events);
+  // 아스트라의 패시브: 맞을 때마다 불굴 +1, 반격은 불굴 1당 +2
+  if (ally.defId === 'astra') gainStack(ally, 'fortitude', 1, events);
   const counter = ally.statuses.find((s) => s.id === 'counter');
-  if (counter?.value && isAlive(ally) && isAlive(enemy)) dealDamage(state, enemy, counter.value, 'counter', events);
+  const bonus = ally.defId === 'astra' ? statusStacks(ally, 'fortitude') * 2 : 0;
+  if (counter?.value && isAlive(ally) && isAlive(enemy)) dealDamage(state, enemy, counter.value + bonus, 'counter', events);
 }
 
 function runEnemyPhase(state: BattleState, rng: Rng, events: BattleEvent[]): void {
@@ -471,6 +613,17 @@ function runEnemyPhase(state: BattleState, rng: Rng, events: BattleEvent[]): voi
       continue;
     }
     events.push({ type: 'enemyAct', enemyUid: e.uid, intent });
+    // 잠식: 움직일 때마다 위력만큼 피해를 받고 횟수가 준다
+    const ero = keyword(e, 'erosion');
+    if (ero) {
+      dealDamage(state, e, ero.value ?? 0, 'erosion', events);
+      spendKeyword(e, 'erosion');
+      feedHunger(state, events);
+      if (!isAlive(e)) {
+        checkOutcome(state);
+        continue;
+      }
+    }
     const living = state.allies.filter(isAlive);
     switch (intent.kind) {
       case 'attack': {
@@ -511,11 +664,16 @@ function endRound(state: BattleState, events: BattleEvent[]): void {
   for (const e of state.enemies) {
     const doom = e.statuses.find((s) => s.id === 'doom');
     if (doom && isAlive(e)) dealDamage(state, e, doom.value ?? 0, 'doom', events);
-    const burn = e.statuses.find((s) => s.id === 'burn');
-    if (burn && isAlive(e)) dealDamage(state, e, burn.value ?? 0, 'burn', events);
+    const burn = keyword(e, 'burn');
+    if (burn && isAlive(e)) {
+      dealDamage(state, e, burn.value ?? 0, 'burn', events);
+      feedHunger(state, events);
+    }
   }
+  // 균열·잠식·월영은 발동할 때만 횟수가 줄고, 나머지는 라운드마다 준다
+  const countOnly: StatusId[] = ['rupture', 'erosion', 'moonshade'];
   for (const u of [...state.allies, ...state.enemies]) {
-    for (const s of u.statuses) s.turns--;
+    for (const s of u.statuses) if (!countOnly.includes(s.id)) s.turns--;
     u.statuses = u.statuses.filter((s) => s.turns > 0);
   }
   for (const a of state.allies) a.shield = 0;

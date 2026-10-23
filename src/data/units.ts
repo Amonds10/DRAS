@@ -14,6 +14,8 @@ const list: UnitDef[] = [
     def: 5,
     spells: ['dawn_thrust', 'solar_cleave', 'flare_rush', 'noon_verdict', 'sun_oath'],
     pool: ['dawn_thrust', 'solar_cleave', 'flare_rush', 'noon_verdict', 'sun_oath', 'sun_kindle', 'stellar_core', 'supernova_lance', 'corona_rite'],
+    passive: { name: '태양심장', desc: '화상 걸린 적을 때릴 때마다 태양핵 +1(최대 6). 태양핵은 초신성 창이 모두 태운다.' },
+    stack: { id: 'solarCore', max: 6 },
   },
   {
     id: 'lune',
@@ -27,6 +29,8 @@ const list: UnitDef[] = [
     def: 4,
     spells: ['moon_veil', 'crescent_edge', 'tidal_song', 'fullmoon_ward', 'moon_brand'],
     pool: ['moon_veil', 'crescent_edge', 'tidal_song', 'fullmoon_ward', 'moon_brand', 'moon_halo_mark', 'lunar_attune', 'eclipse_veil', 'crescent_finale'],
+    passive: { name: '밀물', desc: '아군이 회복할 때마다 만조 +1(최대 10). 만조는 그믐의 종장이 모두 푼다.' },
+    stack: { id: 'tide', max: 10 },
   },
   {
     id: 'nebia',
@@ -40,6 +44,7 @@ const list: UnitDef[] = [
     def: 4,
     spells: ['interstellar_echo', 'primal_light', 'nebula_mist', 'amplify', 'dust_storm'],
     pool: ['interstellar_echo', 'primal_light', 'nebula_mist', 'amplify', 'dust_storm', 'star_tithe', 'dust_brand', 'overflow', 'sunwell'],
+    passive: { name: '증폭자', desc: '네비아가 거는 각인은 위력 +1. 공명파동으로 아군의 다음 시전을 강화한다.' },
   },
   {
     id: 'vela',
@@ -53,6 +58,8 @@ const list: UnitDef[] = [
     def: 3,
     spells: ['meteor_snipe', 'tail_volley', 'orbital_strike', 'piercing_shot', 'scatter_meteor'],
     pool: ['meteor_snipe', 'tail_volley', 'orbital_strike', 'piercing_shot', 'scatter_meteor', 'steady_aim', 'gatling_comet', 'final_star', 'sunfire_round'],
+    passive: { name: '사냥꾼의 눈', desc: '균열 걸린 적을 맞힐 때마다 조준 +1(최대 6). 조준 1당 벨라의 피해 +6%.' },
+    stack: { id: 'aim', max: 6 },
   },
   {
     id: 'nox',
@@ -66,6 +73,8 @@ const list: UnitDef[] = [
     def: 4,
     spells: ['void_touch', 'event_horizon', 'siphon', 'retrograde', 'collapse'],
     pool: ['void_touch', 'event_horizon', 'siphon', 'retrograde', 'collapse', 'rot_seed', 'abyss_feast', 'doom_echo', 'void_resonance'],
+    passive: { name: '포식', desc: '적이 화상·잠식 피해를 받을 때마다 허기 +1(최대 10). 허기 1당 녹스의 피해 +5%.' },
+    stack: { id: 'hunger', max: 10 },
   },
   {
     id: 'astra',
@@ -79,6 +88,8 @@ const list: UnitDef[] = [
     def: 7,
     spells: ['galaxy_ward', 'constellation_echo', 'taunt_star', 'counter_stance', 'star_judgement'],
     pool: ['galaxy_ward', 'constellation_echo', 'taunt_star', 'counter_stance', 'star_judgement', 'bulwark_bash', 'star_aegis', 'guiding_star', 'constellation_mark'],
+    passive: { name: '불굴', desc: '보호막을 얻거나 공격받을 때마다 불굴 +1(최대 8). 반격 피해 +불굴×2.' },
+    stack: { id: 'fortitude', max: 8 },
   },
 ];
 

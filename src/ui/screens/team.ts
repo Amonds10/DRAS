@@ -100,6 +100,7 @@ function unitDetail(unit: UnitDef, order: number, full: boolean, onToggle: () =>
         h('h2', {}, unit.name),
         h('p', { class: 'detail-sub' }, elBadge(unit.element, 'sm'), h('span', {}, `${ROLE_NAMES[unit.role]}`)),
         h('p', { class: 'unit-concept' }, unit.concept),
+        h('p', { class: 'unit-passive' }, h('b', {}, `패시브 · ${unit.passive.name}`), h('span', {}, unit.passive.desc)),
         h('dl', { class: 'detail-stats' }, statBar('HP', unit.maxHp, 100), statBar('공격', unit.atk, 16), statBar('방어', unit.def, 8)),
         button(selected ? `편성에서 빼기 (${order + 1}번)` : full ? '팀이 가득 찼습니다' : '편성에 넣기', onToggle, { variant: selected ? 'ghost' : 'primary', disabled: !selected && full, class: 'detail-toggle' }),
       ),

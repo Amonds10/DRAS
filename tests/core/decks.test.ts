@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_MODS, MARK_DAMAGE, MAX_KINDLE, createBattle, executeRound, statusStacks } from '../../src/core/battle';
+import { DEFAULT_MODS, STACK_MAX, TREMOR_STUN, createBattle, executeRound, statusStacks } from '../../src/core/battle';
 import { newRun, validLoadout } from '../../src/core/run';
 import { analyzeTeam } from '../../src/core/team';
 import type { BattleEvent, BattleState } from '../../src/core/types';
@@ -48,57 +48,95 @@ describe('deck mechanics', () => {
     expect(() => newRun(TEAM, 1, { solea: ['moon_veil'] })).toThrow();
   });
 
-  it('kindle persists across rounds, caps, and a finisher burns it for a bigger hit', () => {
+  it('solar core persists across rounds, caps, and supernova lance burns it for a bigger hit', () => {
     const b = battle(['fallen_keeper'], 2);
-    b.hands.a0 = ['stellar_core', 'sun_kindle'];
-    executeRound(b, [{ allyUid: 'a0', spellId: 'stellar_core' }]);
-    b.hands.a0 = ['stellar_core', 'sun_kindle'];
-    executeRound(b, [{ allyUid: 'a0', spellId: 'stellar_core' }]);
-    const solea = b.allies[0];
-    expect(statusStacks(solea, 'kindle')).toBe(MAX_KINDLE);
+    for (let r = 0; r < 3; r++) {
+      b.hands.a0 = ['stellar_core', 'sun_kindle'];
+      executeRound(b, [{ allyUid: 'a0', spellId: 'stellar_core' }]);
+    }
+    expect(statusStacks(b.allies[0], 'solarCore')).toBe(STACK_MAX.solarCore);
 
     const cold = battle(['fallen_keeper'], 2);
     cold.hands.a0 = ['supernova_lance', 'sun_kindle'];
     const coldHit = damageAfter(executeRound(cold, [{ allyUid: 'a0', spellId: 'supernova_lance' }]), 'supernova_lance');
     b.stardust = 10;
     b.hands.a0 = ['supernova_lance', 'sun_kindle'];
-    const hotHit = damageAfter(executeRound(b, [{ allyUid: 'a0', spellId: 'supernova_lance' }]), 'supernova_lance');
-    expect(hotHit).toBeGreaterThan(coldHit * 3);
-    expect(statusStacks(b.allies[0], 'kindle')).toBe(0);
+    const events = executeRound(b, [{ allyUid: 'a0', spellId: 'supernova_lance' }]);
+    expect(damageAfter(events, 'supernova_lance')).toBeGreaterThan(coldHit * 3);
+    expect(events.some((e) => e.type === 'unleash' && e.stack === 'solarCore' && e.stacks === STACK_MAX.solarCore)).toBe(true);
+    expect(statusStacks(b.allies[0], 'solarCore')).toBe(0);
   });
 
-  it('starmarks stack per hit and add flat damage to every later hit', () => {
+  it('solea gains solar core when she hits a burning enemy', () => {
+    const b = battle(['fallen_keeper'], 3);
+    b.enemies[0].statuses.push({ id: 'burn', turns: 3, value: 2 });
+    b.hands.a0 = ['dawn_thrust', 'sun_oath'];
+    executeRound(b, [{ allyUid: 'a0', spellId: 'dawn_thrust' }]);
+    expect(statusStacks(b.allies[0], 'solarCore')).toBe(1);
+  });
+
+  it('rupture builds under a volley and adds flat damage to the next ally hit', () => {
     const b = battle(['fallen_keeper'], 5);
     b.hands.a3 = ['gatling_comet', 'tail_volley'];
-    b.hands.a0 = ['dawn_thrust', 'sun_oath'];
-    executeRound(b, [{ allyUid: 'a0', spellId: 'dawn_thrust' }, { allyUid: 'a3', spellId: 'gatling_comet' }]);
-    expect(statusStacks(b.enemies[0], 'starmark')).toBe(5);
+    executeRound(b, [{ allyUid: 'a3', spellId: 'gatling_comet' }]);
+    const rupture = b.enemies[0].statuses.find((s) => s.id === 'rupture');
+    expect(rupture?.value).toBeGreaterThanOrEqual(5);
+    // 벨라는 균열 걸린 적을 맞힐 때마다 조준이 쌓인다
+    expect(statusStacks(b.allies[3], 'aim')).toBeGreaterThanOrEqual(4);
 
     const fresh = battle(['fallen_keeper'], 5);
     fresh.hands.a0 = ['dawn_thrust', 'sun_oath'];
     const plain = damageAfter(executeRound(fresh, [{ allyUid: 'a0', spellId: 'dawn_thrust' }]), 'dawn_thrust');
     b.hands.a0 = ['dawn_thrust', 'sun_oath'];
-    const marked = damageAfter(executeRound(b, [{ allyUid: 'a0', spellId: 'dawn_thrust' }]), 'dawn_thrust');
-    expect(marked - plain).toBeGreaterThanOrEqual(Math.floor(5 * MARK_DAMAGE) - 1);
+    const cracked = damageAfter(executeRound(b, [{ allyUid: 'a0', spellId: 'dawn_thrust' }]), 'dawn_thrust');
+    expect(cracked - plain).toBeGreaterThanOrEqual((rupture?.value ?? 0) - 1);
   });
 
-  it('abyss feast consumes all starmarks', () => {
+  it('rot seed turns burn into stronger erosion, and abyss feast devours erosion and rupture', () => {
     const b = battle(['fallen_keeper'], 6);
-    b.enemies[0].statuses.push({ id: 'starmark', turns: 99, value: 10 });
+    b.enemies[0].statuses.push({ id: 'burn', turns: 3, value: 4 });
+    b.hands.a2 = ['rot_seed', 'siphon'];
+    executeRound(b, [{ allyUid: 'a2', spellId: 'rot_seed' }]);
+    expect(statusStacks(b.enemies[0], 'burn')).toBe(0);
+    expect(statusStacks(b.enemies[0], 'erosion')).toBeGreaterThanOrEqual(6);
+
+    b.enemies[0].statuses.push({ id: 'rupture', turns: 3, value: 3 });
+    b.stardust = 10;
     b.hands.a2 = ['abyss_feast', 'siphon'];
     executeRound(b, [{ allyUid: 'a2', spellId: 'abyss_feast' }]);
-    expect(statusStacks(b.enemies[0], 'starmark')).toBe(0);
+    expect(statusStacks(b.enemies[0], 'erosion')).toBe(0);
+    expect(statusStacks(b.enemies[0], 'rupture')).toBe(0);
   });
 
-  it('every cast attunes its output element, resonance spells scale with it and release spends it', () => {
+  it('crescent finale releases the tide that healing built up', () => {
+    const b = battle(['fallen_keeper'], 7);
+    b.allies[0].hp = 10;
+    b.hands.a1 = ['lunar_attune', 'moon_veil'];
+    executeRound(b, [{ allyUid: 'a1', spellId: 'lunar_attune' }]);
+    const tide = statusStacks(b.allies[1], 'tide');
+    expect(tide).toBeGreaterThanOrEqual(3);
+    b.stardust = 10;
+    b.hands.a1 = ['crescent_finale', 'moon_veil'];
+    const events = executeRound(b, [{ allyUid: 'a1', spellId: 'crescent_finale' }]);
+    expect(events.some((e) => e.type === 'unleash' && e.stack === 'tide' && e.stacks >= 3)).toBe(true);
+    expect(statusStacks(b.allies[1], 'tide')).toBeLessThan(tide);
+  });
+
+  it('every cast attunes its output element', () => {
     const b = battle(['fallen_keeper'], 7);
     b.hands.a1 = ['lunar_attune', 'moon_veil'];
     executeRound(b, [{ allyUid: 'a1', spellId: 'lunar_attune' }]);
-    expect(b.attune.luna).toBe(3);
-    b.hands.a1 = ['crescent_finale', 'moon_veil'];
-    const events = executeRound(b, [{ allyUid: 'a1', spellId: 'crescent_finale' }]);
-    expect(events.some((e) => e.type === 'release' && e.element === 'luna' && e.stacks === 3)).toBe(true);
-    expect(b.attune.luna).toBe(1);
+    expect(b.attune.luna).toBeGreaterThanOrEqual(1);
+  });
+
+  it('a tremor burst at high potency stuns the enemy', () => {
+    const team = ['astra', 'lune', 'nox', 'vela'];
+    const b = createBattle(newRun(team, 4).team, ['fallen_keeper'], { ...DEFAULT_MODS, startStardust: 10 }, 4);
+    b.enemies[0].statuses.push({ id: 'tremor', turns: 3, value: TREMOR_STUN });
+    b.hands.a0 = ['star_judgement', 'taunt_star'];
+    const events = executeRound(b, [{ allyUid: 'a0', spellId: 'star_judgement' }]);
+    expect(statusStacks(b.enemies[0], 'tremor')).toBe(0);
+    expect(events.some((e) => e.type === 'enemyStunned') || b.enemies[0].hp <= 0).toBe(true);
   });
 
   it('overflow spends all remaining stardust as power', () => {

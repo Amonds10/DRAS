@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { MAX_ATTUNE, MAX_KINDLE, cloneBattle, executeRound, getFocus, isAlive, planCost, setFocus, statusStacks } from '../../core/battle';
+import { MAX_ATTUNE, STACK_MAX, cloneBattle, executeRound, getFocus, isAlive, planCost, setFocus, statusStacks } from '../../core/battle';
 import { previewChain } from '../../core/link';
 import { sound } from '../../audio/sound';
 import { finishBattle } from '../../core/run';
-import type { Ally, BattleEvent, BattleState, Element, Enemy, PlannedCast, SkillTag } from '../../core/types';
+import type { Ally, BattleEvent, BattleState, Element, Enemy, PlannedCast, SkillTag, Stack } from '../../core/types';
 import { ELEMENTS, STATUS_META, reactionById } from '../../data/elements';
 import { FLOORS } from '../../data/encounters';
 import { TRAIT_DESC, enemyById } from '../../data/enemies';
@@ -41,7 +41,7 @@ function eventText(state: BattleState, ev: BattleEvent): string | null {
     case 'fullChain':
       return '성좌 완성!';
     case 'damage': {
-      const tag = { burn: ' [연소]', doom: ' [폭격]', counter: ' [반격]', chain: ' [성좌]', ally: '', enemy: '' }[ev.source];
+      const tag = { burn: ' [화상]', erosion: ' [잠식]', burst: ' [각인 폭발]', doom: ' [폭격]', counter: ' [반격]', chain: ' [성좌]', ally: '', enemy: '' }[ev.source];
       return `${unitLabel(state, ev.targetUid)} 피해 ${ev.amount}${ev.absorbed ? ` (보호막 ${ev.absorbed})` : ''}${tag}`;
     }
     case 'heal':
@@ -96,11 +96,13 @@ export function battleScreen(app: App): HTMLElement {
 
   const wait = (ms: number) => sleep(ms / app.speed);
   const remaining = () => battle.stardust - planCost(plan);
-  /** 예열을 소모하는 주문이면 그 배율 계수 */
-  const kindleMultOf = (spellId: string): number => {
-    for (const e of spellById(spellId).effects) if (e.kind === 'damage' && e.kindleMult) return e.kindleMult;
-    return 0;
+  /** 고유 중첩을 소모하는 주문이면 그 중첩과 1당 배율 */
+  const consumeOf = (spellId: string): { stack: Stack; per: number } | null => {
+    for (const e of spellById(spellId).effects) if (e.kind === 'damage' && e.consume) return e.consume;
+    return null;
   };
+  /** 술사의 고유 중첩(게이지·오라로 보여 준다) */
+  const stackOf = (a: Ally) => unitById(a.defId).stack ?? null;
   const SUPPORT_TAGS = new Set<SkillTag>(['heal', 'shield', 'buff', 'utility']);
   /** 타격마다 한 번씩 연출하는 주문 유형(광역 베기·관통 광선·지연 폭격은 시전 때 한 번에) */
   const PER_HIT_TAGS = new Set<SkillTag>(['strike', 'execute', 'multi', 'mark', 'drain', 'dot', 'finisher', 'resonance', 'debuff', 'aoe']);
@@ -122,9 +124,12 @@ export function battleScreen(app: App): HTMLElement {
     el.append(n);
     setTimeout(() => n.remove(), 900);
   };
-  /** 예열 오라를 지금 상태에 맞춘다 */
+  /** 고유 중첩 오라를 지금 상태에 맞춘다 */
   const syncAuras = () => {
-    for (const a of battle.allies) stage.setAura(a.uid, isAlive(a) ? statusStacks(a, 'kindle') : 0, elColor(unitById(a.defId).element), MAX_KINDLE);
+    for (const a of battle.allies) {
+      const st = stackOf(a);
+      stage.setAura(a.uid, isAlive(a) && st ? statusStacks(a, st.id) : 0, elColor(unitById(a.defId).element), st?.max ?? 6);
+    }
   };
 
   // ── 무대 준비 ────────────────────────────────────────────
@@ -371,24 +376,30 @@ export function battleScreen(app: App): HTMLElement {
     return b;
   };
 
-  /** 극딜 카드: 지금 쌓인 예열과 그만큼의 배율 */
+  /** 극딜 카드: 지금 쌓인 고유 중첩과 그만큼의 배율 */
   const kindleChip = (a: Ally, spellId: string) => {
-    const km = kindleMultOf(spellId);
-    if (!km) return null;
-    const k = statusStacks(a, 'kindle');
-    const mult = Math.round((1 + k * km) * 10) / 10;
-    return h('span', { class: `sk-kindle ${k >= 3 ? 'ready' : k ? 'warm' : ''}`, title: `예열 ${k}중첩 → 피해 ×${mult}` }, `▲${k} ×${mult}`);
+    const c = consumeOf(spellId);
+    if (!c) return null;
+    const k = statusStacks(a, c.stack);
+    const meta = STATUS_META[c.stack];
+    const mult = Math.round((1 + k * c.per) * 10) / 10;
+    const ready = k >= Math.ceil(STACK_MAX[c.stack] / 2);
+    return h('span', { class: `sk-kindle ${ready ? 'ready' : k ? 'warm' : ''}`, title: `${meta.name} ${k} → 피해 ×${mult}` }, `${meta.glyph}${k} ×${mult}`);
   };
 
-  /** 예열 게이지: 6칸, 3칸부터 극딜 준비 */
+  /** 고유 중첩 게이지: 술사마다 이름과 칸 수가 다르다. 절반부터 준비됨. */
   const kindleGauge = (a: Ally) => {
-    const k = statusStacks(a, 'kindle');
-    if (!k && !battle.hands[a.uid]?.some((id) => kindleMultOf(id) || spellById(id).tag === 'charge')) return null;
+    const st = stackOf(a);
+    if (!st) return null;
+    const k = statusStacks(a, st.id);
+    const meta = STATUS_META[st.id];
+    const ready = k >= Math.ceil(st.max / 2);
     return h(
       'div',
-      { class: `sq-kindle ${k >= 3 ? 'ready' : ''}`, title: `예열 ${k} / ${MAX_KINDLE}` },
-      Array.from({ length: MAX_KINDLE }, (_, i) => h('i', { class: i < k ? 'on' : '' })),
-      k >= 3 ? h('b', {}, 'READY') : null,
+      { class: `sq-kindle ${ready ? 'ready' : ''}`, title: `${meta.name} ${k} / ${st.max} — ${meta.desc}` },
+      h('span', { class: 'sq-stack-name' }, meta.name),
+      Array.from({ length: st.max }, (_, i) => h('i', { class: i < k ? 'on' : '' })),
+      ready ? h('b', {}, 'READY') : null,
     );
   };
 
@@ -814,7 +825,7 @@ export function battleScreen(app: App): HTMLElement {
       else if (ev.type === 'reaction') reaction = reactionById(ev.reactionId).name;
       else if (ev.type === 'status') {
         const meta = STATUS_META[ev.status];
-        const label = ev.status === 'kindle' ? `${meta.name} ${ev.stacks ?? ''}`.trim() : meta.name;
+        const label = meta.keyword ? `${meta.name} ${ev.stacks ?? ''}·${ev.turns}` : ev.stacks ? `${meta.name} ${ev.stacks}` : meta.name;
         (meta.debuff ? debuffs : buffs).set(label, 1);
       }
     }
@@ -914,7 +925,7 @@ export function battleScreen(app: App): HTMLElement {
    * 극딜 컷인: 화면이 어두워지고 술사 그림이 사선 띠와 함께 밀려 들어온다.
    * 예열을 몇 중첩 터뜨리는지와 배율을 크게 보여 주고, 시간을 잠깐 늦춘다.
    */
-  async function finisherCutIn(uid: string, spellName: string, un: { stacks: number; mult: number } | null, color: string, target: string | null) {
+  async function finisherCutIn(uid: string, spellName: string, un: { stack: Stack; stacks: number; mult: number } | null, color: string, target: string | null) {
     const ally = battle.allies.find((a) => a.uid === uid)!;
     const unit = unitById(ally.defId);
     const fig = h('div', { class: 'ci-fig' });
@@ -929,7 +940,9 @@ export function battleScreen(app: App): HTMLElement {
         { class: 'ci-text' },
         h('small', {}, `${unit.code} · CODA`),
         h('b', {}, spellName),
-        un ? h('span', { class: 'ci-kindle' }, h('i', {}, '▲'.repeat(un.stacks)), ` 예열 ${un.stacks}중첩 해방 · 피해 ×${un.mult}`) : h('span', { class: 'ci-kindle' }, '예열 없이 발동'),
+        un
+          ? h('span', { class: 'ci-kindle' }, h('i', {}, STATUS_META[un.stack].glyph.repeat(Math.min(un.stacks, 10))), ` ${STATUS_META[un.stack].name} ${un.stacks} 해방 · 피해 ×${un.mult}`)
+          : h('span', { class: 'ci-kindle' }, '모은 힘 없이 발동'),
       ),
     );
     scene.append(el);
@@ -1184,7 +1197,7 @@ export function battleScreen(app: App): HTMLElement {
             bumpHits(ev.amount, lastColor);
             stats.dmg += ev.amount;
           }
-          sound.hit(crit ? 'crit' : ev.amount === 0 && ev.absorbed ? 'blocked' : ev.source === 'ally' ? (lastTag === 'execute' || lastCaster.length && characterMotion(battle.allies.find((a) => a.uid === lastCaster)?.defId ?? '') === 'slash' ? 'slash' : 'ally') : ev.source);
+          sound.hit(crit ? 'crit' : ev.amount === 0 && ev.absorbed ? 'blocked' : ev.source === 'ally' ? (lastTag === 'execute' || (lastCaster.length && characterMotion(battle.allies.find((a) => a.uid === lastCaster)?.defId ?? '') === 'slash') ? 'slash' : 'ally') : ev.source === 'erosion' ? 'burn' : ev.source === 'burst' ? 'doom' : ev.source);
           floatText(ev.targetUid, ev.amount > 0 ? `${ev.amount}` : `⛨${ev.absorbed}`, ev.source === 'enemy' ? 'dmg-ally' : ev.source === 'burn' ? 'dmg-burn' : crit ? 'dmg-crit' : big ? 'dmg-big' : 'dmg');
           if (big && !finale) stage.glowPulse(crit ? 0.35 : 0.15);
           await wait(finale ? 420 : crit ? 520 : lastTag === 'multi' ? 170 : 230);
@@ -1219,25 +1232,29 @@ export function battleScreen(app: App): HTMLElement {
             sound.debuff();
           }
           if (!isEnemy && (ev.status === 'atkUp' || ev.status === 'counter' || ev.status === 'taunt')) stage.fx?.buff(chest(ev.targetUid), feet(ev.targetUid), lastColor);
-          if (ev.status === 'kindle') {
-            // 예열: 오라가 커지고 발밑에서 불길이 솟는다
-            const ally = battle.allies.find((a) => a.uid === ev.targetUid);
-            const c = ally ? elColor(unitById(ally.defId).element) : lastColor;
+          const ally = battle.allies.find((a) => a.uid === ev.targetUid);
+          const sig = ally ? stackOf(ally) : null;
+          if (ally && sig && ev.status === sig.id) {
+            // 고유 중첩: 오라가 커지고 발밑에서 불길이 솟는다
+            const c = elColor(unitById(ally.defId).element);
             const n = ev.stacks ?? 1;
-            stage.setAura(ev.targetUid, n, c, MAX_KINDLE);
-            sound.kindle(n, MAX_KINDLE);
+            const max = sig.max;
+            stage.setAura(ev.targetUid, n, c, max);
+            sound.kindle(Math.round((n / max) * 6), 6);
             stage.fx?.ring(feet(ev.targetUid), c, 2.6, 0.5, 0.5);
             stage.fx?.burn(chest(ev.targetUid).add(new THREE.Vector3(0, -0.6, 0)), c);
             if (ev.targetUid !== lastCaster) stage.anim(ev.targetUid, 'charge');
-            floatText(ev.targetUid, n >= MAX_KINDLE ? `예열 MAX ▲${n}` : `예열 ▲${n}`, n >= 3 ? 'kindle ready' : 'kindle');
-            stage.glowPulse(0.1 + n * 0.04);
+            floatText(ev.targetUid, n >= max ? `${meta.name} MAX ${meta.glyph}${n}` : `${meta.name} ${meta.glyph}${n}`, n >= Math.ceil(max / 2) ? 'kindle ready' : 'kindle');
+            stage.glowPulse(0.08 + (n / max) * 0.2);
             const gauge = squadEls.get(ev.targetUid)?.querySelector('.sq-kindle');
-            if (gauge) gauge.replaceWith(kindleGauge(ally!) ?? h('span'));
-            else squadEls.get(ev.targetUid)?.querySelector('.sq-info')?.append(kindleGauge(ally!) ?? h('span'));
-            await wait(260);
+            if (gauge) gauge.replaceWith(kindleGauge(ally) ?? h('span'));
+            else squadEls.get(ev.targetUid)?.querySelector('.sq-info')?.append(kindleGauge(ally) ?? h('span'));
+            await wait(220);
             break;
           }
-          floatText(ev.targetUid, `${meta.debuff ? '▼' : '▲'} ${meta.name}`, meta.debuff ? 'debuff' : 'buff');
+          // 각인은 위력·횟수까지, 공명파동은 중첩까지 보여 준다
+          const label = meta.keyword ? `${meta.name} ${ev.stacks ?? ''}·${ev.turns}` : ev.stacks ? `${meta.name} ${ev.stacks}` : meta.name;
+          floatText(ev.targetUid, `${meta.debuff ? '▼' : '▲'} ${label}`, meta.debuff ? 'debuff' : 'buff');
           await wait(110);
           break;
         }

@@ -14,14 +14,28 @@ export type SpellOutput = Element | 'echo';
 
 export type Role = 'striker' | 'guardian' | 'support' | 'hexer';
 
-export type StatusId = 'stun' | 'weaken' | 'burn' | 'expose' | 'atkUp' | 'seal' | 'doom' | 'taunt' | 'counter' | 'kindle' | 'starmark';
+/**
+ * 상태. 적에게 거는 각인(화상·균열·잠식·진동·월영)은 위력(value)과 횟수(turns)를 함께 가진다.
+ * 술사마다 고유 중첩(태양핵·조준·만조·허기·불굴)이 있고, 공명파동은 다음 시전을 강화한다.
+ */
+export type StatusId =
+  | 'stun' | 'weaken' | 'expose' | 'atkUp' | 'seal' | 'doom' | 'taunt' | 'counter'
+  // 적 각인
+  | 'burn' | 'rupture' | 'erosion' | 'tremor' | 'moonshade'
+  // 술사 고유 중첩
+  | 'solarCore' | 'aim' | 'tide' | 'hunger' | 'fortitude' | 'wave';
+
+/** 적에게 거는 각인(위력·횟수를 가진다) */
+export type Keyword = 'burn' | 'rupture' | 'erosion' | 'tremor' | 'moonshade';
+/** 술사에게 쌓이는 중첩 */
+export type Stack = 'solarCore' | 'aim' | 'tide' | 'hunger' | 'fortitude' | 'wave';
 
 export interface Status {
   id: StatusId;
+  /** 남은 턴. 각인은 '횟수'(발동할 때마다 1씩 준다). */
   turns: number;
   /**
-   * burn: 턴당 피해(중첩), atkUp: 공격 증가량, doom: 라운드 끝 폭발 피해, counter: 반격 피해,
-   * kindle: 예열 중첩(아군, 마무리 일격이 소모), starmark: 별흔 중첩(적, 타격마다 고정 추가 피해)
+   * 각인: 위력. atkUp: 공격 증가량, doom: 라운드 끝 폭발 피해, counter: 반격 피해, 중첩: 쌓인 수.
    */
   value?: number;
   /** seal: 봉인된 성속 */
@@ -46,12 +60,16 @@ export interface DamageEffect {
   vsDebuffed?: number;
   /** 준 피해의 일부만큼 시전자 회복 */
   lifesteal?: number;
-  /** 예열 소모: 시전자의 예열 1중첩당 배율 +값. 시전 뒤 예열을 모두 비운다. */
-  kindleMult?: number;
-  /** 타격마다 대상에게 별흔을 이만큼 새긴다 */
-  mark?: number;
-  /** 별흔 폭발: 대상의 별흔 1중첩당 위력 +값. 맞힌 뒤 별흔을 비운다. */
-  consumeMarks?: number;
+  /** 자기 중첩을 모두 소모해 1중첩당 배율 +per(태양핵·조준·만조·불굴·허기) */
+  consume?: { stack: Stack; per: number };
+  /** 대상 각인을 소모해 (위력 × 횟수) × per만큼 위력을 더한다 */
+  devour?: { keywords: Keyword[]; per: number };
+  /** 대상에게 이 각인이 있으면 배율 */
+  bonusVs?: { keyword: Keyword | 'any'; mult: number }[];
+  /** 대상의 이 각인 횟수만큼 타수를 더한다(최대 max) */
+  hitsFrom?: { keyword: Keyword; max: number };
+  /** 타격마다 일어나는 일 */
+  onHit?: OnHit[];
   /** 성속 공명: 이 성속의 각인 1중첩당 배율 +10% */
   attune?: Element;
   /** 공명 해방: 이 성속의 각인을 모두 소모하고 1중첩당 배율 +25% */
@@ -62,7 +80,23 @@ export interface DamageEffect {
   fromShield?: number;
 }
 
-export type Effect =
+/** 타격마다: 대상에게 각인을 걸거나 시전자에게 중첩을 쌓는다(ifHas가 있으면 대상에게 그 각인이 있을 때만) */
+export type OnHit =
+  | { inflict: Keyword; value: number; turns: number; ifHas?: Keyword }
+  | { gain: Stack; amount: number; ifHas?: Keyword };
+
+/** 효과 발동 조건 */
+export interface Cond {
+  /** 대상(집중 대상)에게 이 각인이 있다 */
+  targetHas?: Keyword | 'any';
+  /** 시전자에게 이 중첩이 min 이상 */
+  casterHas?: Stack;
+  min?: number;
+  /** 체인이 이 이상 */
+  chain?: number;
+}
+
+export type Effect = (
   | DamageEffect
   | { kind: 'heal'; power: number; target: AllyTarget }
   | { kind: 'shield'; power: number; target: AllyTarget }
@@ -74,14 +108,21 @@ export type Effect =
   | { kind: 'boost'; amount: number }
   /** 집중 대상에 지연 폭발을 건다. 라운드가 끝날 때 터진다. */
   | { kind: 'doom'; power: number }
-  /** 예열을 쌓는다(최대 6) */
-  | { kind: 'kindle'; amount: number; target: AllyTarget }
-  /** 별흔을 새긴다(최대 12) */
-  | { kind: 'mark'; amount: number; target: 'focus' | 'allEnemies' }
+  /** 중첩을 쌓는다 */
+  | { kind: 'gain'; stack: Stack; amount: number; target: AllyTarget }
+  /** 각인을 건다(위력·횟수가 더해진다) */
+  | { kind: 'inflict'; keyword: Keyword; value: number; turns: number; target: 'focus' | 'allEnemies' }
+  /** 대상에게 걸린 모든 각인의 위력·횟수를 늘린다 */
+  | { kind: 'amplify'; value: number; turns: number; target: 'focus' | 'allEnemies' }
+  /** 각인을 지금 터뜨린다: 화상·잠식은 위력 × 횟수 × mult, 진동은 위력 × mult(8 이상이면 기절) */
+  | { kind: 'burst'; keyword: Keyword; mult: number; target: 'focus' | 'allEnemies' }
+  /** 각인을 다른 각인으로 바꾼다(위력 × mult) */
+  | { kind: 'convert'; from: Keyword; to: Keyword; mult: number; target: 'focus' | 'allEnemies' }
   /** 성속 각인을 더 쌓는다 */
   | { kind: 'attune'; element: Element; amount: number }
   /** 걸려 있는 지연 폭발을 지금 모두 터뜨린다 */
-  | { kind: 'detonate' };
+  | { kind: 'detonate' }
+) & { when?: Cond };
 
 /** 카드에 표시하는 스킬 유형(연출도 이 값을 따른다) */
 export type SkillTag =
@@ -135,6 +176,10 @@ export interface UnitDef {
   spells: string[];
   /** 배울 수 있는 주문 전체(장착 후보). 기본 장착 5개를 포함한다. */
   pool: string[];
+  /** 고유 패시브(전투 중 늘 켜져 있다) */
+  passive: { name: string; desc: string };
+  /** 이 술사가 쌓는 고유 중첩(게이지로 보여 준다) */
+  stack?: { id: Stack; max: number };
 }
 
 export interface ReactionDef {
@@ -231,7 +276,7 @@ export interface BattleState {
   stats: { maxChain: number; reactions: number; fullChains: number };
 }
 
-export type DamageSource = 'ally' | 'enemy' | 'burn' | 'chain' | 'doom' | 'counter';
+export type DamageSource = 'ally' | 'enemy' | 'burn' | 'chain' | 'doom' | 'counter' | 'erosion' | 'burst';
 
 export type BattleEvent =
   | { type: 'cast'; allyUid: string; spellId: string; linked: boolean; chain: number; mult: number; outElement: Element | null; sealed: boolean }
@@ -241,7 +286,7 @@ export type BattleEvent =
   | { type: 'heal'; targetUid: string; amount: number; hpAfter: number }
   | { type: 'shield'; targetUid: string; amount: number; shieldAfter: number }
   | { type: 'status'; targetUid: string; status: StatusId; turns: number; stacks?: number }
-  | { type: 'unleash'; allyUid: string; stacks: number; mult: number }
+  | { type: 'unleash'; allyUid: string; stack: Stack; stacks: number; mult: number }
   | { type: 'purge'; targetUid: string }
   | { type: 'stardust'; amount: number }
   | { type: 'attune'; element: Element; total: number }

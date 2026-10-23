@@ -73,14 +73,13 @@ export function statusRow(statuses: Status[]): HTMLElement {
     { class: 'status-row' },
     statuses.map((st) => {
       const meta = STATUS_META[st.id];
-      // 중첩형(예열·별흔·연소)은 중첩 수를, 나머지는 남은 턴을 작게 붙인다
-      const stacking = st.id === 'kindle' || st.id === 'starmark' || st.id === 'burn';
+      // 각인은 위력·횟수, 고유 중첩은 쌓인 수, 나머지는 남은 턴을 작게 붙인다
       const lasting = st.turns >= 90;
-      const label = st.id === 'burn' || st.id === 'atkUp' || stacking ? `${meta.name} ${st.value ?? ''}` : meta.name;
-      const small = stacking ? st.value : lasting ? null : st.turns;
+      const label = meta.keyword ? `${meta.name} 위력 ${st.value ?? 0}·횟수 ${st.turns}` : st.value && (lasting || st.id === 'atkUp') ? `${meta.name} ${st.value}` : meta.name;
+      const small = meta.keyword ? `${st.value ?? 0}·${st.turns}` : lasting ? (st.value ?? null) : st.turns;
       return h(
         'span',
-        { class: `status ${meta.debuff ? 'debuff' : 'buff'} st-${st.id}`, title: `${meta.debuff ? '약화 효과' : '강화 효과'} · ${label}: ${meta.desc} (${lasting ? '지속' : `${st.turns}턴 남음`})` },
+        { class: `status ${meta.debuff ? 'debuff' : 'buff'} st-${st.id}`, title: `${meta.debuff ? '약화 효과' : '강화 효과'} · ${label}: ${meta.desc} (${meta.keyword ? `${st.turns}회 남음` : lasting ? '지속' : `${st.turns}턴 남음`})` },
         h('i', { class: 'st-dir', 'aria-hidden': 'true' }, meta.debuff ? '▼' : '▲'),
         meta.glyph,
         small != null ? h('small', {}, small) : null,
