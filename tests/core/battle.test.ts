@@ -98,7 +98,11 @@ describe('battle', () => {
     hand(b, { a0: ['flare_rush', 'sun_oath'] });
     const events = executeRound(b, [{ allyUid: 'a0', spellId: 'flare_rush' }]);
     const playerHits = events.filter((e) => e.type === 'damage' && e.source === 'ally');
-    expect(playerHits).toHaveLength(3);
+    const stages = events.filter((e) => e.type === 'stage');
+    expect(stages).toHaveLength(4);
+    // 네 번째 타격은 태양핵 2 이상일 때만 나간다
+    expect(playerHits).toHaveLength(stages.filter((e) => e.type === 'stage' && !e.skipped).length);
+    expect(playerHits.length).toBeGreaterThanOrEqual(3);
   });
 
   it('execute doubles damage on low-HP targets', () => {
@@ -134,7 +138,7 @@ describe('battle', () => {
     hand(b, { a0: ['amplify', 'primal_light'], a1: ['dawn_thrust', 'sun_oath'] });
     const events = executeRound(b, [{ allyUid: 'a0', spellId: 'amplify' }, { allyUid: 'a1', spellId: 'dawn_thrust' }]);
     const cast = events.find((e) => e.type === 'cast' && e.spellId === 'dawn_thrust');
-    expect(cast && cast.type === 'cast' ? cast.mult : 0).toBe(1.5);
+    expect(cast && cast.type === 'cast' ? cast.mult : 0).toBe(1.4);
   });
 
   it('taunt pulls single attacks and counter strikes back', () => {

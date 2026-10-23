@@ -47,10 +47,16 @@ export type AllyTarget = 'lowestAlly' | 'allAllies' | 'self';
 
 export interface DamageEffect {
   kind: 'damage';
+  /** 단타 위력. stages가 있으면 쓰지 않는다. */
   power: number;
   target: EnemyTarget;
-  /** 타격 횟수(기본 1). random은 타격마다 대상을 새로 고른다. */
+  /** 타격 횟수(기본 1). random은 타격마다 대상을 새로 고른다. stages가 있으면 쓰지 않는다. */
   hits?: number;
+  /**
+   * 타격 단계(Ⅰ, Ⅱ, Ⅲ …). 타격마다 위력·조건·적중 효과가 따로 있다.
+   * 없으면 power를 hits번 나눠 친다.
+   */
+  stages?: Stage[];
   scaleWithChain?: boolean;
   /** 방어 무시 */
   pierce?: boolean;
@@ -66,13 +72,13 @@ export interface DamageEffect {
   devour?: { keywords: Keyword[]; per: number };
   /** 대상에게 이 각인이 있으면 배율 */
   bonusVs?: { keyword: Keyword | 'any'; mult: number }[];
-  /** 대상의 이 각인 횟수만큼 타수를 더한다(최대 max) */
+  /** 대상의 이 각인 횟수만큼 마지막 단계를 되풀이한다(최대 max) */
   hitsFrom?: { keyword: Keyword; max: number };
-  /** 타격마다 일어나는 일 */
-  onHit?: OnHit[];
-  /** 성속 공명: 이 성속의 각인 1중첩당 배율 +10% */
+  /** 타격마다 일어나는 일(모든 단계에 공통) */
+  onHit?: Rider[];
+  /** 성속 공명: 이 성속의 공명 1당 배율 +12% */
   attune?: Element;
-  /** 공명 해방: 이 성속의 각인을 모두 소모하고 1중첩당 배율 +25% */
+  /** 공명 해방: 이 성속의 공명을 모두 소모하고 1당 배율 +25% */
   releaseAttune?: Element;
   /** 남은 성진을 모두 쓰고 1당 위력 +값 */
   fromStardust?: number;
@@ -80,20 +86,60 @@ export interface DamageEffect {
   fromShield?: number;
 }
 
-/** 타격마다: 대상에게 각인을 걸거나 시전자에게 중첩을 쌓는다(ifHas가 있으면 대상에게 그 각인이 있을 때만) */
-export type OnHit =
-  | { inflict: Keyword; value: number; turns: number; ifHas?: Keyword }
-  | { gain: Stack; amount: number; ifHas?: Keyword };
+/** 한 번의 타격 */
+export interface Stage {
+  power: number;
+  /** 이 조건이 맞을 때만 나간다(아니면 불발) */
+  only?: Cond;
+  /** 조건이 맞으면 이 타격 피해 배율 */
+  up?: { when: Cond; mult: number };
+  /** 이 타격만 방어 무시 */
+  pierce?: boolean;
+  /** 이 타격만 대상을 바꾼다 */
+  target?: EnemyTarget;
+  /** [적중 시] */
+  onHit?: Rider[];
+}
 
-/** 효과 발동 조건 */
+/**
+ * 적중 효과. 맞은 대상을 기준으로 조건을 본다.
+ * inflict/amplify/burst/weaken·expose는 맞은 대상에게, gain/heal/shield는 아군(기본 자신)에게.
+ */
+export type Rider = (
+  | { inflict: Keyword; value: number; turns: number }
+  | { gain: Stack; amount: number; to?: AllyTarget }
+  | { heal: number; to?: AllyTarget }
+  | { shield: number; to?: AllyTarget }
+  | { amplify: number; turns: number }
+  | { burst: Keyword; mult: number }
+  | { stardust: number }
+  | { debuff: 'weaken' | 'expose'; turns: number }
+  /** 맞은 대상의 이 각인을 다른 모든 적에게 퍼뜨린다(위력·횟수 × ratio) */
+  | { spread: Keyword; ratio: number }
+) & { when?: Cond };
+
+/** 효과 발동 조건. '대상'은 적중 효과·타격에서는 맞은 적, 그 밖에는 집중 대상. */
 export interface Cond {
-  /** 대상(집중 대상)에게 이 각인이 있다 */
+  /** 대상에게 이 각인이 있다(targetMin이 있으면 위력이 그 이상) */
   targetHas?: Keyword | 'any';
+  targetMin?: number;
+  /** 대상의 각인 종류가 이 이상 */
+  kinds?: number;
   /** 시전자에게 이 중첩이 min 이상 */
   casterHas?: Stack;
   min?: number;
+  /** 대상 각인 위력 + 시전자 중첩의 합이 이 이상 */
+  sum?: { keyword: Keyword; stack: Stack; min: number };
   /** 체인이 이 이상 */
   chain?: number;
+  /** 링크로 이어 시전했다 */
+  linked?: boolean;
+  /** 대상 HP 비율이 이 이하 */
+  targetHpBelow?: number;
+  /** 시전자 HP 비율이 이 이하 */
+  casterHpBelow?: number;
+  /** 시전자에게 보호막이 있다 */
+  shielded?: boolean;
 }
 
 export type Effect = (
@@ -114,11 +160,13 @@ export type Effect = (
   | { kind: 'inflict'; keyword: Keyword; value: number; turns: number; target: 'focus' | 'allEnemies' }
   /** 대상에게 걸린 모든 각인의 위력·횟수를 늘린다 */
   | { kind: 'amplify'; value: number; turns: number; target: 'focus' | 'allEnemies' }
-  /** 각인을 지금 터뜨린다: 화상·잠식은 위력 × 횟수 × mult, 진동은 위력 × mult(8 이상이면 기절) */
+  /** 각인을 지금 터뜨린다: 화상·잠식·균열은 위력 × 횟수 × mult, 진동은 위력 × mult(8 이상이면 기절) */
   | { kind: 'burst'; keyword: Keyword; mult: number; target: 'focus' | 'allEnemies' }
   /** 각인을 다른 각인으로 바꾼다(위력 × mult) */
   | { kind: 'convert'; from: Keyword; to: Keyword; mult: number; target: 'focus' | 'allEnemies' }
-  /** 성속 각인을 더 쌓는다 */
+  /** 집중 대상의 각인을 다른 모든 적에게 퍼뜨린다(위력·횟수 × ratio) */
+  | { kind: 'spread'; keyword: Keyword; ratio: number }
+  /** 성속 공명을 더 쌓는다 */
   | { kind: 'attune'; element: Element; amount: number }
   /** 걸려 있는 지연 폭발을 지금 모두 터뜨린다 */
   | { kind: 'detonate' }
@@ -154,7 +202,13 @@ export interface SpellDef {
   cost: number;
   input: SpellInput;
   output: SpellOutput;
+  /** 사용 시 순서대로 일어난다. 피해 앞의 효과는 [사용 시], 뒤의 효과는 [시전 후]로 보인다. */
   effects: Effect[];
+  /** [전투 시작 시] 이번 턴 시전할 예정이면, 누구보다 먼저(성진이 모자라 못 쓰면 일어나지 않는다) */
+  start?: Effect[];
+  /** [처치 시] 이 주문의 타격으로 적을 쓰러뜨리면(시전당 한 번) */
+  kill?: Effect[];
+  /** 한 줄 소개 */
   desc: string;
   tag: SkillTag;
 }
@@ -287,6 +341,10 @@ export type BattleEvent =
   | { type: 'shield'; targetUid: string; amount: number; shieldAfter: number }
   | { type: 'status'; targetUid: string; status: StatusId; turns: number; stacks?: number }
   | { type: 'unleash'; allyUid: string; stack: Stack; stacks: number; mult: number }
+  /** 타격 단계가 시작된다(불발이면 skipped) */
+  | { type: 'stage'; allyUid: string; index: number; total: number; skipped: boolean }
+  /** 조건부 효과·전투 시작 시·처치 시 효과가 발동했다 */
+  | { type: 'trigger'; allyUid: string; spellId: string; phase: 'start' | 'use' | 'kill' | 'after' }
   | { type: 'purge'; targetUid: string }
   | { type: 'stardust'; amount: number }
   | { type: 'attune'; element: Element; total: number }

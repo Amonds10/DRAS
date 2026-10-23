@@ -64,7 +64,8 @@ describe('deck mechanics', () => {
     const events = executeRound(b, [{ allyUid: 'a0', spellId: 'supernova_lance' }]);
     expect(damageAfter(events, 'supernova_lance')).toBeGreaterThan(coldHit * 3);
     expect(events.some((e) => e.type === 'unleash' && e.stack === 'solarCore' && e.stacks === STACK_MAX.solarCore)).toBe(true);
-    expect(statusStacks(b.allies[0], 'solarCore')).toBe(0);
+    // 다 태운 뒤에는 이번 타격으로 다시 붙은 만큼만 남는다
+    expect(statusStacks(b.allies[0], 'solarCore')).toBeLessThan(STACK_MAX.solarCore);
   });
 
   it('solea gains solar core when she hits a burning enemy', () => {
@@ -72,24 +73,29 @@ describe('deck mechanics', () => {
     b.enemies[0].statuses.push({ id: 'burn', turns: 3, value: 2 });
     b.hands.a0 = ['dawn_thrust', 'sun_oath'];
     executeRound(b, [{ allyUid: 'a0', spellId: 'dawn_thrust' }]);
-    expect(statusStacks(b.allies[0], 'solarCore')).toBe(1);
+    // 타격 셋이 모두 화상 걸린 적을 때린다
+    expect(statusStacks(b.allies[0], 'solarCore')).toBeGreaterThanOrEqual(3);
   });
 
-  it('rupture builds under a volley and adds flat damage to the next ally hit', () => {
+  it('rupture builds under a volley, feeds aim, and adds flat damage to later hits', () => {
     const b = battle(['fallen_keeper'], 5);
     b.hands.a3 = ['gatling_comet', 'tail_volley'];
-    executeRound(b, [{ allyUid: 'a3', spellId: 'gatling_comet' }]);
-    const rupture = b.enemies[0].statuses.find((s) => s.id === 'rupture');
-    expect(rupture?.value).toBeGreaterThanOrEqual(5);
+    const events = executeRound(b, [{ allyUid: 'a3', spellId: 'gatling_comet' }]);
+    const hits = events.filter((e): e is Extract<BattleEvent, { type: 'damage' }> => e.type === 'damage' && e.source === 'ally').map((e) => e.amount);
+    // 같은 위력의 타격이라도 균열이 쌓인 뒤가 더 아프다
+    expect(hits[3]).toBeGreaterThan(hits[0]);
     // 벨라는 균열 걸린 적을 맞힐 때마다 조준이 쌓인다
     expect(statusStacks(b.allies[3], 'aim')).toBeGreaterThanOrEqual(4);
 
     const fresh = battle(['fallen_keeper'], 5);
     fresh.hands.a0 = ['dawn_thrust', 'sun_oath'];
     const plain = damageAfter(executeRound(fresh, [{ allyUid: 'a0', spellId: 'dawn_thrust' }]), 'dawn_thrust');
-    b.hands.a0 = ['dawn_thrust', 'sun_oath'];
-    const cracked = damageAfter(executeRound(b, [{ allyUid: 'a0', spellId: 'dawn_thrust' }]), 'dawn_thrust');
-    expect(cracked - plain).toBeGreaterThanOrEqual((rupture?.value ?? 0) - 1);
+    const cracked = battle(['fallen_keeper'], 5);
+    cracked.enemies[0].statuses.push({ id: 'rupture', turns: 5, value: 4 });
+    cracked.hands.a0 = ['dawn_thrust', 'sun_oath'];
+    const more = damageAfter(executeRound(cracked, [{ allyUid: 'a0', spellId: 'dawn_thrust' }]), 'dawn_thrust');
+    // 세 타격 모두 균열 4가 더해진다
+    expect(more - plain).toBeGreaterThanOrEqual(3 * 4 - 2);
   });
 
   it('rot seed turns burn into stronger erosion, and abyss feast devours erosion and rupture', () => {

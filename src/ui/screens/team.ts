@@ -9,7 +9,7 @@ import { characterSvg } from '../../render/characters';
 import type { App } from '../app';
 import { h } from '../dom';
 import { showHelp } from '../help';
-import { NUM, button, costPips, elBadge, elColor, reactionChip, spellFlow, tagLabel } from '../widgets';
+import { NUM, button, costPips, elBadge, elColor, reactionChip, spellFlow, spellRich, tagLabel } from '../widgets';
 
 /** 주문 한 줄. onToggle을 주면 장착/해제 버튼이 된다. */
 function spellLine(spellId: string, equipped = true, onToggle?: () => void, locked = false): HTMLElement {
@@ -24,7 +24,7 @@ function spellLine(spellId: string, equipped = true, onToggle?: () => void, lock
       onclick: onToggle,
     },
     h('div', { class: 'spell-line-head' }, onToggle ? h('span', { class: 'equip-box', 'aria-hidden': 'true' }, equipped ? '✦' : '') : null, tagLabel(sp), h('span', { class: 'spell-name' }, sp.name), spellFlow(sp), costPips(sp.cost)),
-    h('p', { class: 'spell-desc' }, sp.desc),
+    h('div', { class: 'spell-desc' }, spellRich(sp)),
   );
 }
 

@@ -4638,3 +4638,299 @@ button.spell-line.equip:disabled {
 .sq-kindle i {
   width: 7px;
 }
+
+/* ── 주문 효과 전문(림버스식 꼬리표 설명) ── */
+.spell-rich {
+  --t-start: #7fd68a;
+  --t-use: #6fb2ff;
+  --t-hit: #b4e36a;
+  --t-kill: #ff6f6a;
+  --t-after: #6fb2ff;
+  --t-cond: #e3a65a;
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px 9px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #ece6da;
+  text-align: left;
+  white-space: normal;
+  background: rgba(6, 5, 4, 0.9);
+  border: 1px solid rgba(255, 253, 233, 0.12);
+}
+
+.sd-intro {
+  margin: 0 0 4px;
+  font-size: 11.5px;
+  color: #b9b1a3;
+  font-style: italic;
+}
+
+.sd-line {
+  display: block;
+}
+
+.sd-tag {
+  margin-right: 3px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sd-tag.t-start { color: var(--t-start); }
+.sd-tag.t-use { color: var(--t-use); }
+.sd-tag.t-hit { color: var(--t-hit); }
+.sd-tag.t-kill { color: var(--t-kill); }
+.sd-tag.t-after { color: var(--t-after); }
+.sd-tag.t-cond { color: var(--t-cond); }
+
+.sd-head {
+  margin-top: 3px;
+  padding-top: 4px;
+  border-top: 1px dashed rgba(255, 253, 233, 0.14);
+  color: #fffde9;
+}
+
+.sd-stages {
+  display: grid;
+  gap: 3px;
+  margin: 3px 0 2px;
+  padding: 0;
+  list-style: none;
+}
+
+.sd-stage {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: 6px;
+  align-items: start;
+}
+
+.sd-num {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  font-family: var(--font-serif);
+  font-size: 11px;
+  font-weight: 700;
+  color: #fffde9;
+  border: 1.5px solid rgba(255, 253, 233, 0.75);
+  border-radius: 50%;
+}
+
+.sd-stage.gated .sd-num {
+  border-style: dashed;
+  color: var(--t-cond);
+  border-color: var(--t-cond);
+}
+
+.sd-pow b {
+  font-weight: 700;
+  color: #fffde9;
+}
+
+.sd-pow .sd-tag {
+  margin-left: 4px;
+}
+
+.hl-num { color: #fffde9; font-weight: 700; }
+.hl-kw, .hl-stack { font-weight: 700; }
+.hl-burn { color: #ff7d45; }
+.hl-rupture { color: #74dcec; }
+.hl-erosion { color: #b98bff; }
+.hl-tremor { color: #f0cb5c; }
+.hl-moonshade { color: #b3c8ff; }
+.hl-stack { color: #f4cf72; }
+.hl-wave { color: #8fe3d0; }
+
+.peek {
+  width: 380px;
+  max-height: min(64vh, 620px);
+  overflow-y: auto;
+}
+
+.peek-desc {
+  white-space: normal;
+}
+
+.spell-line .spell-rich {
+  margin-top: 4px;
+}
+
+@media (max-width: 600px) {
+  .peek {
+    width: auto;
+    max-height: 52vh;
+  }
+
+  .spell-rich {
+    font-size: 11.5px;
+  }
+}
+
+/* ── 타격 단계: 이름표의 Ⅰ Ⅱ Ⅲ, 대상 위로 뜨는 큰 숫자, 발동 카드 ── */
+.sp-stages {
+  display: flex;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.sp-st {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  font-family: var(--font-serif);
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255, 253, 233, 0.55);
+  border: 1.5px solid rgba(255, 253, 233, 0.3);
+  border-radius: 50%;
+  transition: background 0.15s, color 0.15s, transform 0.15s, border-color 0.15s;
+}
+
+.sp-st.now {
+  color: #120f0c;
+  background: var(--el);
+  border-color: #fffde9;
+  transform: scale(1.28);
+  box-shadow: 0 0 14px var(--el);
+}
+
+.sp-st.done,
+.sp-st.hit:not(.now) {
+  color: #fffde9;
+  border-color: var(--el);
+  background: color-mix(in srgb, var(--el) 35%, transparent);
+}
+
+.sp-st.miss {
+  color: rgba(255, 120, 110, 0.85);
+  border-style: dashed;
+  border-color: rgba(255, 120, 110, 0.7);
+  text-decoration: line-through;
+}
+
+.float.stage-num {
+  top: 6%;
+  font-family: var(--font-serif);
+  font-size: 44px;
+  font-weight: 900;
+  color: #fffde9;
+  -webkit-text-stroke: 1.5px rgba(0, 0, 0, 0.85);
+  text-shadow: 0 0 18px rgba(255, 220, 160, 0.8), 0 3px 8px #000;
+  translate: calc(-50% + var(--x, 0px) * 0.3) 0;
+  animation: stage-pop 0.75s cubic-bezier(0.2, 1.4, 0.4, 1) forwards;
+}
+
+.float.stage-num.last {
+  font-size: 58px;
+  color: #ffe6a8;
+}
+
+.float.stage-num.miss {
+  font-size: 22px;
+  color: #ff8a80;
+  text-shadow: 0 2px 6px #000;
+}
+
+@keyframes stage-pop {
+  0% {
+    opacity: 0;
+    transform: scale(2.2) rotate(-8deg);
+  }
+  22% {
+    opacity: 1;
+    transform: scale(0.95) rotate(0);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-14px) scale(1.05);
+  }
+}
+
+.float.trigger {
+  top: -4%;
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 900;
+  -webkit-text-stroke: 0;
+  padding: 2px 8px;
+  background: rgba(6, 5, 4, 0.85);
+  border: 1px solid currentColor;
+}
+
+.float.trigger.t-start { color: #7fd68a; }
+.float.trigger.t-kill { color: #ff6f6a; }
+.float.trigger.t-use,
+.float.trigger.t-after { color: #e3a65a; font-size: 13px; }
+
+.trigger-slot {
+  position: absolute;
+  top: 196px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 18;
+  width: min(420px, calc(100% - 24px));
+  display: grid;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.trigger-card {
+  --el: #fff;
+  display: grid;
+  gap: 2px;
+  padding: 7px 12px;
+  font-size: 12px;
+  color: #ece6da;
+  background: rgba(6, 5, 4, 0.9);
+  border-left: 3px solid var(--el);
+  animation: plate-in 0.28s cubic-bezier(0.2, 1, 0.3, 1) both;
+  transition: opacity 0.35s, transform 0.35s;
+}
+
+.trigger-card.out {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+.trigger-card small {
+  color: color-mix(in srgb, var(--el) 70%, #fff);
+}
+
+.trigger-card b {
+  font-size: 14px;
+}
+
+.trigger-card.t-start b { color: #7fd68a; }
+.trigger-card.t-kill b { color: #ff6f6a; }
+
+.tc-lines {
+  display: grid;
+  gap: 1px;
+}
+
+.start-banner b {
+  color: #7fd68a;
+}
+
+@media (max-width: 600px) {
+  .trigger-slot {
+    top: 150px;
+  }
+
+  .float.stage-num {
+    font-size: 34px;
+  }
+
+  .float.stage-num.last {
+    font-size: 44px;
+  }
+}

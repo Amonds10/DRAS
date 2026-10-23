@@ -1,5 +1,6 @@
 import { enemyHitAmount } from '../core/battle';
 import type { Ally, Element, Enemy, Intent, SpellDef, SpellInput, SpellOutput, Status } from '../core/types';
+import { ROMAN, describeSpell, type DescLine } from '../data/describe';
 import { ELEMENTS, STATUS_META, reactionById } from '../data/elements';
 import { TAG_NAMES } from '../data/spells';
 import { unitById } from '../data/units';
@@ -175,4 +176,62 @@ export interface LinkHint {
 /** 스킬 유형 표시: 아이콘 + 이름(무채색) */
 export function tagLabel(spell: SpellDef): HTMLElement {
   return h('span', { class: 'skill-tag' }, glyph(spell.tag, 'skill-tag-glyph'), TAG_NAMES[spell.tag]);
+}
+
+/** 설명 속 각인·중첩 이름과 "2·3" 같은 수치를 색으로 짚는다 */
+const HL_IDS = Object.keys(STATUS_META).filter((id) => STATUS_META[id].keyword || ['solarCore', 'aim', 'tide', 'hunger', 'fortitude', 'wave'].includes(id));
+const HL_BY_NAME = new Map(HL_IDS.map((id) => [STATUS_META[id].name, id]));
+const HL_RE = new RegExp(`(${[...HL_BY_NAME.keys()].sort((a, b) => b.length - a.length).join('|')}|\\d+·\\d+|[+×]\\d+(?:\\.\\d+)?%?)`, 'g');
+
+export function highlight(text: string): (string | HTMLElement)[] {
+  const out: (string | HTMLElement)[] = [];
+  let last = 0;
+  for (const m of text.matchAll(HL_RE)) {
+    if (m.index! > last) out.push(text.slice(last, m.index));
+    const id = HL_BY_NAME.get(m[0]);
+    out.push(h('span', { class: id ? `hl hl-${id} ${STATUS_META[id].keyword ? 'hl-kw' : 'hl-stack'}` : 'hl hl-num' }, m[0]));
+    last = m.index! + m[0].length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+function descLine(l: DescLine): HTMLElement {
+  return h('div', { class: 'sd-line' }, l.tags.map((t) => h('span', { class: `sd-tag t-${t.kind}` }, `[${t.text}]`)), h('span', { class: 'sd-text' }, highlight(l.text)));
+}
+
+/**
+ * 주문 효과 전문: [전투 시작 시]·[사용 시] → 타격 Ⅰ·Ⅱ·Ⅲ … → [시전 후]·[처치 시].
+ * 꼬리표마다 색이 다르고, 각인·중첩 이름은 그 색으로 짚는다.
+ */
+export function spellRich(spell: SpellDef, withIntro = true): HTMLElement {
+  const d = describeSpell(spell);
+  return h(
+    'div',
+    { class: 'spell-rich' },
+    withIntro ? h('p', { class: 'sd-intro' }, spell.desc) : null,
+    d.pre.map(descLine),
+    d.head ? h('div', { class: 'sd-head' }, h('b', {}, d.head)) : null,
+    d.attack.map(descLine),
+    d.stages.length
+      ? h(
+          'ol',
+          { class: 'sd-stages' },
+          d.stages.map((st) =>
+            h(
+              'li',
+              { class: `sd-stage ${st.only ? 'gated' : ''}`, 'data-n': String(st.n) },
+              h('span', { class: 'sd-num', 'aria-label': `${st.n}타` }, ROMAN[st.n - 1] ?? String(st.n)),
+              h(
+                'div',
+                { class: 'sd-body' },
+                h('div', { class: 'sd-pow' }, h('b', {}, `위력 ${st.power}`), st.target ? h('span', {}, ` · ${st.target}`) : null, st.only ? h('span', { class: 'sd-tag t-cond' }, `[${st.only}일 때만]`) : null),
+                st.lines.map(descLine),
+              ),
+            ),
+          ),
+        )
+      : null,
+    d.post.map(descLine),
+  );
 }

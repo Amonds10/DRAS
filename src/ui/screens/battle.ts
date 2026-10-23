@@ -4,6 +4,7 @@ import { previewChain } from '../../core/link';
 import { sound } from '../../audio/sound';
 import { finishBattle } from '../../core/run';
 import type { Ally, BattleEvent, BattleState, Element, Enemy, PlannedCast, SkillTag, Stack } from '../../core/types';
+import { ROMAN, describeSpell, type TagKind } from '../../data/describe';
 import { ELEMENTS, STATUS_META, reactionById } from '../../data/elements';
 import { FLOORS } from '../../data/encounters';
 import { TRAIT_DESC, enemyById } from '../../data/enemies';
@@ -21,7 +22,7 @@ import { characterBust, characterSvg } from '../../render/characters';
 import { characterMotion } from '../../render/rig';
 import { cornerStars, guillocheSvg, sealSvg, sigilRingSvg } from '../arcane';
 import { glyph } from '../glyphs';
-import { NUM, allyName, button, elBadge, elColor, hpBar, intentView, modal, spellFlow, statusRow, updateHpBar } from '../widgets';
+import { NUM, allyName, button, elBadge, elColor, highlight, hpBar, intentView, modal, spellFlow, spellRich, statusRow, updateHpBar } from '../widgets';
 
 function unitLabel(state: BattleState, uid: string): string {
   const ally = state.allies.find((a) => a.uid === uid);
@@ -29,6 +30,8 @@ function unitLabel(state: BattleState, uid: string): string {
   const enemy = state.enemies.find((e) => e.uid === uid);
   return enemy ? enemyById(enemy.defId).name : uid;
 }
+
+const PHASE_NAME: Record<'start' | 'use' | 'kill' | 'after', string> = { start: '전투 시작 시', use: '사용 시 · 조건 충족', kill: '처치 시', after: '시전 후 · 조건 충족' };
 
 function eventText(state: BattleState, ev: BattleEvent): string | null {
   switch (ev.type) {
@@ -58,6 +61,10 @@ function eventText(state: BattleState, ev: BattleEvent): string | null {
       return `— ${ev.round} 라운드 —`;
     case 'release':
       return `공명 해방: ${ELEMENTS[ev.element].name} ${ev.stacks}중첩`;
+    case 'trigger':
+      return `${unitLabel(state, ev.allyUid)}: ${spellById(ev.spellId).name} [${PHASE_NAME[ev.phase]}]`;
+    case 'stage':
+      return ev.skipped ? `  ${ROMAN[ev.index]} 불발` : null;
     default:
       return null;
   }
@@ -104,8 +111,6 @@ export function battleScreen(app: App): HTMLElement {
   /** 술사의 고유 중첩(게이지·오라로 보여 준다) */
   const stackOf = (a: Ally) => unitById(a.defId).stack ?? null;
   const SUPPORT_TAGS = new Set<SkillTag>(['heal', 'shield', 'buff', 'utility']);
-  /** 타격마다 한 번씩 연출하는 주문 유형(광역 베기·관통 광선·지연 폭격은 시전 때 한 번에) */
-  const PER_HIT_TAGS = new Set<SkillTag>(['strike', 'execute', 'multi', 'mark', 'drain', 'dot', 'finisher', 'resonance', 'debuff', 'aoe']);
   /** 의성어: 무기마다 다른 소리를 화면에 크게 쓴다 */
   const ONOMA: Record<string, [string, string]> = {
     thrust: ['푸욱!', '꿰뚫는다!'],
@@ -483,7 +488,7 @@ export function battleScreen(app: App): HTMLElement {
       h('div', { class: 'peek-head' }, glyph(sp.tag, 'peek-glyph'), h('span', { class: 'peek-owner' }, `${unit.name} · ${TAG_NAMES[sp.tag]}`), h('span', { class: 'peek-cost' }, Array.from({ length: sp.cost }, () => h('i')))),
       h('h3', {}, sp.name),
       h('div', { class: 'peek-flow' }, spellFlow(sp), h('span', {}, flowText(sp.input, sp.output))),
-      h('p', { class: 'peek-desc' }, sp.desc),
+      h('div', { class: 'peek-desc' }, spellRich(sp)),
       !affordable ? h('p', { class: 'peek-link break' }, `성진이 부족합니다 (남은 성진 ${remaining()})`) : null,
       affordable ? h('p', { class: `peek-link ${hint?.kind ?? 'start'}` }, !hint || hint.kind === 'start' ? (plan.length && sp.input === 'none' ? '기점 스킬: 앞의 체인을 닫고 새 체인을 엽니다.' : '첫 스킬로 체인을 엽니다.') : hint.kind === 'break' ? (st.sealed ? '성식에 막혀 링크가 끊깁니다.' : '앞 스킬과 성속이 맞지 않아 체인이 1로 돌아갑니다.') : `링크 ${st.chain} · 배율 ×${st.mult}`) : null,
       reaction ? h('p', { class: 'peek-reaction' }, h('b', {}, `반응 「${reaction.name}」`), ` ${reaction.desc}`) : null,
@@ -863,10 +868,42 @@ export function battleScreen(app: App): HTMLElement {
           h('small', { class: 'sp-who' }, `${step} · ${unit.name} `, h('span', {}, unit.code)),
           h('b', { class: 'sp-name' }, glyph(sp.tag, 'sp-glyph'), sp.name),
           h('div', { class: 'sp-meta' }, h('span', { class: 'sp-tag' }, `${TAG_NAMES[sp.tag]} · ${TAG_EN[sp.tag]}`), h('span', { class: `sp-link ${linked ? 'on' : ''}` }, chainText)),
+          stageCount(spellId) ? h('div', { class: 'sp-stages', 'aria-label': '타격 단계' }, Array.from({ length: stageCount(spellId) }, (_, i) => h('i', { class: 'sp-st', 'data-i': String(i) }, ROMAN[i]))) : null,
           chips.length ? h('div', { class: 'sp-result' }, chips) : null,
         ),
       ),
     );
+  };
+  const stageCount = (spellId: string) => describeSpell(spellById(spellId)).stages.length;
+  /** 이름표의 타격 단계 표시: 지금 치는 단계를 밝히고, 불발은 흐리게 */
+  const plateStage = (i: number, state: 'on' | 'miss') => {
+    const pips = plateSlot.querySelectorAll<HTMLElement>('.sp-st');
+    pips.forEach((x, j) => {
+      x.classList.toggle('now', j === i && state === 'on');
+      if (j < i && !x.classList.contains('miss')) x.classList.add('done');
+    });
+    pips[i]?.classList.add(state === 'on' ? 'hit' : 'miss');
+  };
+
+  /** 발동 카드: [전투 시작 시]·[처치 시] 효과를 이름표 아래에 잠깐 띄운다 */
+  const triggerSlot = h('div', { class: 'trigger-slot', 'aria-live': 'polite' });
+  scene.append(triggerSlot);
+  const showTrigger = (allyUid: string, spellId: string, phase: TagKind) => {
+    const sp = spellById(spellId);
+    const ally = battle.allies.find((a) => a.uid === allyUid);
+    if (!ally) return;
+    const d = describeSpell(sp);
+    const lines = [...d.pre, ...d.post].filter((l) => l.tags.some((t) => t.kind === phase));
+    const card = h(
+      'div',
+      { class: `trigger-card t-${phase}`, style: { '--el': elColor(unitById(ally.defId).element) } },
+      h('small', {}, `${unitById(ally.defId).name} · ${sp.name}`),
+      h('b', {}, `[${PHASE_NAME[phase as 'start' | 'kill']}]`),
+      lines.length ? h('div', { class: 'tc-lines' }, lines.map((l) => h('span', {}, highlight(l.text)))) : null,
+    );
+    triggerSlot.append(card);
+    setTimeout(() => card.classList.add('out'), 1500);
+    setTimeout(() => card.remove(), 1900);
   };
 
   const showEnemyPlate = (enemyUid: string, text: string) => {
@@ -988,7 +1025,27 @@ export function battleScreen(app: App): HTMLElement {
      * 지금 진행 중인 시전의 연출 상태. 근접 술사는 대상 앞으로 돌진해 타격마다 다른 자세로 베고,
      * 원거리 술사는 타격마다 한 발씩 쏜다. 시전이 끝나면 제자리로 돌아온다.
      */
-    let choreo: { caster: string; color: string; motion: string; melee: boolean; dashed: boolean; hits: number; idx: number; tag: SkillTag } | null = null;
+    let choreo: { caster: string; color: string; motion: string; melee: boolean; dashed: boolean; hits: number; idx: number; tag: SkillTag; pending: boolean; firstHit: boolean; last: boolean } | null = null;
+    /** 이 단계에서 피해를 받는 대상들(다음 단계·시전 전까지) */
+    const stageTargets = (from: number): string[] => {
+      const out: string[] = [];
+      for (let i = from + 1; i < events.length; i++) {
+        const x = events[i];
+        if (x.type === 'stage' || x.type === 'cast' || x.type === 'enemyAct' || x.type === 'enemyStunned' || x.type === 'fullChain') break;
+        if (x.type === 'damage' && x.source === 'ally') out.push(x.targetUid);
+      }
+      return out;
+    };
+    /** 이 시전에 아직 나갈(불발이 아닌) 단계가 남았는지 */
+    const laterStage = (from: number): boolean => {
+      for (let i = from + 1; i < events.length; i++) {
+        const x = events[i];
+        if (x.type === 'cast' || x.type === 'enemyAct' || x.type === 'fullChain') return false;
+        if (x.type === 'stage' && !x.skipped) return true;
+      }
+      return false;
+    };
+    let startShown = false;
     const endCast = async () => {
       if (!choreo) return;
       const c = choreo;
@@ -1035,12 +1092,13 @@ export function battleScreen(app: App): HTMLElement {
           stage.fx?.gather(chest(ev.allyUid).add(new THREE.Vector3(0.7, 0.1, 0)), color, sp.cost >= 2 ? 26 : 16, 0.42);
           const motion = characterMotion(unit.id);
           const hitCount = lastTargets.length;
-          const perHit = hitCount > 0 && PER_HIT_TAGS.has(sp.tag);
+          const castEnd = nextCast < 0 ? events.length : nextCast;
+          const perHit = events.slice(k + 1, castEnd).some((x) => x.type === 'stage');
           const melee = perHit && (motion === 'thrust' || motion === 'slash' || motion === 'bash');
           // 연출 배경: 무대 뒤가 어두워지고 성속 색 무늬가 깔린다
           stage.setBackdrop(color, SUPPORT_TAGS.has(sp.tag) || sp.tag === 'charge' ? 0.55 : sp.cost >= 2 ? 0.9 : 0.8);
-          await wait(360);
-          choreo = { caster: ev.allyUid, color, motion, melee, dashed: false, hits: hitCount, idx: 0, tag: sp.tag };
+          await wait(460);
+          choreo = { caster: ev.allyUid, color, motion, melee, dashed: false, hits: hitCount, idx: 0, tag: sp.tag, pending: false, firstHit: false, last: false };
           if (melee) {
             // 대상 앞으로 돌진
             stage.anim(ev.allyUid, 'dash');
@@ -1123,37 +1181,23 @@ export function battleScreen(app: App): HTMLElement {
           const fx = stage.fx;
           const p = chest(ev.targetUid);
           let finale = false;
-          if (ev.source === 'ally' && choreo && choreo.idx < choreo.hits) {
+          if (ev.source === 'ally' && choreo && choreo.pending) {
+            // 단계의 휘두름·탄은 stage 이벤트에서 나갔다. 여기서는 맞는 순간만 그린다.
             const c = choreo;
-            const i = c.idx++;
-            const last = i === c.hits - 1;
-            finale = last && (c.hits > 1 || ev.amount >= 12 || crit);
-            const col = c.color;
-            if (c.melee) {
-              // 근접: 타격마다 자세를 바꿔 벤다(내려베기 → 올려베기 → 찌르기 …, 마지막은 뛰어올라 내리꽂기)
-              const pose = last && c.hits > 1 ? 'finish' : (['combo1', 'combo2', 'combo3'] as const)[i % 3];
-              if (c.tag !== 'aoe') stage.dash(c.caster, ev.targetUid, 0.08);
-              stage.anim(c.caster, pose);
-              await wait(pose === 'finish' ? 200 : 75);
-              const roll = { combo1: -0.9, combo2: 2.3, combo3: 0.1, finish: -1.35 }[pose];
-              stage.toon.slash(p, col, pose === 'finish' ? 4.6 : 3.4, roll);
-              if (pose === 'finish') stage.toon.slash(p, '#ffffff', 3.8, roll + 0.5, 0.04);
-              stage.afterimage(c.caster, col, 2);
-            } else {
-              // 원거리: 타격마다 한 발
-              stage.anim(c.caster, c.motion === 'shoot' ? 'fire' : i % 2 ? 'cast2' : 'cast1');
-              stage.toon.shot(chest(c.caster).add(new THREE.Vector3(0.7, 0.15, 0)), p, col, 0.12);
-              sound.whoosh(c.motion === 'shoot' ? 'projectile' : 'mark');
-              await wait(115);
+            const first = c.firstHit;
+            c.firstHit = false;
+            const last = c.last;
+            finale = last && first && (c.hits > 1 || ev.amount >= 12 || crit);
+            stage.toon.hit(p, c.color, last ? 1.3 : first ? 1 : 0.8);
+            if (first) {
+              stage.kick((c.idx % 2 ? 1 : -1) * (0.025 + 0.01 * Math.min(c.idx, 3)), last ? 1.1 : 0.55);
+              stage.hitStop(last ? 0.1 : 0.05);
+              onomatopoeia(ev.targetUid, c.motion, finale);
             }
-            stage.toon.hit(p, col, last ? 1.3 : 1);
-            stage.kick((i % 2 ? 1 : -1) * (0.025 + 0.01 * Math.min(i, 3)), last ? 1.1 : 0.55);
-            stage.hitStop(last ? 0.09 : 0.045);
-            onomatopoeia(ev.targetUid, c.motion, finale);
             if (finale) {
-              stage.toon.finale(p, col, crit ? 1.5 : 1.1);
-              stage.slowMo(0.35, 0.28);
-              if (c.hits >= 3 || crit) speedLines(col);
+              stage.toon.finale(p, c.color, crit ? 1.5 : 1.1);
+              stage.slowMo(0.35, 0.3);
+              if (c.hits >= 3 || crit) speedLines(c.color);
             }
           }
           if (fx) {
@@ -1200,7 +1244,7 @@ export function battleScreen(app: App): HTMLElement {
           sound.hit(crit ? 'crit' : ev.amount === 0 && ev.absorbed ? 'blocked' : ev.source === 'ally' ? (lastTag === 'execute' || (lastCaster.length && characterMotion(battle.allies.find((a) => a.uid === lastCaster)?.defId ?? '') === 'slash') ? 'slash' : 'ally') : ev.source === 'erosion' ? 'burn' : ev.source === 'burst' ? 'doom' : ev.source);
           floatText(ev.targetUid, ev.amount > 0 ? `${ev.amount}` : `⛨${ev.absorbed}`, ev.source === 'enemy' ? 'dmg-ally' : ev.source === 'burn' ? 'dmg-burn' : crit ? 'dmg-crit' : big ? 'dmg-big' : 'dmg');
           if (big && !finale) stage.glowPulse(crit ? 0.35 : 0.15);
-          await wait(finale ? 420 : crit ? 520 : lastTag === 'multi' ? 170 : 230);
+          await wait(finale ? 520 : crit ? 600 : lastTag === 'multi' ? 210 : 280);
           break;
         }
         case 'heal': {
@@ -1306,6 +1350,89 @@ export function battleScreen(app: App): HTMLElement {
           sound.enemyAct();
           await wait(360);
           stage.focus(null);
+          break;
+        }
+        case 'stage': {
+          const c = choreo;
+          if (!c || c.caster !== ev.allyUid) break;
+          c.hits = ev.total;
+          c.idx = ev.index;
+          plateStage(ev.index, ev.skipped ? 'miss' : 'on');
+          const here = stageTargets(k);
+          const tgt = here[0] ?? focusAt(events, k);
+          if (ev.skipped) {
+            // 조건이 맞지 않아 이 단계는 나가지 않는다
+            c.pending = false;
+            if (tgt) floatText(tgt, `${ROMAN[ev.index]} 불발`, 'stage-num miss');
+            sound.ui('ui_toggle', 0.35);
+            await wait(340);
+            break;
+          }
+          const last = !laterStage(k);
+          c.pending = true;
+          c.firstHit = true;
+          c.last = last;
+          const col = c.color;
+          const p = tgt ? chest(tgt) : enemyCenter();
+          if (tgt) floatText(tgt, ROMAN[ev.index] ?? String(ev.index + 1), `stage-num ${last ? 'last' : ''}`);
+          if (c.melee) {
+            // 근접: 단계마다 자세를 바꾼다(내려베기 → 올려베기 → 찌르기 …, 마지막은 뛰어올라 내리꽂기)
+            const pose = last && ev.total > 1 ? 'finish' : (['combo1', 'combo2', 'combo3'] as const)[ev.index % 3];
+            if (tgt && c.tag !== 'aoe') stage.dash(c.caster, tgt, 0.1);
+            stage.anim(c.caster, pose);
+            sound.whoosh('sweep');
+            await wait(pose === 'finish' ? 300 : 150);
+            const roll = { combo1: -0.9, combo2: 2.3, combo3: 0.1, finish: -1.35 }[pose];
+            stage.toon.slash(p, col, pose === 'finish' ? 4.8 : 3.4, roll);
+            // 단계마다 다른 모양: 둘째는 X자, 셋째는 꿰뚫는 선, 마무리는 흰 겹베기와 폭발
+            if (ev.index % 3 === 1) stage.toon.slash(p, col, 3.1, roll + 1.7, 0.06);
+            if (ev.index % 3 === 2) stage.toon.beam(chest(c.caster), p.clone().add(new THREE.Vector3(1.2, 0, 0)), col, 0.45, 0.24);
+            if (pose === 'finish') {
+              stage.toon.slash(p, '#ffffff', 4, roll + 0.5, 0.04);
+              stage.toon.slash(p, col, 4.2, roll + 2.2, 0.1);
+            }
+            stage.afterimage(c.caster, col, last ? 4 : 2);
+          } else {
+            // 원거리: 단계마다 한 발(광역이면 대상마다), 마지막 단계는 굵은 광선
+            stage.anim(c.caster, c.motion === 'shoot' ? 'fire' : ev.index % 2 ? 'cast2' : 'cast1');
+            const from = chest(c.caster).add(new THREE.Vector3(0.7, 0.15, 0));
+            const aims = here.length ? [...new Set(here)] : tgt ? [tgt] : [];
+            aims.forEach((t, j) => {
+              if (last && ev.total > 1) stage.toon.beam(from, chest(t), col, 0.55, 0.3, j * 0.04);
+              else stage.toon.shot(from, chest(t), col, 0.15, j * 0.05);
+            });
+            if (ev.index >= 1) stage.fx?.castCircle(chest(c.caster), col, 2 + ev.index * 0.4);
+            sound.whoosh(c.motion === 'shoot' ? 'projectile' : 'mark');
+            await wait(last && ev.total > 1 ? 260 : 180);
+          }
+          break;
+        }
+        case 'trigger': {
+          if (ev.phase === 'start') {
+            // 전투 시작 시 효과: 누구의 시전보다 먼저 한 줄씩
+            if (!startShown) {
+              startShown = true;
+              showCallout(h('div', { class: 'banner phase-banner start-banner' }, h('small', {}, 'COMBAT START'), h('b', {}, '전투 시작')), 'start');
+              sound.ui('card_fan', 0.4);
+              await wait(520);
+              clearCallout();
+            }
+            const col = elColor(unitById(battle.allies.find((a) => a.uid === ev.allyUid)!.defId).element);
+            stage.focus(chest(ev.allyUid), 0.4);
+            stage.anim(ev.allyUid, 'channel');
+            stage.fx?.magicCircle(feet(ev.allyUid), col, 2.2, 0.9, 'magic_01');
+            floatText(ev.allyUid, '[전투 시작 시]', 'trigger t-start');
+            showTrigger(ev.allyUid, ev.spellId, 'start');
+            await wait(560);
+          } else if (ev.phase === 'kill') {
+            floatText(ev.allyUid, '[처치 시]', 'trigger t-kill');
+            showTrigger(ev.allyUid, ev.spellId, 'kill');
+            stage.glowPulse(0.25);
+            await wait(420);
+          } else {
+            floatText(ev.allyUid, '조건 충족', `trigger t-${ev.phase}`);
+            await wait(160);
+          }
           break;
         }
         case 'unleash':
