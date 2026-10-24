@@ -52,27 +52,27 @@ const list: RewardDef[] = [
     id: 'flow',
     name: '성진의 흐름',
     glyph: '✦',
-    desc: '성진을 최대 1개 더 모을 수 있습니다.',
+    desc: '매 턴 얻는 성진이 1 늘어납니다.',
     apply: (run) => {
-      run.mods.maxSp += 1;
+      run.mods.stardustPerTurn += 1;
     },
   },
   {
     id: 'reserve',
     name: '성진 비축',
     glyph: '❖',
-    desc: '전투를 시작할 때 성진을 1 더 가지고 시작합니다.',
+    desc: '전투를 시작할 때 성진을 2 더 가지고 시작합니다.',
     apply: (run) => {
-      run.mods.startSp += 1;
+      run.mods.startStardust += 2;
     },
   },
   {
     id: 'resonance',
-    name: '선율 예열',
+    name: '완성 공명',
     glyph: '✷',
-    desc: '전투를 시작할 때 필살기 에너지가 25% 더 차 있습니다.',
+    desc: '성좌 완성(풀 체인) 보너스 피해가 50% 늘어납니다.',
     apply: (run) => {
-      run.mods.startEnergy = Math.min(1, run.mods.startEnergy + 0.25);
+      run.mods.fullChainBonus += 0.5;
     },
   },
 ];

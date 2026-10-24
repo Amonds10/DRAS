@@ -5964,3 +5964,530 @@ button.spell-line.equip:disabled {
     display: none;
   }
 }
+
+/* ═══════════ 전투 v4: 라운드 계획 + 링크 명령 패널 ═══════════ */
+.cmd-slot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 12;
+  padding: 0 12px 12px;
+  pointer-events: none;
+}
+
+.cmd {
+  display: grid;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.executing .cmd-slot {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s;
+}
+
+.executing .cmd-slot * {
+  pointer-events: none;
+}
+
+.cmd-desc {
+  --el: #fff;
+  justify-self: center;
+  width: min(760px, 100%);
+  min-height: 64px;
+  padding: 8px 14px;
+  background: rgba(7, 7, 9, 0.9);
+  border-left: 3px solid var(--el);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.5);
+}
+
+.cd-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+
+.cd-head small {
+  font-size: 11px;
+  color: color-mix(in srgb, var(--el) 70%, #fff);
+}
+
+.cd-head b {
+  font-size: 17px;
+}
+
+.cd-meta {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--gold);
+}
+
+.cmd-desc .ab-desc {
+  font-size: 12.5px;
+}
+
+.cmd-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.cmd-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, 132px);
+  gap: 5px;
+}
+
+.cmd-tab {
+  --el: #fff;
+  position: relative;
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 8px 4px 4px;
+  text-align: left;
+  color: #ece6da;
+  cursor: pointer;
+  background: rgba(10, 10, 13, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-left: 3px solid color-mix(in srgb, var(--el) 60%, transparent);
+  transition: background 0.15s, transform 0.12s;
+}
+
+.cmd-tab.on {
+  background: color-mix(in srgb, var(--el) 24%, rgba(10, 10, 13, 0.95));
+  border-color: var(--el);
+  transform: translateY(-2px);
+}
+
+.cmd-tab.planned .ct-text small {
+  color: var(--gold);
+}
+
+.cmd-tab.dead {
+  opacity: 0.35;
+}
+
+.ct-face {
+  width: 34px;
+  height: 34px;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--el) 30%, #15131c), #0b0a10);
+}
+
+.ct-face svg {
+  width: 100%;
+  height: 100%;
+}
+
+.ct-text {
+  display: grid;
+  min-width: 0;
+}
+
+.ct-text b {
+  font-size: 13px;
+}
+
+.ct-text small {
+  font-size: 10.5px;
+  color: #a39b8e;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cmd-tab kbd {
+  position: absolute;
+  right: 4px;
+  top: 2px;
+  font-size: 9px;
+  color: #8c857a;
+}
+
+.cmd-skills {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.cmd-skill {
+  --el: #fff;
+  position: relative;
+  min-width: 0;
+  padding: 6px 9px 7px;
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  text-align: left;
+  color: #ece6da;
+  cursor: pointer;
+  background: rgba(10, 10, 13, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-bottom: 3px solid transparent;
+  clip-path: polygon(0 0, 100% 0, 100% 82%, 92% 100%, 0 100%);
+  transition: transform 0.12s, background 0.15s, border-color 0.15s;
+}
+
+.cmd-skill:hover:not(:disabled) {
+  border-color: var(--el);
+  transform: translateY(-3px);
+}
+
+.cmd-skill.on {
+  background: color-mix(in srgb, var(--el) 28%, rgba(10, 10, 13, 0.95));
+  border-color: var(--el);
+  transform: translateY(-4px);
+}
+
+.cmd-skill:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.cmd-skill.cooling {
+  opacity: 0.4;
+  filter: grayscale(0.7);
+}
+
+.cs-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cs-glyph {
+  width: 16px;
+  height: 16px;
+  color: var(--el);
+}
+
+.cs-glyph svg {
+  width: 100%;
+  height: 100%;
+}
+
+.cs-top kbd {
+  margin-left: auto;
+  font-size: 10px;
+  color: #8c857a;
+}
+
+.cs-name {
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cs-flow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cs-flow small {
+  font-family: var(--font-latin, serif);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: #8c857a;
+}
+
+.cs-hint,
+.cs-cd {
+  justify-self: start;
+  padding: 1px 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.cs-hint.link {
+  color: #111;
+  background: var(--gold);
+}
+
+.cs-hint.reaction {
+  color: #111;
+  background: linear-gradient(90deg, #f2c86a, #e09bc4, #74cdbd);
+}
+
+.cs-hint.break {
+  color: #ffb4ad;
+  border: 1px solid rgba(255, 110, 96, 0.7);
+}
+
+.cs-hint.start {
+  color: #cfc8bb;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.cs-cd {
+  color: #9fb4d6;
+  border: 1px dashed rgba(159, 180, 214, 0.6);
+}
+
+.cs-order {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-num);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent-ink);
+  background: var(--accent);
+}
+
+.cmd-side {
+  display: grid;
+  gap: 6px;
+  min-width: 150px;
+}
+
+.cmd-dust {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: rgba(10, 10, 13, 0.85);
+}
+
+.cmd-dust small {
+  font-size: 10px;
+  color: #a39b8e;
+}
+
+.cmd-dust span {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  max-width: 96px;
+}
+
+.cmd-dust i {
+  width: 7px;
+  height: 7px;
+  transform: rotate(45deg);
+  border: 1px solid var(--gold-dim);
+}
+
+.cmd-dust i.on {
+  background: var(--gold);
+  border-color: var(--gold);
+}
+
+.cmd-dust i.spend {
+  background: rgba(216, 192, 138, 0.25);
+}
+
+.cmd-dust b {
+  margin-left: auto;
+  font-family: var(--font-num);
+  font-size: 13px;
+  color: var(--gold);
+}
+
+.cmd-cast {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 0;
+  padding: 6px 14px;
+  color: #111;
+  cursor: pointer;
+  background: var(--gold);
+  border: none;
+  clip-path: polygon(8% 0, 100% 0, 100% 100%, 0 100%);
+}
+
+.cmd-cast small {
+  font-family: var(--font-num);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.cmd-cast b {
+  font-size: 19px;
+}
+
+.cmd-cast kbd {
+  font-size: 9px;
+  opacity: 0.6;
+}
+
+.cmd-cast.pass {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ece6da;
+}
+
+.cmd-cast.full {
+  background: linear-gradient(90deg, #ffd27a, #fff2c2, #ffd27a);
+  box-shadow: 0 0 18px rgba(255, 210, 122, 0.6);
+}
+
+.v4 .bx-info-slot {
+  bottom: 230px;
+}
+
+.v4 .hud-slot .chain-track .cn-name {
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bx-ab-head .flow {
+  margin-left: 4px;
+}
+
+@media (max-width: 760px) {
+  .cmd-slot {
+    padding: 0 6px 6px;
+  }
+
+  .cmd-desc {
+    min-height: 0;
+    padding: 6px 10px;
+  }
+
+  .cmd-desc .ab-desc {
+    font-size: 11.5px;
+    max-height: 4.8em;
+    overflow-y: auto;
+  }
+
+  .cmd-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .cmd-tabs {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .cmd-tab {
+    grid-template-columns: 1fr;
+    padding: 2px;
+    justify-items: center;
+  }
+
+  .ct-text small,
+  .cmd-tab kbd {
+    display: none;
+  }
+
+  .ct-text b {
+    font-size: 11px;
+  }
+
+  .ct-face {
+    width: 28px;
+    height: 28px;
+  }
+
+  .cmd-skills {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cs-name {
+    font-size: 12.5px;
+  }
+
+  .cs-top kbd {
+    display: none;
+  }
+
+  .cmd-side {
+    grid-template-columns: 1fr auto;
+    min-width: 0;
+  }
+
+  .v4 .bx-info-slot {
+    bottom: 8px;
+  }
+}
+
+/* 스킬 버튼·설명의 받는 → 넘기는 성속: 링크를 읽는 핵심이라 크게 */
+.cs-flow .flow-node,
+.cd-head .flow-node {
+  font-size: 15px;
+  font-weight: 700;
+  text-shadow: 0 0 6px color-mix(in srgb, var(--el) 60%, transparent);
+}
+
+.cs-flow .spell-flow,
+.cd-head .spell-flow {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+}
+
+@media (max-width: 760px) {
+  .cmd {
+    gap: 5px;
+  }
+
+  .cmd-desc .ab-desc {
+    max-height: 3.3em;
+  }
+
+  .cd-head b {
+    font-size: 14px;
+  }
+
+  .cmd-skills {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .cmd-skill {
+    padding: 4px 5px 5px;
+    gap: 2px;
+  }
+
+  .cs-top .cost,
+  .cs-flow small {
+    display: none;
+  }
+
+  .cs-name {
+    font-size: 11.5px;
+  }
+
+  .cs-hint,
+  .cs-cd {
+    font-size: 9.5px;
+    padding: 0 4px;
+  }
+
+  .cmd-tab {
+    padding: 1px;
+  }
+
+  .ct-face {
+    width: 24px;
+    height: 24px;
+  }
+
+  .cmd-dust {
+    padding: 2px 6px;
+  }
+
+  .cmd-cast {
+    padding: 2px 12px;
+  }
+
+  .cmd-cast b {
+    font-size: 15px;
+  }
+}

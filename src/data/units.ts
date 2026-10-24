@@ -1,6 +1,6 @@
 import type { Role, UnitDef } from '../core/types';
 
-/** 술사 6명. 각자 일반 공격·전투 스킬·필살기와 패시브를 가진다. */
+/** 술사 6명. 각자 고정 스킬 4개와 패시브를 가진다. */
 const list: UnitDef[] = [
   {
     id: 'solea',
@@ -12,9 +12,7 @@ const list: UnitDef[] = [
     maxHp: 80,
     atk: 14,
     def: 5,
-    spd: 105,
-    energy: 120,
-    kit: { basic: 'solea_basic', skill: 'solea_skill', ultimate: 'solea_ult' },
+    spells: ['dawn_thrust', 'stellar_core', 'flare_rush', 'supernova_lance'],
     passive: { name: '태양심장', desc: '화상 걸린 적을 때릴 때마다 태양핵 +1(최대 6). 태양핵은 초신성 창이 모두 태운다.' },
     stack: { id: 'solarCore', max: 6 },
   },
@@ -28,9 +26,7 @@ const list: UnitDef[] = [
     maxHp: 72,
     atk: 11,
     def: 4,
-    spd: 100,
-    energy: 110,
-    kit: { basic: 'lune_basic', skill: 'lune_skill', ultimate: 'lune_ult' },
+    spells: ['crescent_edge', 'moon_veil', 'moon_brand', 'crescent_finale'],
     passive: { name: '밀물', desc: '아군이 회복할 때마다 만조 +1(최대 10). 만조는 그믐의 종장이 모두 푼다.' },
     stack: { id: 'tide', max: 10 },
   },
@@ -44,9 +40,7 @@ const list: UnitDef[] = [
     maxHp: 70,
     atk: 11,
     def: 4,
-    spd: 112,
-    energy: 100,
-    kit: { basic: 'nebia_basic', skill: 'nebia_skill', ultimate: 'nebia_ult' },
+    spells: ['nebula_mist', 'star_tithe', 'amplify', 'primal_light'],
     passive: { name: '증폭자', desc: '네비아가 거는 각인은 위력 +1. 공명파동으로 아군의 다음 시전을 강화한다.' },
   },
   {
@@ -59,9 +53,7 @@ const list: UnitDef[] = [
     maxHp: 64,
     atk: 15,
     def: 3,
-    spd: 102,
-    energy: 130,
-    kit: { basic: 'vela_basic', skill: 'vela_skill', ultimate: 'vela_ult' },
+    spells: ['meteor_snipe', 'scatter_meteor', 'gatling_comet', 'final_star'],
     passive: { name: '사냥꾼의 눈', desc: '균열 걸린 적을 맞힐 때마다 조준 +1(최대 6). 조준 1당 벨라의 피해 +6%.' },
     stack: { id: 'aim', max: 6 },
   },
@@ -75,9 +67,7 @@ const list: UnitDef[] = [
     maxHp: 68,
     atk: 12,
     def: 4,
-    spd: 108,
-    energy: 120,
-    kit: { basic: 'nox_basic', skill: 'nox_skill', ultimate: 'nox_ult' },
+    spells: ['siphon', 'void_touch', 'rot_seed', 'abyss_feast'],
     passive: { name: '포식', desc: '적이 화상·잠식 피해를 받을 때마다 허기 +1(최대 10). 허기 1당 녹스의 피해 +5%.' },
     stack: { id: 'hunger', max: 10 },
   },
@@ -91,9 +81,7 @@ const list: UnitDef[] = [
     maxHp: 92,
     atk: 10,
     def: 7,
-    spd: 94,
-    energy: 110,
-    kit: { basic: 'astra_basic', skill: 'astra_skill', ultimate: 'astra_ult' },
+    spells: ['bulwark_bash', 'constellation_echo', 'star_aegis', 'star_judgement'],
     passive: { name: '불굴', desc: '보호막을 얻거나 공격받을 때마다 불굴 +1(최대 8). 반격 피해 +불굴×2.' },
     stack: { id: 'fortitude', max: 8 },
   },

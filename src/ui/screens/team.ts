@@ -1,27 +1,25 @@
 import { randomSeed, Rng } from '../../core/rng';
 import { newRun } from '../../core/run';
-import { TEAM_SIZE } from '../../core/team';
-import type { Slot, UnitDef } from '../../core/types';
-import { SLOT_NAMES, abilityById } from '../../data/abilities';
+import { TEAM_SIZE, analyzeTeam } from '../../core/team';
+import type { UnitDef } from '../../core/types';
 import { DECKS, type DeckPreset } from '../../data/decks';
-import { ENEMIES } from '../../data/enemies';
 import { ELEMENTS } from '../../data/elements';
+import { TAG_NAMES, spellById } from '../../data/spells';
 import { ROLE_NAMES, UNIT_LIST, unitById } from '../../data/units';
 import { characterSvg } from '../../render/characters';
 import type { App } from '../app';
 import { h } from '../dom';
 import { showHelp } from '../help';
-import { NUM, button, elBadge, elColor, highlight } from '../widgets';
+import { NUM, button, costPips, elBadge, elColor, highlight, reactionChip, spellFlow, spellText } from '../widgets';
 
-/** 능력 한 칸: 일반 공격·전투 스킬·필살기 */
-function abilityLine(unit: UnitDef, slot: Slot): HTMLElement {
-  const ab = abilityById(unit.kit[slot]);
-  const cost = slot === 'basic' ? '성진 +1' : slot === 'skill' ? '성진 -1' : `에너지 ${unit.energy}`;
+/** 스킬 한 칸: 유형, 이름, 받는→넘기는 성속, 성진, 쿨타임, 설명 */
+function skillLine(spellId: string): HTMLElement {
+  const sp = spellById(spellId);
   return h(
     'div',
-    { class: `spell-line kit-line slot-${slot}` },
-    h('div', { class: 'spell-line-head' }, h('span', { class: 'kit-slot' }, SLOT_NAMES[slot]), h('span', { class: 'spell-name' }, ab.name), h('span', { class: 'kit-cost' }, cost)),
-    h('p', { class: 'ab-desc' }, highlight(ab.desc)),
+    { class: 'spell-line kit-line' },
+    h('div', { class: 'spell-line-head' }, h('span', { class: 'kit-slot' }, TAG_NAMES[sp.tag]), h('span', { class: 'spell-name' }, sp.name), spellFlow(sp), h('span', { class: 'kit-cost' }, sp.cooldown ? `쿨타임 ${sp.cooldown}` : '매 라운드'), costPips(sp.cost)),
+    spellText(sp),
   );
 }
 
@@ -66,7 +64,7 @@ function statBar(label: string, value: number, max: number): HTMLElement {
   return h('div', { class: 'stat-bar' }, h('dt', {}, label), h('dd', {}, h('b', {}, value), h('span', { class: 'stat-track' }, h('i', { style: { width: `${Math.round((value / max) * 100)}%` } }))));
 }
 
-/** 상세: 능력치, 패시브, 일반 공격·전투 스킬·필살기 */
+/** 상세: 능력치, 패시브, 고정 스킬 4개 */
 function unitDetail(unit: UnitDef, order: number, full: boolean, onToggle: () => void): HTMLElement {
   const selected = order >= 0;
   const detail = h(
@@ -84,32 +82,41 @@ function unitDetail(unit: UnitDef, order: number, full: boolean, onToggle: () =>
         h('p', { class: 'detail-sub' }, elBadge(unit.element, 'sm'), h('span', {}, `${ELEMENTS[unit.element].name} · ${ROLE_NAMES[unit.role]}`)),
         h('p', { class: 'unit-concept' }, unit.concept),
         h('p', { class: 'unit-passive' }, h('b', {}, `패시브 · ${unit.passive.name}`), h('span', {}, highlight(unit.passive.desc))),
-        h('dl', { class: 'detail-stats' }, statBar('HP', unit.maxHp, 100), statBar('공격', unit.atk, 16), statBar('방어', unit.def, 8), statBar('속도', unit.spd, 120)),
+        h('dl', { class: 'detail-stats' }, statBar('HP', unit.maxHp, 100), statBar('공격', unit.atk, 16), statBar('방어', unit.def, 8)),
         button(selected ? `편성에서 빼기 (${order + 1}번)` : full ? '팀이 가득 찼습니다' : '편성에 넣기', onToggle, { variant: selected ? 'ghost' : 'primary', disabled: !selected && full, class: 'detail-toggle' }),
       ),
     ),
-    h('div', { class: 'unit-spells' }, h('p', { class: 'unit-spells-head' }, '능력'), (['basic', 'skill', 'ultimate'] as Slot[]).map((slot) => abilityLine(unit, slot))),
+    h('div', { class: 'unit-spells' }, h('p', { class: 'unit-spells-head' }, '스킬 4개 · 전투 내내 모두 쓸 수 있고, 쿨타임으로 제한됩니다'), unit.spells.map(skillLine)),
   );
   detail.querySelector('.detail-fig')!.innerHTML = characterSvg(unit.id);
   return detail;
 }
 
-/** 팀 요약: 속성 구성과, 그 속성으로 격파할 수 있는 적 */
+/** 팀 궁합: 이 팀이 만들 수 있는 최대 체인, 성좌 반응, 예시 순서 */
 function synergyPanel(selected: string[]): HTMLElement {
-  if (selected.length === 0) return h('div', { class: 'synergy empty' }, h('p', {}, '술사를 고르면 이 팀이 어떤 적의 약점을 찌를 수 있는지 보여줍니다.'));
-  const els = new Set(selected.map((id) => unitById(id).element));
-  const foes = Object.values(ENEMIES);
-  const covered = foes.filter((e) => e.weak.some((w) => els.has(w)));
+  if (selected.length === 0) return h('div', { class: 'synergy empty' }, h('p', {}, '술사를 고르면 이 팀이 만들 수 있는 링크와 성좌 반응을 보여줍니다.'));
+  const syn = analyzeTeam(selected);
   return h(
     'div',
     { class: 'synergy' },
-    h('div', { class: 'syn-block' }, h('h4', {}, '팀 속성'), h('div', { class: 'chip-row' }, [...els].map((e) => h('span', { class: 'profile-chip' }, elBadge(e, 'sm'), ` ${ELEMENTS[e].name}`)))),
     h(
       'div',
-      { class: 'syn-block' },
-      h('h4', {}, `약점을 찌를 수 있는 적 ${covered.length} / ${foes.length}`),
-      h('ul', { class: 'syn-foes' }, foes.map((f) => h('li', { class: covered.includes(f) ? 'on' : '' }, h('span', {}, f.glyph, ' ', f.name), h('span', {}, f.weak.map((w) => elBadge(w, 'sm')))))),
+      { class: 'syn-stats' },
+      h('div', { class: 'syn-stat' }, h('span', { class: 'syn-label' }, '가능한 최대 체인'), h('span', { class: `syn-value ${syn.maxChain >= 4 ? 'full' : ''}` }, syn.maxChain)),
+      h('div', { class: 'syn-stat' }, h('span', { class: 'syn-label' }, '링크 쌍'), h('span', { class: 'syn-value' }, syn.linkPairs)),
     ),
+    h('div', { class: 'syn-block' }, h('h4', {}, '발동 가능한 성좌 반응'), syn.reactions.length ? h('div', { class: 'chip-row' }, syn.reactions.map(reactionChip)) : h('p', { class: 'syn-none' }, '아직 없음')),
+    syn.bestSequence.length > 1
+      ? h(
+          'div',
+          { class: 'syn-block' },
+          h('h4', {}, '이어지는 순서 예시'),
+          h('ol', { class: 'syn-seq' }, syn.bestSequence.map((st) => {
+            const sp = spellById(st.spellId);
+            return h('li', {}, elBadge(unitById(st.unitId).element, 'sm'), h('span', {}, sp.name), spellFlow(sp));
+          })),
+        )
+      : null,
   );
 }
 

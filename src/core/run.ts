@@ -6,7 +6,7 @@ import { Rng } from './rng';
 import { TEAM_SIZE } from './team';
 import type { Ally, BattleMods, BattleState } from './types';
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 export const REVIVE_RATIO = 0.25;
 export const POST_BATTLE_HEAL = 0.1;
 
@@ -23,7 +23,7 @@ export interface RunState {
   mods: BattleMods;
   battle: BattleState | null;
   rewardChoices: string[] | null;
-  stats: { battlesWon: number; breaks: number; ultimates: number; turns: number };
+  stats: { battlesWon: number; maxChain: number; reactions: number; fullChains: number; rounds: number };
 }
 
 export function newRun(unitIds: string[], seed: number): RunState {
@@ -31,7 +31,7 @@ export function newRun(unitIds: string[], seed: number): RunState {
   if (new Set(unitIds).size !== unitIds.length) throw new Error('같은 술사를 두 번 편성할 수 없습니다.');
   const team: Ally[] = unitIds.map((id, i) => {
     const def = unitById(id);
-    return { uid: `a${i}`, defId: id, hp: def.maxHp, maxHp: def.maxHp, atk: def.atk, def: def.def, shield: 0, statuses: [], energy: 0 };
+    return { uid: `a${i}`, defId: id, hp: def.maxHp, maxHp: def.maxHp, atk: def.atk, def: def.def, shield: 0, statuses: [], cooldowns: {} };
   });
   return {
     version: SAVE_VERSION,
@@ -43,7 +43,7 @@ export function newRun(unitIds: string[], seed: number): RunState {
     mods: { ...DEFAULT_MODS },
     battle: null,
     rewardChoices: null,
-    stats: { battlesWon: 0, breaks: 0, ultimates: 0, turns: 0 },
+    stats: { battlesWon: 0, maxChain: 0, reactions: 0, fullChains: 0, rounds: 0 },
   };
 }
 
@@ -67,9 +67,10 @@ export function startBattle(run: RunState): BattleState {
 export function finishBattle(run: RunState): void {
   const battle = run.battle;
   if (run.phase !== 'battle' || !battle || battle.outcome === 'ongoing') throw new Error('끝난 전투가 없습니다.');
-  run.stats.breaks += battle.stats.breaks;
-  run.stats.ultimates += battle.stats.ultimates;
-  run.stats.turns += battle.stats.turns;
+  run.stats.maxChain = Math.max(run.stats.maxChain, battle.stats.maxChain);
+  run.stats.reactions += battle.stats.reactions;
+  run.stats.fullChains += battle.stats.fullChains;
+  run.stats.rounds += battle.round;
   run.battle = null;
 
   if (battle.outcome === 'defeat') {

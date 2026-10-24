@@ -1,17 +1,42 @@
 import { enemyHitAmount } from '../core/battle';
-import type { AbilityDef, Affinity, Ally, Enemy, Intent, Status } from '../core/types';
-import { ELEMENTS, STATUS_META } from '../data/elements';
+import type { Ally, Element, Enemy, Intent, SpellDef, SpellInput, SpellOutput, Status } from '../core/types';
+import { ELEMENTS, STATUS_META, reactionById } from '../data/elements';
+import { TAG_NAMES } from '../data/spells';
 import { unitById } from '../data/units';
 import { h } from './dom';
+import { glyph } from './glyphs';
 
-export function elColor(el: Affinity): string {
+export function elColor(el: Element | 'star'): string {
   return ELEMENTS[el].color;
 }
 
-export function elBadge(el: Affinity, size: 'sm' | 'md' | 'lg' = 'md'): HTMLElement {
+export function elBadge(el: Element | 'star', size: 'sm' | 'md' | 'lg' = 'md'): HTMLElement {
   return h('span', { class: `el-badge el-${size}`, style: { '--el': elColor(el) }, title: ELEMENTS[el].name }, ELEMENTS[el].glyph);
 }
 
+function inputGlyph(input: SpellInput): HTMLElement {
+  if (input === 'none') return h('span', { class: 'flow-node flow-start', title: '기점: 새 체인을 연다' }, '●');
+  if (input === 'wild') return h('span', { class: 'flow-node', style: { '--el': elColor('star') }, title: '어떤 성속이든 받는다' }, ELEMENTS.star.glyph);
+  return h('span', { class: 'flow-node', style: { '--el': elColor(input) }, title: `${ELEMENTS[input].name}을(를) 받는다` }, ELEMENTS[input].glyph);
+}
+
+function outputGlyph(output: SpellOutput): HTMLElement {
+  if (output === 'echo') return h('span', { class: 'flow-node', style: { '--el': elColor('star') }, title: '받은 성속을 그대로 넘긴다' }, '↻');
+  return h('span', { class: 'flow-node', style: { '--el': elColor(output) }, title: `${ELEMENTS[output].name}을(를) 넘긴다` }, ELEMENTS[output].glyph);
+}
+
+/** 마법의 입력 → 출력 성속 표시 */
+export function spellFlow(spell: SpellDef): HTMLElement {
+  return h('span', { class: 'spell-flow' }, inputGlyph(spell.input), h('span', { class: 'flow-arrow' }, '→'), outputGlyph(spell.output));
+}
+
+export function costPips(cost: number): HTMLElement {
+  return h('span', { class: 'cost', title: `성진 ${cost}` }, '✦'.repeat(cost) || '0');
+}
+
+/**
+ * HP 막대. forecast를 주면 이번 라운드에 깎일 예상 구간을 흐린 막대로 겹쳐 보여 준다.
+ */
 export function hpBar(hp: number, maxHp: number, shield: number, forecast?: number): HTMLElement {
   const pct = Math.max(0, Math.min(100, (hp / maxHp) * 100));
   const shieldPct = Math.min(100 - pct, (shield / maxHp) * 100);
@@ -85,10 +110,29 @@ export function intentView(intent: Intent | null, enemy: Enemy, allies: Ally[]):
     case 'buff':
       return h('div', { class: 'intent intent-buff', title: '강화' }, h('b', {}, '↑ ', intent.atk), h('span', { class: 'intent-target' }, '공격 강화'));
     case 'seal':
-      return h('div', { class: 'intent intent-seal', title: '성식: 우리 성진 1을 빼앗는다' }, h('b', {}, '⊘ ✦-1'), h('span', { class: 'intent-target' }, '성식'));
+      return h(
+        'div',
+        { class: 'intent intent-seal', title: '성식: 다음 턴 이 성속으로 이어지는 링크가 끊긴다' },
+        h('b', {}, '⊘ '),
+        intent.element ? elBadge(intent.element, 'sm') : null,
+        h('span', { class: 'intent-target' }, '성식'),
+      );
     case 'charge':
       return h('div', { class: 'intent intent-charge', title: '다음 행동이 강력하다' }, h('b', {}, '◌◌◌'), h('span', { class: 'intent-target' }, '힘을 모은다'));
   }
+}
+
+export function reactionChip(id: string): HTMLElement {
+  const r = reactionById(id);
+  return h(
+    'span',
+    { class: 'reaction-chip', style: { '--from': elColor(r.from), '--to': elColor(r.to) }, title: r.desc },
+    ELEMENTS[r.from].glyph,
+    '→',
+    ELEMENTS[r.to].glyph,
+    ' ',
+    r.name,
+  );
 }
 
 export function button(label: string | Node, onClick: () => void, opts: { variant?: 'primary' | 'ghost' | 'danger'; disabled?: boolean; title?: string; class?: string } = {}): HTMLButtonElement {
@@ -122,10 +166,21 @@ export function modal(title: string, body: Node, onClose: () => void): HTMLEleme
 
 export const NUM = ['1', '2', '3', '4', '5', '6', '7'];
 
-/** 설명 속 각인·중첩 이름과 "2·3", "140%" 같은 수치를 색으로 짚는다 */
+/** 카드 위 링크 예고: 링크(배율), 반응, 끊김, 새 체인 */
+export interface LinkHint {
+  kind: 'link' | 'reaction' | 'break' | 'start';
+  text: string;
+}
+
+/** 스킬 유형 표시: 아이콘 + 이름(무채색) */
+export function tagLabel(spell: SpellDef): HTMLElement {
+  return h('span', { class: 'skill-tag' }, glyph(spell.tag, 'skill-tag-glyph'), TAG_NAMES[spell.tag]);
+}
+
+/** 설명 속 각인·중첩 이름과 "2·3" 같은 수치를 색으로 짚는다 */
 const HL_IDS = Object.keys(STATUS_META).filter((id) => STATUS_META[id].keyword || ['solarCore', 'aim', 'tide', 'hunger', 'fortitude', 'wave'].includes(id));
 const HL_BY_NAME = new Map(HL_IDS.map((id) => [STATUS_META[id].name, id]));
-const HL_RE = new RegExp(`(${[...HL_BY_NAME.keys()].sort((a, b) => b.length - a.length).join('|')}|\\d+·\\d+|[+×]?\\d+(?:\\.\\d+)?%|[+×]\\d+(?:\\.\\d+)?)`, 'g');
+const HL_RE = new RegExp(`(${[...HL_BY_NAME.keys()].sort((a, b) => b.length - a.length).join('|')}|위력 \\d+|\\d+·\\d+|[+×]?\\d+(?:\\.\\d+)?%|[+×]\\d+(?:\\.\\d+)?)`, 'g');
 
 export function highlight(text: string): (string | HTMLElement)[] {
   const out: (string | HTMLElement)[] = [];
@@ -140,12 +195,7 @@ export function highlight(text: string): (string | HTMLElement)[] {
   return out;
 }
 
-/** 능력 설명(문장형) */
-export function abilityText(ab: AbilityDef): HTMLElement {
-  return h('p', { class: 'ab-desc' }, highlight(ab.desc));
-}
-
-/** 약점 속성 아이콘 줄 */
-export function weakRow(weak: Affinity[]): HTMLElement {
-  return h('span', { class: 'weak-row', title: `약점: ${weak.map((w) => ELEMENTS[w].name).join(', ')}` }, weak.map((w) => elBadge(w, 'sm')));
+/** 스킬 설명(문장형) */
+export function spellText(spell: SpellDef): HTMLElement {
+  return h('p', { class: 'ab-desc' }, highlight(spell.desc));
 }

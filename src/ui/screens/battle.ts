@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import { sound } from '../../audio/sound';
-import { BREAK_EFFECT, abilityOf, act, begin, canUltimate, getFocus, isAlive, maxEnergy, setFocus, statusStacks, timeline, validateAction } from '../../core/battle';
+import { MAX_ATTUNE, cloneBattle, executeRound, getFocus, isAlive, planCost, ready, setFocus, statusStacks } from '../../core/battle';
+import { previewChain } from '../../core/link';
 import { finishBattle } from '../../core/run';
-import type { AbilityDef, Action, Ally, BattleEvent, BattleState, Enemy, SkillTag, Slot, Stack, Status } from '../../core/types';
-import { SLOT_EN, SLOT_NAMES, abilityById } from '../../data/abilities';
-import { ELEMENTS, STATUS_META } from '../../data/elements';
+import type { Ally, BattleEvent, BattleState, Element, Enemy, PlannedCast, SkillTag, Stack, Status } from '../../core/types';
+import { ELEMENTS, STATUS_META, reactionById } from '../../data/elements';
 import { FLOORS } from '../../data/encounters';
 import { TRAIT_DESC, enemyById } from '../../data/enemies';
+import { TAG_EN, TAG_NAMES, spellById } from '../../data/spells';
 import { ROLE_NAMES, unitById } from '../../data/units';
 import { characterBust, characterSvg } from '../../render/characters';
 import { characterMotion } from '../../render/rig';
@@ -14,15 +15,16 @@ import { floorPreset } from '../../render/three/environment';
 import { getStage } from '../../render/three/stage';
 import type { App } from '../app';
 import { h, sleep } from '../dom';
+import { glyph } from '../glyphs';
 import { cycleGraphics, graphicsLabel } from '../graphics';
 import { showHelp } from '../help';
-import { allyName, button, elBadge, elColor, highlight, hpBar, intentView, modal, statusRow, updateHpBar, weakRow } from '../widgets';
+import { NUM, allyName, button, costPips, elBadge, elColor, highlight, hpBar, intentView, modal, spellFlow, statusRow, updateHpBar } from '../widgets';
 
 /*
- * 전투 화면(스타레일식).
- * - 체력·강인도·상태는 캐릭터 발밑에 붙는다.
- * - 캐릭터(아군·적)를 누르면 강조되고 오른쪽에 상세 정보가 뜬다. 적을 누르면 그 적을 노린다.
- * - 왼쪽은 행동 순서, 오른쪽 아래는 지금 차례 술사의 일반 공격·전투 스킬, 왼쪽 아래는 필살기 초상.
+ * 전투 화면 v4: 라운드 계획 + 링크.
+ * - 아래: 술사 탭(4명)과 고른 술사의 고정 스킬 4개. 스킬마다 지금 계획 뒤에 붙였을 때의 링크 예고가 붙는다.
+ * - 위 가운데: 체인 트랙. 앞 스킬이 넘긴 성속을 다음 스킬이 받으면 링크, 특정 조합이면 성좌 반응.
+ * - 체력·상태는 캐릭터 발밑에. 캐릭터를 누르면 강조되고 오른쪽에 상세 정보가 뜬다.
  */
 
 function unitLabel(state: BattleState, uid: string): string {
@@ -34,85 +36,91 @@ function unitLabel(state: BattleState, uid: string): string {
 
 function eventText(state: BattleState, ev: BattleEvent): string | null {
   switch (ev.type) {
-    case 'cast':
-      return `${unitLabel(state, ev.allyUid)}: ${SLOT_NAMES[ev.slot]} 「${abilityById(ev.abilityId).name}」${ev.targetUid ? ` → ${unitLabel(state, ev.targetUid)}` : ''}`;
+    case 'cast': {
+      const link = ev.linked ? ` · 링크 ${ev.chain} (×${ev.mult})` : ev.sealed ? ' · 성식에 끊김' : '';
+      return `${unitLabel(state, ev.allyUid)}: ${spellById(ev.spellId).name}${link}`;
+    }
+    case 'reaction':
+      return `성좌 반응 「${reactionById(ev.reactionId).name}」`;
+    case 'fullChain':
+      return '성좌 완성!';
     case 'damage': {
-      const tag = { burn: ' [화상]', erosion: ' [잠식]', burst: ' [각인 폭발]', doom: ' [폭격]', counter: ' [반격]', break: ' [격파]', ally: '', enemy: '' }[ev.source];
+      const tag = { burn: ' [화상]', erosion: ' [잠식]', burst: ' [각인 폭발]', doom: ' [폭격]', counter: ' [반격]', chain: ' [성좌]', ally: '', enemy: '' }[ev.source];
       return `${unitLabel(state, ev.targetUid)} 피해 ${ev.amount}${ev.absorbed ? ` (보호막 ${ev.absorbed})` : ''}${tag}`;
     }
     case 'heal':
       return `${unitLabel(state, ev.targetUid)} 회복 ${ev.amount}`;
-    case 'break':
-      return `${unitLabel(state, ev.targetUid)} 약점 격파! (${ELEMENTS[ev.element].name})`;
-    case 'recover':
-      return `${unitLabel(state, ev.targetUid)} 강인도 회복`;
     case 'enemyStunned':
-      return `${unitLabel(state, ev.enemyUid)}은(는) 움직이지 못한다`;
+      return `${unitLabel(state, ev.enemyUid)}은(는) 기절해 움직이지 못한다`;
     case 'death':
       return `${unitLabel(state, ev.uid)} 쓰러짐`;
-    case 'turn':
-      return `— ${unitLabel(state, ev.uid)}의 차례 —`;
+    case 'seal':
+      return `성식: 다음 턴 ${ELEMENTS[ev.element].name} 링크 봉인`;
+    case 'skip':
+      return `${unitLabel(state, ev.allyUid)}: ${ev.reason === 'cost' ? '성진 부족' : '시전 불가'}`;
+    case 'round':
+      return `— ${ev.round} 라운드 —`;
     default:
       return null;
   }
 }
 
-const SUPPORT_TAGS = new Set<SkillTag>(['heal', 'shield', 'buff', 'utility']);
+const SUPPORT_TAGS = new Set<SkillTag>(['heal', 'shield', 'buff', 'utility', 'charge']);
 const STACKS: Stack[] = ['solarCore', 'aim', 'tide', 'hunger', 'fortitude', 'wave'];
+const SKILL_KEYS = ['Q', 'W', 'E', 'R'];
+
+type Hint = { kind: 'link' | 'reaction' | 'break' | 'start'; text: string };
 
 export function battleScreen(app: App): HTMLElement {
   const run = app.run!;
   const battle = run.battle!;
   const floor = FLOORS[run.floor];
   const stage = getStage();
+  let plan: PlannedCast[] = [];
   let busy = false;
-  const log: string[] = [];
-
-  /** 고른 능력: 차례인 술사의 일반 공격·전투 스킬, 또는 아무 술사의 필살기 */
-  let chosen: { allyUid: string; slot: Slot } | null = null;
-  /** 아군을 고르는 능력의 대상 */
-  let allyTarget: string | null = null;
-  /** 상세 정보를 보고 있는 유닛 */
+  const log: string[] = [`— ${battle.round} 라운드 —`];
+  /** 아래 스킬 패널에 보이는 술사 */
+  let picked: string = battle.allies.find(isAlive)?.uid ?? 'a0';
+  /** 설명 카드에 띄울 스킬(가리키거나 고른 것) */
+  let hover: string | null = null;
+  /** 상세 정보를 보는 유닛 */
   let inspect: string | null = null;
 
-  const root = h('main', { class: 'battle-wrap bx' });
+  const root = h('main', { class: 'battle-wrap bx v4' });
   const scene = h('section', { class: `scene floor-${floor.kind}`, 'aria-label': '전장' });
   const actorLayer = h('div', { class: 'actor-layer' });
   const callout = h('div', { class: 'callout-layer', 'aria-live': 'polite' });
   const hudSlot = h('div', { class: 'hud-slot' });
-  const lineSlot = h('div', { class: 'bx-line-slot' });
   const infoSlot = h('div', { class: 'bx-info-slot' });
-  const ultSlot = h('div', { class: 'bx-ult-slot' });
-  const actSlot = h('div', { class: 'bx-act-slot' });
   const plateSlot = h('div', { class: 'plate-slot', 'aria-live': 'polite' });
   const hitSlot = h('div', { class: 'hit-slot' });
-  scene.append(actorLayer, hudSlot, lineSlot, plateSlot, hitSlot, callout, infoSlot);
-  root.append(scene, ultSlot, actSlot);
+  const dockSlot = h('div', { class: 'cmd-slot' });
+  scene.append(actorLayer, hudSlot, plateSlot, hitSlot, callout, infoSlot);
+  root.append(scene, dockSlot);
 
   const actorEls = new Map<string, HTMLElement>();
+  let previewArcs: THREE.Mesh[] = [];
   const wait = (ms: number) => sleep(ms / app.speed);
+  const remaining = () => battle.stardust - planCost(plan);
   const stackOf = (a: Ally) => unitById(a.defId).stack ?? null;
   const allyOf = (uid: string) => battle.allies.find((a) => a.uid === uid);
   const enemyOf = (uid: string) => battle.enemies.find((e) => e.uid === uid);
 
-  // ── 무대 준비 ────────────────────────────────────────────
+  // ── 무대 ────────────────────────────────────────────────
   stage.mount(scene, 'battle');
   stage.setScene(floorPreset(run.floor));
   stage.setActors([
     ...battle.allies.map((a) => ({ uid: a.uid, side: 'ally' as const, defId: a.defId, dead: !isAlive(a) })),
     ...battle.enemies.map((e) => ({ uid: e.uid, side: 'enemy' as const, defId: e.defId, dead: !isAlive(e), boss: !!enemyById(e.defId).traits?.length })),
   ]);
-  // 아래쪽 행동 패널이 덮는 만큼 무대를 위로 올린다(차례마다 패널 높이가 바뀌어도 화면이 출렁이지 않게 고정값)
-  const fitSafeArea = () => stage.setSafeArea(window.matchMedia('(max-width: 760px)').matches ? 290 : 190);
+  const fitSafeArea = () => stage.setSafeArea(window.matchMedia('(max-width: 760px)').matches ? 330 : 200);
   fitSafeArea();
-  const dockObserver = new ResizeObserver(fitSafeArea);
-  dockObserver.observe(root);
-
-  // 발밑 정보판·머리 위 예고를 매 프레임 캐릭터 위치에 맞춘다.
+  const resizeObs = new ResizeObserver(fitSafeArea);
+  resizeObs.observe(root);
   const off = stage.onFrame(() => {
     if (!root.isConnected) {
       off();
-      dockObserver.disconnect();
+      resizeObs.disconnect();
       return;
     }
     for (const [uid, el] of actorEls) {
@@ -123,7 +131,6 @@ export function battleScreen(app: App): HTMLElement {
       el.style.height = `${box.height.toFixed(1)}px`;
     }
   });
-
   const syncAuras = () => {
     for (const a of battle.allies) {
       const st = stackOf(a);
@@ -131,42 +138,86 @@ export function battleScreen(app: App): HTMLElement {
     }
   };
 
-  // ── 선택 ────────────────────────────────────────────────
-  const activeAlly = () => (battle.active ? allyOf(battle.active) ?? null : null);
-  /** 지금 고른 능력(없으면 차례 술사의 일반 공격) */
-  const current = (): { ally: Ally; slot: Slot; ab: AbilityDef } | null => {
-    const sel = chosen ?? (battle.active ? { allyUid: battle.active, slot: 'basic' as Slot } : null);
-    if (!sel) return null;
-    const ally = allyOf(sel.allyUid);
-    if (!ally) return null;
-    return { ally, slot: sel.slot, ab: abilityOf(ally, sel.slot) };
-  };
-  const actionOf = (): Action | null => {
-    const c = current();
-    if (!c) return null;
-    const targetUid = c.ab.aim === 'enemy' ? (getFocus(battle)?.uid ?? null) : c.ab.aim === 'ally' ? (allyTarget && isAlive(allyOf(allyTarget)!) ? allyTarget : c.ally.uid) : null;
-    return { allyUid: c.ally.uid, slot: c.slot, targetUid };
+  // ── 계획 ────────────────────────────────────────────────
+  const steps = () => previewChain(plan.map((p) => spellById(p.spellId)), battle.seal);
+
+  /** 이 스킬을 지금 계획에 넣으면 어떻게 이어지는지 */
+  const linkHint = (allyUid: string, spellId: string): Hint => {
+    const idx = plan.findIndex((p) => p.allyUid === allyUid);
+    const trial = plan.slice();
+    if (idx >= 0) trial[idx] = { allyUid, spellId };
+    else trial.push({ allyUid, spellId });
+    const at = idx >= 0 ? idx : trial.length - 1;
+    const st = previewChain(trial.map((p) => spellById(p.spellId)), battle.seal)[at];
+    if (at === 0) return { kind: 'start', text: '체인 시작' };
+    if (st.reactionId) return { kind: 'reaction', text: `${reactionById(st.reactionId).name} ×${st.mult}` };
+    if (st.linked) return { kind: 'link', text: `LINK ${st.chain} ×${st.mult}` };
+    if (spellById(spellId).input === 'none') return { kind: 'start', text: '새 체인' };
+    return { kind: 'break', text: st.sealed ? '봉인됨' : '끊김' };
   };
 
-  const choose = (allyUid: string, slot: Slot) => {
-    if (busy || battle.outcome !== 'ongoing') return;
-    const c = current();
-    if (c && c.ally.uid === allyUid && c.slot === slot) {
-      void execute();
-      return;
+  const nextUnplanned = () => battle.allies.find((a) => isAlive(a) && !plan.some((p) => p.allyUid === a.uid))?.uid ?? null;
+
+  const pickSpell = (ally: Ally, spellId: string) => {
+    if (busy || !isAlive(ally)) return;
+    const idx = plan.findIndex((p) => p.allyUid === ally.uid);
+    if (idx >= 0 && plan[idx].spellId === spellId) {
+      plan.splice(idx, 1);
+      sound.ui('card_remove', 0.5);
+    } else {
+      const sp = spellById(spellId);
+      const myCost = idx >= 0 ? spellById(plan[idx].spellId).cost : 0;
+      if (!ready(ally, spellId) || sp.cost > remaining() + myCost) return;
+      if (idx >= 0) plan[idx] = { allyUid: ally.uid, spellId };
+      else plan.push({ allyUid: ally.uid, spellId });
+      sound.ui('card_place', 0.55);
+      const st = steps()[plan.findIndex((p) => p.allyUid === ally.uid)];
+      if (st?.linked) sound.link(st.chain, st.outElement ?? 'star');
+      // 다음 술사로 넘어간다
+      const next = nextUnplanned();
+      if (next) picked = next;
     }
-    chosen = { allyUid, slot };
-    sound.ui('card_place', 0.45);
+    hover = null;
     render();
+  };
+
+  const clearPreview = () => {
+    for (const m of previewArcs) stage.fx?.removeMesh(m);
+    previewArcs = [];
+  };
+  const drawPreview = () => {
+    clearPreview();
+    if (!stage.fx) return;
+    const st = steps();
+    plan.forEach((p, i) => {
+      if (i === 0 || !st[i].linked) return;
+      const prevOut = st[i - 1].outElement;
+      previewArcs.push(stage.fx!.arc(stage.actorPos(plan[i - 1].allyUid), stage.actorPos(p.allyUid), prevOut ? elColor(prevOut) : '#ffffff', true));
+    });
+  };
+
+  /** 지금 계획대로면 각 유닛 HP가 어떻게 되는지(적은 우리 차례 뒤) */
+  const forecast = (): Map<string, number> => {
+    const out = new Map<string, number>();
+    if (!plan.length) return out;
+    try {
+      const sim = cloneBattle(battle);
+      for (const ev of executeRound(sim, plan)) {
+        if (ev.type === 'enemyAct') break;
+        if (ev.type === 'damage' || ev.type === 'heal') out.set(ev.targetUid, ev.hpAfter);
+      }
+    } catch {
+      // 계획이 유효하지 않으면 예측을 생략한다.
+    }
+    return out;
   };
 
   const onUnitClick = (uid: string) => {
     if (busy) return;
-    const c = current();
     if (uid.startsWith('e')) {
       const e = enemyOf(uid);
       if (e && isAlive(e)) setFocus(battle, uid);
-    } else if (c?.ab.aim === 'ally' && isAlive(allyOf(uid)!)) allyTarget = uid;
+    } else if (isAlive(allyOf(uid)!)) picked = uid;
     inspect = inspect === uid ? null : uid;
     sound.ui('ui_toggle', 0.35);
     render();
@@ -189,83 +240,59 @@ export function battleScreen(app: App): HTMLElement {
     );
   };
 
-  const energyBar = (a: Ally) => {
-    const max = maxEnergy(a);
-    const pct = Math.min(100, (a.energy / max) * 100);
-    return h('div', { class: `bx-energy ${a.energy >= max ? 'full' : ''}`, title: `필살기 에너지 ${a.energy}/${max}` }, h('i', { style: { width: `${pct}%` } }));
-  };
-
-  const toughBar = (e: Enemy) => {
-    const pct = (e.toughness / e.maxToughness) * 100;
-    return h('div', { class: `bx-tough ${e.broken ? 'broken' : ''}`, title: e.broken ? '격파됨: 다음 차례를 잃는다' : `강인도 ${e.toughness}/${e.maxToughness}` }, h('i', { style: { width: `${e.broken ? 0 : pct}%` } }), e.broken ? h('b', {}, 'BREAK') : null);
-  };
-
   const allyActor = (a: Ally, i: number) => {
     const unit = unitById(a.defId);
-    const c = current();
     const alive = isAlive(a);
-    const isTarget = alive && c?.ab.aim === 'ally' && (allyTarget ?? c.ally.uid) === a.uid;
-    const isAllTarget = alive && c && c.ab.aim === 'none' && c.ab.effects.some((e) => 'target' in e && e.target === 'allAllies');
+    const order = plan.findIndex((p) => p.allyUid === a.uid);
     const el = h(
       'button',
       {
         type: 'button',
-        class: `actor ally bx-unit bx-i${i % 2} ${alive ? '' : 'dead'} ${battle.active === a.uid ? 'turn' : ''} ${inspect === a.uid ? 'inspected' : ''} ${isTarget || isAllTarget ? 'ally-target' : ''}`,
+        class: `actor ally bx-unit bx-i${i % 2} ${alive ? '' : 'dead'} ${picked === a.uid && !busy ? 'turn' : ''} ${inspect === a.uid ? 'inspected' : ''}`,
         style: { '--el': elColor(unit.element) },
         disabled: !alive,
-        'aria-label': `${unit.name} 상세 보기`,
+        'aria-label': `${unit.name} 고르기·상세 보기`,
         onclick: () => onUnitClick(a.uid),
       },
       h(
         'div',
         { class: 'actor-top' },
-        battle.active === a.uid && !busy ? h('span', { class: 'bx-turn-tag' }, '차례') : null,
+        order >= 0 ? h('span', { class: 'order-tag' }, NUM[order]) : null,
         alive && threatCount(a) ? h('span', { class: 'threat-tag', title: '적이 노리고 있다' }, '!') : null,
       ),
-      isTarget ? h('span', { class: 'target-bracket ally', 'aria-label': '대상' }, h('i'), h('i'), h('i'), h('i')) : null,
       h(
         'div',
         { class: 'bx-foot' },
         h('div', { class: 'bx-name' }, h('b', {}, unit.name), elBadge(unit.element, 'sm')),
         hpBar(a.hp, a.maxHp, a.shield),
-        alive ? energyBar(a) : null,
         alive ? stackPips(a) : null,
-        alive && a.statuses.some((s) => !STACKS.includes(s.id as Stack)) ? statusRow(a.statuses.filter((s) => !STACKS.includes(s.id as Stack) || s.id === 'wave')) : null,
+        alive && a.statuses.some((s) => !STACKS.includes(s.id as Stack) || s.id === 'wave') ? statusRow(a.statuses.filter((s) => !STACKS.includes(s.id as Stack) || s.id === 'wave')) : null,
       ),
     );
     actorEls.set(a.uid, el);
     return el;
   };
 
-  const enemyActor = (e: Enemy) => {
+  const enemyActor = (e: Enemy, fc: Map<string, number>) => {
     const def = enemyById(e.defId);
     const alive = isAlive(e);
-    const c = current();
-    const focus = getFocus(battle);
-    const aimEnemy = c?.ab.aim === 'enemy';
-    const allEnemies = c?.ab.effects.some((x) => x.kind === 'damage' && (x.target === 'allEnemies' || x.target === 'random'));
-    const blast = c?.ab.effects.some((x) => x.kind === 'damage' && x.target === 'blast');
-    const living = battle.enemies.filter(isAlive);
-    const fi = focus ? living.indexOf(focus) : -1;
-    const side = blast && alive && fi >= 0 && Math.abs(living.indexOf(e) - fi) === 1;
-    const focused = alive && focus?.uid === e.uid && (aimEnemy || !c);
+    const focused = alive && getFocus(battle)?.uid === e.uid;
     const el = h(
       'button',
       {
         type: 'button',
-        class: `actor enemy bx-unit bx-i${battle.enemies.indexOf(e) % 2} ${alive ? '' : 'dead'} ${focused ? 'focused' : ''} ${side ? 'side-target' : ''} ${allEnemies && alive ? 'all-target' : ''} ${inspect === e.uid ? 'inspected' : ''} ${def.traits?.length ? 'boss' : ''} ${e.broken ? 'broken' : ''}`,
+        class: `actor enemy bx-unit bx-i${battle.enemies.indexOf(e) % 2} ${alive ? '' : 'dead'} ${focused ? 'focused' : ''} ${inspect === e.uid ? 'inspected' : ''} ${def.traits?.length ? 'boss' : ''}`,
         disabled: !alive,
-        'aria-label': `${def.name} — 눌러서 대상 지정·상세 보기`,
+        'aria-label': `${def.name} — 눌러서 집중 대상 지정·상세 보기`,
         onclick: () => onUnitClick(e.uid),
       },
       h('div', { class: 'actor-top' }, alive ? intentView(e.intent, e, battle.allies) : null),
-      focused ? h('span', { class: 'target-bracket', 'aria-label': '대상' }, h('i'), h('i'), h('i'), h('i')) : null,
+      focused ? h('span', { class: 'target-bracket', 'aria-label': '집중 대상' }, h('i'), h('i'), h('i'), h('i')) : null,
       h(
         'div',
         { class: 'bx-foot' },
-        h('div', { class: 'bx-name' }, focused ? h('span', { class: 'plate-target' }, 'TARGET') : null, h('b', {}, def.name), weakRow(def.weak)),
-        hpBar(e.hp, e.maxHp, e.shield),
-        alive ? toughBar(e) : null,
+        h('div', { class: 'bx-name' }, focused ? h('span', { class: 'plate-target' }, 'TARGET') : null, h('b', {}, def.name)),
+        hpBar(e.hp, e.maxHp, e.shield, alive ? fc.get(e.uid) : undefined),
         alive && e.statuses.length ? statusRow(e.statuses) : null,
       ),
     );
@@ -273,28 +300,55 @@ export function battleScreen(app: App): HTMLElement {
     return el;
   };
 
-  // ── 행동 순서 ────────────────────────────────────────────
-  const lineView = () => {
-    const order = timeline(battle, 7);
+  // ── 체인 트랙(위 가운데) ─────────────────────────────────
+  const chainTrack = () => {
+    const st = steps();
+    const last = st[st.length - 1];
+    const nextIn = last?.outElement ?? null;
     return h(
-      'ol',
-      { class: 'bx-line', 'aria-label': '행동 순서' },
-      order.map((uid, i) => {
-        const ally = allyOf(uid);
-        const enemy = enemyOf(uid);
-        const color = ally ? elColor(unitById(ally.defId).element) : '#e0685a';
-        const face = h('span', { class: 'bx-line-face' });
-        if (ally) face.innerHTML = characterBust(ally.defId);
-        else if (enemy) face.textContent = enemyById(enemy.defId).glyph;
-        return h(
-          'li',
-          { class: `bx-line-item ${ally ? 'ally' : 'enemy'} ${i === 0 ? 'now' : ''}`, style: { '--el': color }, title: unitLabel(battle, uid), onclick: () => onUnitClick(uid) },
-          face,
-          i === 0 ? h('small', {}, 'NOW') : null,
+      'div',
+      { class: 'chain-track v4-track', 'aria-label': '시전 순서' },
+      Array.from({ length: 4 }, (_, i) => {
+        const p = plan[i];
+        const link =
+          i === 0
+            ? null
+            : h('div', { class: `cn-link ${p ? (st[i].reactionId ? 'react' : st[i].linked ? 'ok' : 'broken') : ''}` }, p ? h('span', {}, st[i].reactionId ? reactionById(st[i].reactionId!).name : st[i].linked ? `×${st[i].mult}` : st[i].sealed ? '봉인' : '끊김') : null);
+        if (!p) return [link, h('div', { class: `q-slot cn empty ${i === plan.length ? 'next' : ''}` }, h('i', {}, NUM[i]))];
+        const ally = allyOf(p.allyUid)!;
+        const unit = unitById(ally.defId);
+        const sp = spellById(p.spellId);
+        const node = h(
+          'button',
+          {
+            type: 'button',
+            class: 'q-slot cn',
+            style: { '--el': elColor(unit.element) },
+            title: `${i + 1}. ${unit.name} · ${sp.name} (눌러서 빼기)`,
+            disabled: busy,
+            'data-sfx': 'none',
+            onclick: () => {
+              plan.splice(i, 1);
+              sound.ui('card_remove', 0.5);
+              render();
+            },
+          },
+          glyph(sp.tag, 'cn-glyph'),
         );
-      }),
+        return [link, h('div', { class: 'cn-wrap' }, node, h('small', { class: 'cn-name' }, sp.name))];
+      }).flat(),
+      h('div', { class: 'cn-next', title: '다음 스킬이 이 성속을 받으면 링크가 이어집니다' }, h('small', {}, 'NEXT'), nextIn ? elBadge(nextIn, 'sm') : h('span', {}, '—')),
     );
   };
+
+  function attuneRow(): HTMLElement {
+    const els = (Object.keys(battle.attune) as Element[]).filter((e) => battle.attune[e] > 0);
+    return h(
+      'div',
+      { class: 'attune-row', title: '속성 공명: 시전마다 내보낸 속성이 1씩 쌓입니다.' },
+      els.map((e) => h('span', { class: `attune-chip ${battle.attune[e] >= MAX_ATTUNE ? 'max' : ''}`, 'data-el': e, style: { '--el': ELEMENTS[e].color } }, elBadge(e, 'sm'), h('b', {}, battle.attune[e]))),
+    );
+  }
 
   // ── 상세 정보 ────────────────────────────────────────────
   const statusList = (statuses: Status[]) =>
@@ -305,12 +359,7 @@ export function battleScreen(app: App): HTMLElement {
           statuses.map((st) => {
             const meta = STATUS_META[st.id];
             const amount = meta.keyword ? `위력 ${st.value ?? 0} · 횟수 ${st.turns}` : st.turns >= 90 ? (st.value ? `${st.value}` : '지속') : `${st.value ? `${st.value} · ` : ''}${st.turns}턴`;
-            return h(
-              'li',
-              { class: meta.debuff ? 'debuff' : 'buff' },
-              h('b', {}, `${meta.debuff ? '▼' : '▲'} ${meta.glyph} ${meta.name}`, h('small', {}, ` ${amount}`)),
-              h('span', {}, meta.desc),
-            );
+            return h('li', { class: meta.debuff ? 'debuff' : 'buff' }, h('b', {}, `${meta.debuff ? '▼' : '▲'} ${meta.glyph} ${meta.name}`, h('small', {}, ` ${amount}`)), h('span', {}, meta.desc));
           }),
         )
       : h('p', { class: 'bx-empty' }, '걸린 효과 없음');
@@ -338,8 +387,6 @@ export function battleScreen(app: App): HTMLElement {
           h('div', {}, h('dt', {}, 'HP'), h('dd', {}, `${ally.hp}/${ally.maxHp}`)),
           h('div', {}, h('dt', {}, '공격'), h('dd', {}, ally.atk)),
           h('div', {}, h('dt', {}, '방어'), h('dd', {}, ally.def)),
-          h('div', {}, h('dt', {}, '속도'), h('dd', {}, unit.spd)),
-          h('div', {}, h('dt', {}, '에너지'), h('dd', {}, `${ally.energy}/${unit.energy}`)),
           ally.shield ? h('div', {}, h('dt', {}, '보호막'), h('dd', {}, ally.shield)) : null,
         ),
         h('section', {}, h('h4', {}, '상태'), statusList(ally.statuses)),
@@ -347,10 +394,16 @@ export function battleScreen(app: App): HTMLElement {
         h(
           'section',
           {},
-          h('h4', {}, '능력'),
-          (['basic', 'skill', 'ultimate'] as Slot[]).map((slot) => {
-            const ab = abilityOf(ally, slot);
-            return h('div', { class: `bx-ab slot-${slot}` }, h('div', { class: 'bx-ab-head' }, h('small', {}, SLOT_NAMES[slot]), h('b', {}, ab.name), slot === 'ultimate' ? h('span', {}, `에너지 ${unit.energy}`) : slot === 'skill' ? h('span', {}, '성진 1') : h('span', {}, '성진 +1')), h('p', { class: 'ab-desc' }, highlight(ab.desc)));
+          h('h4', {}, '스킬'),
+          unit.spells.map((id) => {
+            const sp = spellById(id);
+            const cd = ally.cooldowns[id] ?? 0;
+            return h(
+              'div',
+              { class: 'bx-ab' },
+              h('div', { class: 'bx-ab-head' }, h('small', {}, TAG_NAMES[sp.tag]), h('b', {}, sp.name), spellFlow(sp), h('span', {}, cd ? `쿨타임 ${cd}` : `성진 ${sp.cost}`)),
+              h('p', { class: 'ab-desc' }, highlight(sp.desc)),
+            );
           }),
         ),
       );
@@ -361,111 +414,139 @@ export function battleScreen(app: App): HTMLElement {
         'aside',
         { class: 'bx-info enemy', style: { '--el': '#e0685a' } },
         close,
-        h('header', {}, h('div', { class: 'bx-info-bust glyph' }, def.glyph), h('div', {}, h('small', {}, 'ENEMY'), h('h3', {}, def.name), h('p', {}, '약점 ', weakRow(def.weak)))),
+        h('header', {}, h('div', { class: 'bx-info-bust glyph' }, def.glyph), h('div', {}, h('small', {}, 'ENEMY'), h('h3', {}, def.name))),
         h(
           'dl',
           { class: 'bx-stats' },
           h('div', {}, h('dt', {}, 'HP'), h('dd', {}, `${enemy.hp}/${enemy.maxHp}`)),
-          h('div', {}, h('dt', {}, '강인도'), h('dd', {}, enemy.broken ? '격파' : `${enemy.toughness}/${enemy.maxToughness}`)),
           h('div', {}, h('dt', {}, '공격'), h('dd', {}, enemy.atk)),
           h('div', {}, h('dt', {}, '방어'), h('dd', {}, enemy.def)),
-          h('div', {}, h('dt', {}, '속도'), h('dd', {}, def.spd)),
         ),
         h('section', {}, h('h4', {}, '다음 행동'), isAlive(enemy) ? intentView(enemy.intent, enemy, battle.allies) : h('p', {}, '쓰러짐')),
         h('section', {}, h('h4', {}, '상태'), statusList(enemy.statuses)),
-        h(
-          'section',
-          {},
-          h('h4', {}, '약점 격파'),
-          h('p', { class: 'ab-desc' }, '약점 속성으로 맞으면 강인도가 깎이고, 0이 되면 격파되어 추가 피해를 받고 다음 차례를 잃는다. 속성별 격파 효과: '),
-          h('ul', { class: 'bx-break-list' }, def.weak.map((w) => h('li', {}, elBadge(w, 'sm'), ` ${ELEMENTS[w].name}: `, ...highlight(BREAK_EFFECT[w])))),
-        ),
         def.traits?.length ? h('section', {}, h('h4', {}, '특성'), def.traits.map((t) => h('p', {}, TRAIT_DESC[t]))) : null,
       );
     }
     return null;
   };
 
-  // ── 필살기 초상 ──────────────────────────────────────────
-  const ultView = () =>
-    h(
-      'div',
-      { class: 'bx-ults', 'aria-label': '필살기' },
-      battle.allies.map((a, i) => {
-        const unit = unitById(a.defId);
-        const max = maxEnergy(a);
-        const ready = canUltimate(battle, a) && !busy;
-        const sel = chosen?.allyUid === a.uid && chosen.slot === 'ultimate';
-        const bust = h('span', { class: 'bx-ult-face' });
-        bust.innerHTML = characterBust(a.defId);
-        return h(
-          'button',
-          {
-            type: 'button',
-            class: `bx-ult ${ready ? 'ready' : ''} ${sel ? 'on' : ''} ${isAlive(a) ? '' : 'dead'} ${battle.active === a.uid ? 'turn' : ''}`,
-            style: { '--el': elColor(unit.element), '--fill': `${Math.min(100, (a.energy / max) * 100)}%` },
-            disabled: !ready,
-            title: `${unit.name} 필살기 「${abilityOf(a, 'ultimate').name}」 — 에너지 ${a.energy}/${max}${ready ? ' (누르면 선택, 한 번 더 누르면 발동)' : ''}`,
-            onclick: () => choose(a.uid, 'ultimate'),
-          },
-          bust,
-          h('kbd', {}, String(i + 1)),
-          ready ? h('small', {}, 'ULT') : null,
-        );
-      }),
+  // ── 명령 패널(아래) ──────────────────────────────────────
+  const allyTab = (a: Ally, i: number) => {
+    const unit = unitById(a.defId);
+    const order = plan.findIndex((p) => p.allyUid === a.uid);
+    const bust = h('span', { class: 'ct-face' });
+    bust.innerHTML = characterBust(a.defId);
+    return h(
+      'button',
+      {
+        type: 'button',
+        class: `cmd-tab ${picked === a.uid ? 'on' : ''} ${order >= 0 ? 'planned' : ''} ${isAlive(a) ? '' : 'dead'}`,
+        style: { '--el': elColor(unit.element) },
+        disabled: !isAlive(a) || busy,
+        onclick: () => {
+          picked = a.uid;
+          hover = null;
+          render();
+        },
+        title: `${unit.name} (${i + 1})`,
+      },
+      bust,
+      h('span', { class: 'ct-text' }, h('b', {}, unit.name), h('small', {}, order >= 0 ? `${NUM[order]}번 · ${spellById(plan[order].spellId).name}` : isAlive(a) ? '대기' : '전투 불능')),
+      h('kbd', {}, String(i + 1)),
     );
+  };
 
-  // ── 행동 패널 ────────────────────────────────────────────
-  const actView = () => {
-    const ally = activeAlly();
-    const c = current();
-    if (!ally || !c || busy || battle.outcome !== 'ongoing') return h('div', { class: 'bx-act idle' }, h('small', {}, busy ? '진행 중…' : ''));
-    const unit = unitById(ally.defId);
-    const target = (() => {
-      const a = actionOf();
-      if (!a?.targetUid) return c.ab.aim === 'none' ? (c.ab.effects.some((e) => e.kind === 'damage' && e.target === 'allEnemies') ? '모든 적' : c.ab.effects.some((e) => e.kind === 'damage' && e.target === 'random') ? '무작위 적' : '') : '';
-      return unitLabel(battle, a.targetUid);
-    })();
-    const err = (() => {
-      const a = actionOf();
-      return a ? validateAction(battle, a) : null;
-    })();
-    const slotBtn = (slot: 'basic' | 'skill', key: string) => {
-      const ab = abilityOf(ally, slot);
-      const on = c.ally.uid === ally.uid && c.slot === slot;
-      const disabled = slot === 'skill' && battle.sp < 1;
-      return h(
-        'button',
-        { type: 'button', class: `bx-slot slot-${slot} ${on ? 'on' : ''}`, disabled, onclick: () => choose(ally.uid, slot), title: `${SLOT_NAMES[slot]} 「${ab.name}」 (${key})` },
-        h('kbd', {}, key),
-        h('b', {}, ab.name),
-        h('small', {}, `${SLOT_NAMES[slot]} · ${slot === 'basic' ? '성진 +1' : '성진 -1'}`),
-      );
-    };
+  const skillButton = (a: Ally, id: string, k: number) => {
+    const sp = spellById(id);
+    const unit = unitById(a.defId);
+    const idx = plan.findIndex((p) => p.allyUid === a.uid);
+    const chosen = idx >= 0 && plan[idx].spellId === id;
+    const myCost = idx >= 0 ? spellById(plan[idx].spellId).cost : 0;
+    const cd = a.cooldowns[id] ?? 0;
+    const tooCostly = !chosen && sp.cost > remaining() + myCost;
+    const hint = cd ? null : linkHint(a.uid, id);
+    return h(
+      'button',
+      {
+        type: 'button',
+        class: `cmd-skill ${chosen ? 'on' : ''} ${cd ? 'cooling' : ''} ${hint ? `hint-${hint.kind}` : ''}`,
+        style: { '--el': elColor(unit.element) },
+        disabled: busy || cd > 0 || tooCostly,
+        'data-sfx': 'none',
+        onclick: () => pickSpell(a, id),
+        onmouseenter: () => {
+          hover = id;
+          dockSlot.querySelector('.cmd-desc')?.replaceWith(descCard());
+        },
+        onfocus: () => {
+          hover = id;
+          dockSlot.querySelector('.cmd-desc')?.replaceWith(descCard());
+        },
+        'aria-label': `${sp.name}, ${TAG_NAMES[sp.tag]}, 성진 ${sp.cost}${cd ? `, 쿨타임 ${cd}` : ''}${hint ? `, ${hint.text}` : ''}`,
+      },
+      h('span', { class: 'cs-top' }, glyph(sp.tag, 'cs-glyph'), costPips(sp.cost), h('kbd', {}, SKILL_KEYS[k])),
+      h('b', { class: 'cs-name' }, sp.name),
+      h('span', { class: 'cs-flow' }, spellFlow(sp), h('small', {}, TAG_EN[sp.tag])),
+      cd ? h('span', { class: 'cs-cd' }, `쿨타임 ${cd}`) : hint ? h('span', { class: `cs-hint ${hint.kind}` }, hint.text) : null,
+      chosen ? h('span', { class: 'cs-order' }, NUM[idx]) : null,
+    );
+  };
+
+  const descCard = () => {
+    const a = allyOf(picked);
+    const id = hover ?? (a ? plan.find((p) => p.allyUid === a.uid)?.spellId : null) ?? (a ? unitById(a.defId).spells[0] : null);
+    if (!a || !id) return h('div', { class: 'cmd-desc' });
+    const sp = spellById(id);
+    const unit = unitById(a.defId);
     return h(
       'div',
-      { class: 'bx-act', style: { '--el': elColor(c.slot === 'ultimate' ? unitById(c.ally.defId).element : unit.element) } },
+      { class: 'cmd-desc', style: { '--el': elColor(unit.element) } },
+      h('div', { class: 'cd-head' }, h('small', {}, `${unit.name} · ${TAG_NAMES[sp.tag]}`), h('b', {}, sp.name), spellFlow(sp), h('span', { class: 'cd-meta' }, `성진 ${sp.cost} · ${sp.cooldown ? `쿨타임 ${sp.cooldown}` : '쿨타임 없음'}`)),
+      h('p', { class: 'ab-desc' }, highlight(sp.desc)),
+    );
+  };
+
+  const castButton = () => {
+    const st = steps();
+    const last = st[st.length - 1];
+    const chain = last?.chain ?? 0;
+    const full = chain === 4;
+    return h(
+      'button',
+      { type: 'button', class: `cmd-cast ${plan.length ? '' : 'pass'} ${full ? 'full' : ''}`, disabled: busy, onclick: () => void execute(), title: plan.length ? '시전 (Space)' : '아무것도 하지 않고 성진만 모은다 (Space)' },
+      h('small', {}, full ? '성좌 완성' : `CHAIN ${plan.length ? chain : 0}${plan.length && last ? ` ×${last.mult}` : ''}`),
+      h('b', {}, plan.length ? '시전' : '대기'),
+      h('kbd', {}, 'Space'),
+    );
+  };
+
+  const dockView = () => {
+    const a = allyOf(picked);
+    const left = remaining();
+    return h(
+      'div',
+      { class: 'cmd' },
+      descCard(),
       h(
         'div',
-        { class: 'bx-card' },
-        h('div', { class: 'bx-card-head' }, h('small', {}, `${unitById(c.ally.defId).name} · ${SLOT_NAMES[c.slot]} · ${SLOT_EN[c.slot]}`), h('b', {}, c.ab.name), target ? h('span', { class: 'bx-card-target' }, `대상 ▸ ${target}`) : null),
-        h('p', { class: 'ab-desc' }, highlight(c.ab.desc)),
-        err ? h('p', { class: 'bx-card-err' }, err) : null,
-      ),
-      h(
-        'div',
-        { class: 'bx-act-row' },
-        h('div', { class: 'bx-sp', title: `성진 ${battle.sp}/${battle.maxSp} — 일반 공격 +1, 전투 스킬 -1` }, h('small', {}, '성진'), h('span', {}, Array.from({ length: battle.maxSp }, (_, i) => h('i', { class: i < battle.sp ? 'on' : '' })))),
-        slotBtn('basic', 'Q'),
-        slotBtn('skill', 'E'),
-        h('button', { type: 'button', class: 'bx-go', disabled: !!err, onclick: () => void execute(), title: '실행 (Space)' }, c.slot === 'ultimate' ? '필살기 발동' : '실행', h('kbd', {}, 'Space')),
+        { class: 'cmd-row' },
+        h('div', { class: 'cmd-tabs' }, battle.allies.map(allyTab)),
+        h('div', { class: 'cmd-skills' }, a && isAlive(a) ? unitById(a.defId).spells.map((id, k) => skillButton(a, id, k)) : null),
+        h(
+          'div',
+          { class: 'cmd-side' },
+          h('div', { class: 'cmd-dust', title: `성진 ${battle.stardust}/${battle.maxStardust}, 계획 후 남는 성진 ${left}` }, h('small', {}, '성진'), h('span', {}, Array.from({ length: battle.maxStardust }, (_, i) => h('i', { class: i < left ? 'on' : i < battle.stardust ? 'spend' : '' }))), h('b', {}, `${left}/${battle.stardust}`)),
+          castButton(),
+        ),
       ),
     );
   };
 
   function render() {
     actorEls.clear();
-    actorLayer.replaceChildren(...battle.allies.map((a, i) => allyActor(a, i)), ...battle.enemies.map(enemyActor));
+    const fc = busy ? new Map<string, number>() : forecast();
+    if (!isAlive(allyOf(picked) ?? { hp: 0 })) picked = battle.allies.find(isAlive)?.uid ?? picked;
+    actorLayer.replaceChildren(...battle.allies.map((a, i) => allyActor(a, i)), ...battle.enemies.map((e) => enemyActor(e, fc)));
     hudSlot.replaceChildren(
       h(
         'header',
@@ -478,7 +559,8 @@ export function battleScreen(app: App): HTMLElement {
             app.save();
             app.go('title');
           }, { class: 'btn-hud', title: '메인으로 (진행 상황은 저장됩니다)' }),
-          h('div', { class: 'plaque' }, h('span', { class: 'plaque-sub' }, `${run.floor + 1}층 · ${floor.name}`), h('b', {}, `TURN ${battle.stats.turns}`)),
+          h('div', { class: 'plaque' }, h('span', { class: 'plaque-sub' }, `${run.floor + 1}층 · ${floor.name}`), h('b', {}, `ROUND ${battle.round}`)),
+          attuneRow(),
         ),
         h(
           'div',
@@ -496,12 +578,13 @@ export function battleScreen(app: App): HTMLElement {
           button('?', () => showHelp(), { class: 'btn-hud', title: '플레이 방법' }),
         ),
       ),
+      chainTrack(),
+      ...(battle.seal ? [h('div', { class: 'seal-banner' }, '⊘ 성식 — ', elBadge(battle.seal, 'sm'), ` ${ELEMENTS[battle.seal].name}(으)로 가는 링크가 끊깁니다`)] : []),
     );
-    lineSlot.replaceChildren(lineView());
     infoSlot.replaceChildren(...[infoView()].filter((x): x is HTMLElement => !!x));
     root.classList.toggle('inspecting', !!inspect);
-    ultSlot.replaceChildren(ultView());
-    actSlot.replaceChildren(actView());
+    dockSlot.replaceChildren(dockView());
+    drawPreview();
     syncAuras();
   }
 
@@ -512,7 +595,7 @@ export function battleScreen(app: App): HTMLElement {
   };
   const showLog = () => modal('전투 기록', h('ol', { class: 'log-list' }, log.slice(-80).reverse().map((l) => h('li', {}, l))), () => {});
 
-  // ── 단축키: Q 일반 공격, E 전투 스킬, 1~4 필살기, Space 실행, Tab 대상 전환, Esc 상세 닫기 ──
+  // ── 단축키: 1~4 술사, Q W E R 스킬, Space 시전, Backspace 마지막 취소, Tab 대상, Esc 상세 닫기 ──
   const onKey = (e: KeyboardEvent) => {
     if (!root.isConnected) {
       document.removeEventListener('keydown', onKey);
@@ -525,17 +608,27 @@ export function battleScreen(app: App): HTMLElement {
       return;
     }
     if (busy || battle.outcome !== 'ongoing') return;
-    const ally = activeAlly();
+    if (e.target instanceof HTMLElement && e.target.closest('input, textarea')) return;
     const k = e.key.toLowerCase();
-    if (k === 'q' && ally) choose(ally.uid, 'basic');
-    else if (k === 'e' && ally) choose(ally.uid, 'skill');
-    else if (['1', '2', '3', '4'].includes(k)) {
-      const a = battle.allies[Number(k) - 1];
-      if (a && canUltimate(battle, a)) choose(a.uid, 'ultimate');
+    const n = Number(e.key);
+    if (n >= 1 && n <= battle.allies.length) {
+      const a = battle.allies[n - 1];
+      if (isAlive(a)) {
+        picked = a.uid;
+        hover = null;
+        render();
+      }
+    } else if (['q', 'w', 'e', 'r'].includes(k)) {
+      const a = allyOf(picked);
+      const id = a ? unitById(a.defId).spells[['q', 'w', 'e', 'r'].indexOf(k)] : null;
+      if (a && id) pickSpell(a, id);
     } else if (k === ' ' || k === 'enter') {
       if (e.target instanceof HTMLButtonElement && k === 'enter') return;
       e.preventDefault();
       void execute();
+    } else if (k === 'backspace') {
+      plan.pop();
+      render();
     } else if (k === 'tab') {
       e.preventDefault();
       const living = battle.enemies.filter(isAlive);
@@ -601,38 +694,33 @@ export function battleScreen(app: App): HTMLElement {
     const u = allyOf(uid) ?? enemyOf(uid);
     if (!el || !u) return;
     const foot = el.querySelector('.bx-foot');
-    if (!foot) return;
-    const fresh = (u.uid.startsWith('e') ? enemyActor(u as Enemy) : allyActor(u as Ally, battle.allies.indexOf(u as Ally))).querySelector('.bx-foot');
+    const fresh = (u.uid.startsWith('e') ? enemyActor(u as Enemy, new Map()) : allyActor(u as Ally, battle.allies.indexOf(u as Ally))).querySelector('.bx-foot');
     actorEls.set(uid, el);
-    if (fresh) foot.replaceWith(fresh);
+    if (foot && fresh) foot.replaceWith(fresh);
   };
 
-  /** 이번 행동의 결과 요약 칩 */
   const castSummary = (events: BattleEvent[], from: number) => {
     let dmg = 0;
     let hits = 0;
     let heal = 0;
     let shield = 0;
-    let broke = false;
+    let reaction: string | null = null;
     const buffs = new Set<string>();
     const debuffs = new Set<string>();
     for (let i = from + 1; i < events.length; i++) {
       const ev = events[i];
-      if (ev.type === 'cast' || ev.type === 'turn') break;
+      if (ev.type === 'cast' || ev.type === 'enemyAct' || ev.type === 'enemyStunned' || ev.type === 'round') break;
       if (ev.type === 'damage' && ev.source !== 'enemy') {
         dmg += ev.amount;
         hits++;
       } else if (ev.type === 'heal') heal += ev.amount;
       else if (ev.type === 'shield' && !ev.targetUid.startsWith('e')) shield += ev.amount;
-      else if (ev.type === 'break') broke = true;
-      else if (ev.type === 'status') {
-        const meta = STATUS_META[ev.status];
-        (meta.debuff ? debuffs : buffs).add(meta.name);
-      }
+      else if (ev.type === 'reaction') reaction = reactionById(ev.reactionId).name;
+      else if (ev.type === 'status') (STATUS_META[ev.status].debuff ? debuffs : buffs).add(STATUS_META[ev.status].name);
     }
     const chips: HTMLElement[] = [];
     if (dmg) chips.push(h('span', { class: 'rc dmg' }, `피해 ${dmg}`, hits > 1 ? h('small', {}, ` ${hits}타`) : null));
-    if (broke) chips.push(h('span', { class: 'rc react' }, '약점 격파'));
+    if (reaction) chips.push(h('span', { class: 'rc react' }, `반응 ${reaction}`));
     if (heal) chips.push(h('span', { class: 'rc heal' }, `회복 ${heal}`));
     if (shield) chips.push(h('span', { class: 'rc shield' }, `⛨ ${shield}`));
     for (const b of buffs) chips.push(h('span', { class: 'rc buff' }, `▲ ${b}`));
@@ -640,23 +728,23 @@ export function battleScreen(app: App): HTMLElement {
     return chips;
   };
 
-  const showSkillPlate = (allyUid: string, abilityId: string, slot: Slot, chips: HTMLElement[]) => {
+  const showSkillPlate = (allyUid: string, spellId: string, chainText: string, linked: boolean, chips: HTMLElement[], step: string) => {
     const ally = allyOf(allyUid)!;
     const unit = unitById(ally.defId);
-    const ab = abilityById(abilityId);
+    const sp = spellById(spellId);
     const bust = h('div', { class: 'sp-bust' });
     bust.innerHTML = characterBust(ally.defId);
     plateSlot.replaceChildren(
       h(
         'div',
-        { class: `skill-plate slot-${slot}`, style: { '--el': elColor(unit.element) } },
+        { class: `skill-plate ${linked ? 'linked' : ''}`, style: { '--el': elColor(unit.element) } },
         bust,
         h(
           'div',
           { class: 'sp-body' },
-          h('small', { class: 'sp-who' }, `${unit.name} `, h('span', {}, unit.code)),
-          h('b', { class: 'sp-name' }, ab.name),
-          h('div', { class: 'sp-meta' }, h('span', { class: 'sp-tag' }, `${SLOT_NAMES[slot]} · ${SLOT_EN[slot]}`)),
+          h('small', { class: 'sp-who' }, `${step} · ${unit.name} `, h('span', {}, unit.code)),
+          h('b', { class: 'sp-name' }, glyph(sp.tag, 'sp-glyph'), sp.name),
+          h('div', { class: 'sp-meta' }, h('span', { class: 'sp-tag' }, `${TAG_NAMES[sp.tag]} · ${TAG_EN[sp.tag]}`), h('span', { class: `sp-link ${linked ? 'on' : ''}` }, chainText)),
           chips.length ? h('div', { class: 'sp-result' }, chips) : null,
         ),
       ),
@@ -667,8 +755,8 @@ export function battleScreen(app: App): HTMLElement {
     plateSlot.replaceChildren(h('div', { class: 'skill-plate enemy' }, h('div', { class: 'sp-body' }, h('small', { class: 'sp-who' }, 'ENEMY'), h('b', { class: 'sp-name' }, def.name), h('div', { class: 'sp-meta' }, h('span', { class: 'sp-tag' }, text)))));
   };
 
-  /** 필살기 컷인 */
-  async function ultimateCutIn(uid: string, name: string, un: { stack: Stack; stacks: number; mult: number } | null, color: string, target: string | null) {
+  /** 극딜 컷인 */
+  async function finisherCutIn(uid: string, spellName: string, un: { stack: Stack; stacks: number; mult: number } | null, color: string, target: string | null) {
     const ally = allyOf(uid)!;
     const unit = unitById(ally.defId);
     const fig = h('div', { class: 'ci-fig' });
@@ -681,18 +769,18 @@ export function battleScreen(app: App): HTMLElement {
       h(
         'div',
         { class: 'ci-text' },
-        h('small', {}, `${unit.code} · ULTIMATE`),
-        h('b', {}, name),
-        un ? h('span', { class: 'ci-kindle' }, h('i', {}, STATUS_META[un.stack].glyph.repeat(Math.min(un.stacks, 10))), ` ${STATUS_META[un.stack].name} ${un.stacks} 해방 · 피해 ×${un.mult}`) : null,
+        h('small', {}, `${unit.code} · CODA`),
+        h('b', {}, spellName),
+        un ? h('span', { class: 'ci-kindle' }, h('i', {}, STATUS_META[un.stack].glyph.repeat(Math.min(un.stacks, 10))), ` ${STATUS_META[un.stack].name} ${un.stacks} 해방 · 피해 ×${un.mult}`) : h('span', { class: 'ci-kindle' }, '모은 힘 없이 발동'),
       ),
     );
     scene.append(el);
     stage.flashScreen(0.25);
-    sound.unleash(un?.stacks ?? 3);
+    sound.unleash(un?.stacks ?? 0);
     sound.duck(2);
     if (target) stage.punch(chest(target), 1.1);
     stage.slowMo(0.35, 0.5);
-    await wait(1050);
+    await wait(un ? 1050 : 700);
     speedLines(color);
     el.classList.add('out');
     setTimeout(() => el.remove(), 400);
@@ -700,17 +788,25 @@ export function battleScreen(app: App): HTMLElement {
 
   // ── 재생 ────────────────────────────────────────────────
   async function play(events: BattleEvent[]) {
+    let prevCaster: string | null = null;
+    let prevOut: Element | null = null;
+    let enemyPhase = false;
+    let castIdx = -1;
     let lastTag: SkillTag = 'strike';
     let lastColor = '#ffffff';
     let lastCaster = '';
     let lastElement = 'star';
     let unleashed = false;
-    let choreo: { caster: string; color: string; motion: string; melee: boolean; dashed: boolean; hits: number; idx: number; tag: SkillTag; slot: Slot; pending: boolean; firstHit: boolean; last: boolean } | null = null;
+    let startShown = false;
+    const castTotal = events.filter((x) => x.type === 'cast' || x.type === 'skip').length;
+    const stats = { dmg: 0, casts: 0, reactions: 0, chain: 0 };
+    let choreo: { caster: string; color: string; motion: string; melee: boolean; dashed: boolean; hits: number; idx: number; tag: SkillTag; pending: boolean; firstHit: boolean; last: boolean; big: boolean } | null = null;
+    const trackSlots = () => hudSlot.querySelectorAll('.q-slot');
     const stageTargets = (from: number): string[] => {
       const out: string[] = [];
       for (let i = from + 1; i < events.length; i++) {
         const x = events[i];
-        if (x.type === 'stage' || x.type === 'cast' || x.type === 'turn') break;
+        if (x.type === 'stage' || x.type === 'cast' || x.type === 'enemyAct' || x.type === 'enemyStunned' || x.type === 'fullChain') break;
         if (x.type === 'damage' && x.source === 'ally') out.push(x.targetUid);
       }
       return out;
@@ -718,10 +814,16 @@ export function battleScreen(app: App): HTMLElement {
     const laterStage = (from: number): boolean => {
       for (let i = from + 1; i < events.length; i++) {
         const x = events[i];
-        if (x.type === 'cast' || x.type === 'turn') return false;
+        if (x.type === 'cast' || x.type === 'enemyAct' || x.type === 'fullChain') return false;
         if (x.type === 'stage' && !x.skipped) return true;
       }
       return false;
+    };
+    const turnSummary = async () => {
+      if (!stats.casts) return;
+      showCallout(h('div', { class: 'banner turn-summary' }, h('small', {}, 'YOUR TURN'), h('b', {}, `총 피해 ${stats.dmg}`), h('span', {}, `시전 ${stats.casts} · 최대 체인 ${stats.chain}${stats.reactions ? ` · 성좌 반응 ${stats.reactions}` : ''}`)), 'summary');
+      await wait(1000);
+      clearCallout();
     };
     const endCast = async () => {
       if (!choreo) return;
@@ -741,63 +843,77 @@ export function battleScreen(app: App): HTMLElement {
       const text = eventText(battle, ev);
       if (text) log.push(text);
       switch (ev.type) {
-        case 'turn': {
-          await endCast();
-          resetHits();
-          plateSlot.replaceChildren();
-          // 행동 순서 표시를 앞으로 당긴다
-          lineSlot.querySelector('.bx-line-item.now')?.classList.add('gone');
-          if (ev.uid.startsWith('a')) {
-            stage.focus(null);
-            floatText(ev.uid, '차례', 'turn-pop');
+        case 'trigger': {
+          if (ev.phase === 'start') {
+            if (!startShown) {
+              startShown = true;
+              showCallout(h('div', { class: 'banner phase-banner start-banner' }, h('small', {}, 'ROUND START'), h('b', {}, '라운드 시작 효과')), 'start');
+              await wait(420);
+              clearCallout();
+            }
+            const col = elColor(unitById(allyOf(ev.allyUid)!.defId).element);
+            stage.anim(ev.allyUid, 'channel');
+            stage.fx?.magicCircle(feet(ev.allyUid), col, 2.2, 0.9, 'magic_01');
+            floatText(ev.allyUid, spellById(ev.spellId).name, 'trigger t-start');
+            await wait(460);
+          } else if (ev.phase === 'kill') {
+            floatText(ev.allyUid, '처치 효과', 'trigger t-kill');
+            await wait(260);
           }
-          await wait(120);
           break;
         }
         case 'cast': {
           await endCast();
+          castIdx++;
           unleashed = false;
-          const ally = allyOf(ev.allyUid)!;
-          const unit = unitById(ally.defId);
+          stats.chain = Math.max(stats.chain, ev.chain);
+          const unit = unitById(allyOf(ev.allyUid)!.defId);
           const color = elColor(unit.element);
-          const ab = abilityById(ev.abilityId);
-          lastTag = ab.tag;
+          const sp = spellById(ev.spellId);
+          lastTag = sp.tag;
           lastColor = color;
           lastCaster = ev.allyUid;
           lastElement = unit.element;
-          const nextCut = events.findIndex((x, j) => j > k && (x.type === 'cast' || x.type === 'turn'));
-          const castEnd = nextCut < 0 ? events.length : nextCut;
-          const slice = events.slice(k + 1, castEnd);
+          trackSlots().forEach((q, i) => {
+            q.classList.toggle('active', i === castIdx);
+            if (i < castIdx) q.classList.add('spent');
+          });
+          const nextCast = events.findIndex((x, j) => j > k && (x.type === 'cast' || x.type === 'enemyAct' || x.type === 'fullChain'));
+          const slice = events.slice(k + 1, nextCast < 0 ? events.length : nextCast);
           const unleash = slice.find((x): x is Extract<BattleEvent, { type: 'unleash' }> => x.type === 'unleash') ?? null;
           const targets = slice.filter((x): x is Extract<BattleEvent, { type: 'damage' }> => x.type === 'damage' && x.source === 'ally').map((x) => x.targetUid);
-          if (ev.slot === 'ultimate') await ultimateCutIn(ev.allyUid, ab.name, unleash, color, targets[0] ?? null);
+          if (sp.tag === 'finisher' || unleash) await finisherCutIn(ev.allyUid, sp.name, unleash, color, targets[0] ?? null);
           stage.focus(chest(ev.allyUid), 0.7);
-          stage.fx?.castCircle(chest(ev.allyUid), color, ev.slot === 'basic' ? 2.6 : 3.6);
-          stage.fx?.gather(chest(ev.allyUid).add(new THREE.Vector3(0.7, 0.1, 0)), color, ev.slot === 'basic' ? 12 : 24, 0.42);
+          stage.fx?.castCircle(chest(ev.allyUid), color, sp.cost >= 2 ? 3.8 : 3);
+          stage.fx?.gather(chest(ev.allyUid).add(new THREE.Vector3(0.7, 0.1, 0)), color, sp.cost >= 2 ? 26 : 16, 0.42);
           const motion = characterMotion(unit.id);
           const staged = slice.some((x) => x.type === 'stage');
           const melee = staged && (motion === 'thrust' || motion === 'slash' || motion === 'bash');
-          stage.setBackdrop(color, SUPPORT_TAGS.has(ab.tag) ? 0.5 : ev.slot === 'basic' ? 0.6 : 0.85);
-          showSkillPlate(ev.allyUid, ev.abilityId, ev.slot, castSummary(events, k));
-          await wait(ev.slot === 'basic' ? 320 : 460);
-          choreo = { caster: ev.allyUid, color, motion, melee, dashed: false, hits: targets.length, idx: 0, tag: ab.tag, slot: ev.slot, pending: false, firstHit: false, last: false };
+          stage.setBackdrop(color, SUPPORT_TAGS.has(sp.tag) ? 0.55 : sp.cost >= 2 ? 0.9 : 0.75);
+          showSkillPlate(ev.allyUid, ev.spellId, ev.linked ? `LINK ${ev.chain} · ×${ev.mult}` : ev.sealed ? '성식 — 링크 끊김' : prevCaster ? '링크 끊김 · 새 체인' : `CHAIN 1${ev.mult !== 1 ? ` · ×${ev.mult}` : ''}`, ev.linked, castSummary(events, k), `${castIdx + 1} / ${castTotal}`);
+          await wait(420);
+          choreo = { caster: ev.allyUid, color, motion, melee, dashed: false, hits: targets.length, idx: 0, tag: sp.tag, pending: false, firstHit: false, last: false, big: sp.cost >= 2 };
           if (melee && targets[0]) {
             stage.anim(ev.allyUid, 'dash');
             stage.dash(ev.allyUid, targets[0], 0.16);
             stage.afterimage(ev.allyUid, color, 4);
             sound.whoosh('sweep');
             choreo.dashed = true;
-          } else stage.anim(ev.allyUid, SUPPORT_TAGS.has(ab.tag) ? 'channel' : staged ? (motion === 'shoot' ? 'fire' : 'cast1') : 'cast');
-          sound.cast(unit.element, ev.slot === 'ultimate' ? 4 : ev.slot === 'skill' ? 2 : 1, motion);
+          } else stage.anim(ev.allyUid, sp.tag === 'charge' ? 'charge' : SUPPORT_TAGS.has(sp.tag) ? 'channel' : staged ? (motion === 'shoot' ? 'fire' : 'cast1') : 'cast');
+          sound.cast(unit.element, ev.chain, motion);
+          if (ev.linked) sound.link(ev.chain, prevOut ?? unit.element);
           stage.fx?.magicCircle(feet(ev.allyUid), color, 2.6, 1.1, 'magic_01');
+          if (ev.linked && prevCaster) stage.fx?.arc(chest(prevCaster), chest(ev.allyUid), prevOut ? elColor(prevOut) : color);
+          resetHits();
+          stats.casts++;
           if (!staged) {
-            // 회복·보호막·강화: 몸에서 빛이 퍼진다
             stage.fx?.flare(chest(ev.allyUid), color, 1.4, 0.35);
             stage.fx?.ring(feet(ev.allyUid), color, 0.4, 4.2, 0.6);
-            if (ev.targetUid && ev.targetUid !== ev.allyUid && ev.targetUid.startsWith('a')) stage.fx?.arc(chest(ev.allyUid), chest(ev.targetUid), color);
             stage.focus(null);
           } else if (targets[0]) stage.focus(new Set(targets).size > 1 ? enemyCenter() : chest(targets[0]), 0.55);
-          await wait(staged ? 120 : 420);
+          await wait(staged ? 140 : 420);
+          prevCaster = ev.allyUid;
+          prevOut = ev.outElement;
           break;
         }
         case 'stage': {
@@ -807,7 +923,7 @@ export function battleScreen(app: App): HTMLElement {
           c.idx = ev.index;
           if (ev.skipped) {
             c.pending = false;
-            await wait(160);
+            await wait(140);
             break;
           }
           const here = stageTargets(k);
@@ -825,36 +941,64 @@ export function battleScreen(app: App): HTMLElement {
             sound.whoosh('sweep');
             await wait(pose === 'finish' ? 300 : 150);
             const roll = { combo1: -0.9, combo2: 2.3, combo3: 0.1, finish: -1.35 }[pose];
-            stage.toon.slash(p, col, pose === 'finish' ? 4.8 : 3.4, roll);
+            stage.toon.slash(p, col, pose === 'finish' ? 4.6 : 3.4, roll);
             if (ev.index % 3 === 1) stage.toon.slash(p, col, 3.1, roll + 1.7, 0.06);
-            if (ev.index % 3 === 2) stage.toon.beam(chest(c.caster), p.clone().add(new THREE.Vector3(1.2, 0, 0)), col, 0.45, 0.24);
-            if (pose === 'finish') {
-              stage.toon.slash(p, '#ffffff', 4, roll + 0.5, 0.04);
-              stage.toon.slash(p, col, 4.2, roll + 2.2, 0.1);
-            }
+            if (pose === 'finish') stage.toon.slash(p, '#ffffff', 4, roll + 0.5, 0.04);
             stage.afterimage(c.caster, col, last ? 4 : 2);
           } else {
             stage.anim(c.caster, c.motion === 'shoot' ? 'fire' : ev.index % 2 ? 'cast2' : 'cast1');
             const from = chest(c.caster).add(new THREE.Vector3(0.7, 0.15, 0));
             const aims = here.length ? [...new Set(here)] : tgt ? [tgt] : [];
             aims.forEach((t, j) => {
-              // 광선은 전투 스킬·필살기의 마지막 한 발에만
-              if (last && ev.total > 1 && c.slot !== 'basic') stage.toon.beam(from, chest(t), col, c.slot === 'ultimate' ? 0.6 : 0.35, 0.28, j * 0.04);
+              if (last && ev.total > 1 && c.big) stage.toon.beam(from, chest(t), col, 0.4, 0.28, j * 0.04);
               else stage.toon.shot(from, chest(t), col, 0.15, j * 0.05);
             });
             if (c.tag === 'aoe' && last) stage.fx?.sweep(enemyCenter(), col, 6.5);
             sound.whoosh(c.motion === 'shoot' ? 'projectile' : 'mark');
-            await wait(last && ev.total > 1 ? 260 : 180);
+            await wait(last && ev.total > 1 ? 240 : 170);
           }
+          break;
+        }
+        case 'reaction': {
+          const r = reactionById(ev.reactionId);
+          const target = getFocus(battle)?.uid ?? null;
+          const at = target ? chest(target) : enemyCenter();
+          stage.fx?.nova(at, elColor(r.from), elColor(r.to), 0.8);
+          sound.reaction(r.from, r.to);
+          stats.reactions++;
+          stage.flashScreen(0.15);
+          stage.punch(at, 0.7);
+          stage.glowPulse(0.4);
+          stage.fx?.signature(r.from, at, elColor(r.from), 1.3);
+          stage.fx?.signature(r.to, at, elColor(r.to), 1.1);
+          showCallout(h('div', { class: 'banner reaction-banner', style: { '--from': elColor(r.from), '--to': elColor(r.to) } }, h('small', {}, `REACTION · ${r.en}`), h('b', {}, r.name), h('span', {}, r.desc)), 'reaction');
+          await wait(1050);
+          clearCallout();
+          break;
+        }
+        case 'fullChain': {
+          await endCast();
+          stage.fx?.goldArcs();
+          sound.fullChain();
+          sound.duck(1.5);
+          const c = enemyCenter();
+          stage.fx?.magicCircle(new THREE.Vector3(-3.6, 0, 0.1), '#ffd27a', 8, 1.6, 'magic_02');
+          stage.fx?.nova(c, '#ffd27a', '#ffffff', 1.05);
+          stage.flashScreen(0.3);
+          stage.shake(0.35);
+          stage.punch(c, 1);
+          speedLines('#ffd27a');
+          showCallout(h('div', { class: 'banner complete-banner' }, h('small', {}, 'CONSTELLATION COMPLETE'), h('b', {}, '성좌 완성')), 'complete');
+          await wait(1400);
+          clearCallout();
           break;
         }
         case 'damage': {
           const unit = allyOf(ev.targetUid) ?? enemyOf(ev.targetUid);
           const el = actorEls.get(ev.targetUid);
-          if (el && unit) for (const t of [el].filter((x) => x.querySelector('.hp'))) updateHpBar(t, ev.hpAfter, unit.maxHp, ev.shieldAfter);
+          if (el && unit && el.querySelector('.hp')) updateHpBar(el, ev.hpAfter, unit.maxHp, ev.shieldAfter);
           const crit = unleashed && ev.source === 'ally';
-          const power = crit ? 2.4 : Math.min(2, Math.max(0.6, ev.amount / 14));
-          stage.anim(ev.targetUid, 'hit', power);
+          stage.anim(ev.targetUid, 'hit', crit ? 2.4 : Math.min(2, Math.max(0.6, ev.amount / 14)));
           if (crit) stage.hitStop(0.14);
           else if (ev.source !== 'burn' && ev.amount >= 12) stage.hitStop(0.06);
           const fx = stage.fx;
@@ -887,11 +1031,9 @@ export function battleScreen(app: App): HTMLElement {
             else if (ev.source === 'doom') {
               fx.meteor(feet(ev.targetUid).add(new THREE.Vector3(0, 0.8, 0)), elColor('comet'));
               stage.shake(0.5);
-            } else if (ev.source === 'counter') fx.slash(p, elColor('star'), 2);
-            else if (ev.source === 'break') {
-              fx.impact(p, lastColor, 1.6);
-              stage.toon.finale(p, '#ffffff', 1.2);
-            } else {
+            } else if (ev.source === 'chain') fx.impact(p, '#ffd27a', 1.2);
+            else if (ev.source === 'counter') fx.slash(p, elColor('star'), 2);
+            else {
               fx.flare(p, lastColor, 1.2, 0.2);
               fx.sparks(p, lastColor, 8, 6, 0.2);
             }
@@ -904,10 +1046,13 @@ export function battleScreen(app: App): HTMLElement {
             stage.shake(0.55);
             stage.flashScreen(0.18);
           }
-          if (ev.source !== 'enemy' && ev.targetUid.startsWith('e')) bumpHits(ev.amount, lastColor);
-          sound.hit(crit || ev.source === 'break' ? 'crit' : ev.amount === 0 && ev.absorbed ? 'blocked' : ev.source === 'ally' ? (characterMotion(allyOf(lastCaster)?.defId ?? '') === 'slash' ? 'slash' : 'ally') : ev.source === 'erosion' ? 'burn' : ev.source === 'burst' ? 'doom' : ev.source);
-          floatText(ev.targetUid, ev.amount > 0 ? `${ev.amount}` : `⛨${ev.absorbed}`, ev.source === 'enemy' ? 'dmg-ally' : ev.source === 'burn' || ev.source === 'erosion' ? 'dmg-burn' : crit || ev.source === 'break' ? 'dmg-crit' : 'dmg');
-          await wait(finale ? 480 : crit ? 560 : lastTag === 'multi' ? 190 : 260);
+          if (ev.source !== 'enemy' && !enemyPhase) {
+            bumpHits(ev.amount, lastColor);
+            stats.dmg += ev.amount;
+          }
+          sound.hit(crit ? 'crit' : ev.amount === 0 && ev.absorbed ? 'blocked' : ev.source === 'ally' ? (characterMotion(allyOf(lastCaster)?.defId ?? '') === 'slash' ? 'slash' : 'ally') : ev.source === 'erosion' ? 'burn' : ev.source === 'burst' ? 'doom' : ev.source);
+          floatText(ev.targetUid, ev.amount > 0 ? `${ev.amount}` : `⛨${ev.absorbed}`, ev.source === 'enemy' ? 'dmg-ally' : ev.source === 'burn' || ev.source === 'erosion' ? 'dmg-burn' : crit ? 'dmg-crit' : ev.source === 'chain' || ev.source === 'doom' ? 'dmg-big' : 'dmg');
+          await wait(finale ? 480 : crit ? 560 : lastTag === 'multi' ? 190 : 250);
           break;
         }
         case 'heal': {
@@ -920,14 +1065,13 @@ export function battleScreen(app: App): HTMLElement {
           await wait(130);
           break;
         }
-        case 'shield': {
+        case 'shield':
           stage.fx?.shield(chest(ev.targetUid), ev.targetUid.startsWith('e') ? '#e0685a' : '#8ec5e0');
           sound.shield();
           floatText(ev.targetUid, `⛨ ${ev.amount}`, 'shield');
           refreshFoot(ev.targetUid);
           await wait(120);
           break;
-        }
         case 'status': {
           const meta = STATUS_META[ev.status];
           const isEnemy = ev.targetUid.startsWith('e');
@@ -957,57 +1101,39 @@ export function battleScreen(app: App): HTMLElement {
           unleashed = true;
           refreshFoot(ev.allyUid);
           break;
-        case 'toughness': {
-          refreshFoot(ev.targetUid);
-          floatText(ev.targetUid, `강인도 -${ev.amount}`, 'tough');
-          break;
-        }
-        case 'break': {
-          // 약점 격파: 화면이 멈칫하고 큰 글씨
-          const col = elColor(ev.element);
-          stage.impactFrame(col);
-          stage.flashScreen(0.3);
-          stage.shake(0.5);
-          stage.hitStop(0.18);
-          stage.fx?.ring(feet(ev.targetUid), col, 0.6, 6, 0.6);
-          sound.reaction('sol', 'luna');
-          showCallout(h('div', { class: 'banner break-banner', style: { '--el': col } }, h('small', {}, 'WEAKNESS BREAK'), h('b', {}, '약점 격파'), h('span', {}, `${ELEMENTS[ev.element].name} 격파 — ${BREAK_EFFECT[ev.element]}`)), 'break');
-          refreshFoot(ev.targetUid);
-          await wait(720);
-          clearCallout();
-          break;
-        }
-        case 'recover':
-          floatText(ev.targetUid, '강인도 회복', 'buff');
-          refreshFoot(ev.targetUid);
-          await wait(260);
-          break;
-        case 'energy':
-        case 'sp':
-          ultSlot.replaceChildren(ultView());
-          if (ev.type === 'sp' && ev.amount > 0) sound.stardust();
-          break;
-        case 'trigger':
-          if (ev.phase === 'kill') {
-            floatText(ev.allyUid, '처치 효과', 'trigger t-kill');
-            await wait(260);
-          }
-          break;
         case 'purge':
           floatText(ev.targetUid, '강화 해제', 'debuff');
           await wait(110);
           break;
+        case 'stardust':
+          if (ev.amount > 0) sound.stardust();
+          break;
+        case 'skip':
+          floatText(ev.allyUid, ev.reason === 'cost' ? '성진 부족' : '시전 불가', 'debuff');
+          await wait(420);
+          break;
         case 'enemyAct':
         case 'enemyStunned': {
-          await endCast();
+          if (!enemyPhase) {
+            await endCast();
+            enemyPhase = true;
+            stage.focus(null);
+            stage.fx?.fadeArcs();
+            trackSlots().forEach((q) => q.classList.add('spent'));
+            await turnSummary();
+            plateSlot.replaceChildren();
+            resetHits();
+            showCallout(h('div', { class: 'banner phase-banner' }, h('small', {}, 'ENEMY PHASE'), h('b', {}, '적의 차례')), 'enemy');
+            await wait(700);
+            clearCallout();
+          }
           if (ev.type === 'enemyStunned') {
-            floatText(ev.enemyUid, enemyOf(ev.enemyUid)?.broken === false ? '움직이지 못한다' : '기절', 'debuff');
-            showEnemyPlate(ev.enemyUid, '행동 불능');
-            await wait(520);
+            floatText(ev.enemyUid, '기절', 'debuff');
+            await wait(360);
             break;
           }
           stage.focus(chest(ev.enemyUid), 0.35);
-          showEnemyPlate(ev.enemyUid, { attack: `공격${ev.intent.kind === 'attack' && ev.intent.targetId ? ` → ${unitLabel(battle, ev.intent.targetId)}` : ''}`, attackAll: '전체 공격', defend: '방어 태세', buff: '힘을 모은다', seal: '성식 — 성진 강탈', charge: '큰 공격 준비' }[ev.intent.kind]);
+          showEnemyPlate(ev.enemyUid, { attack: `공격${ev.intent.kind === 'attack' && ev.intent.targetId ? ` → ${unitLabel(battle, ev.intent.targetId)}` : ''}`, attackAll: '전체 공격', defend: '방어 태세', buff: '힘을 모은다', seal: '성식 — 성속 봉인', charge: '큰 공격 준비' }[ev.intent.kind]);
           stage.fx?.gather(chest(ev.enemyUid), '#ff5a4a', 16, 0.36);
           await wait(320);
           stage.anim(ev.enemyUid, 'act');
@@ -1024,49 +1150,57 @@ export function battleScreen(app: App): HTMLElement {
           actorEls.get(ev.uid)?.classList.add('dying');
           await wait(380);
           break;
+        case 'seal':
+          stage.lightning();
+          sound.seal();
+          showCallout(h('div', { class: 'banner phase-banner' }, h('small', {}, 'OCCULTATION'), h('b', {}, `성식 — ${ELEMENTS[ev.element].name} 봉인`)), 'enemy');
+          await wait(720);
+          clearCallout();
+          break;
+        case 'attune': {
+          sound.attune(ev.element);
+          const chip = hudSlot.querySelector(`.attune-chip[data-el="${ev.element}"] b`);
+          if (chip) chip.textContent = String(ev.total);
+          else hudSlot.querySelector('.attune-row')?.replaceWith(attuneRow());
+          break;
+        }
+        case 'release':
+          sound.release(ev.element);
+          break;
+        case 'round':
         case 'outcome':
           break;
       }
     }
     await endCast();
+    if (!enemyPhase) await turnSummary();
+    stage.fx?.fadeArcs();
     stage.focus(null);
     plateSlot.replaceChildren();
     resetHits();
-    await wait(200);
+    await wait(250);
   }
 
   async function execute() {
     if (busy) return;
-    const a = actionOf();
-    if (!a || validateAction(battle, a)) return;
     busy = true;
+    const toRun = plan;
     root.classList.add('busy', 'executing');
+    inspect = null;
     render();
-    const events = act(battle, a);
-    chosen = null;
-    allyTarget = null;
+    clearPreview();
+    const events = executeRound(battle, toRun);
+    plan = [];
     await play(events);
     app.save();
     busy = false;
     root.classList.remove('busy', 'executing');
     clearCallout();
-    if (battle.outcome === 'ongoing') render();
-    else showOutcome();
-  }
-
-  /** 첫 진입: 적이 먼저 움직이면 그 차례를 보여 준 뒤 술사 차례로 */
-  async function opening() {
-    if (battle.active || battle.outcome !== 'ongoing') return;
-    busy = true;
-    root.classList.add('busy');
-    render();
-    const events = begin(battle);
-    await play(events);
-    app.save();
-    busy = false;
-    root.classList.remove('busy');
-    if (battle.outcome === 'ongoing') render();
-    else showOutcome();
+    picked = battle.allies.find(isAlive)?.uid ?? picked;
+    if (battle.outcome === 'ongoing') {
+      render();
+      sound.ui('card_fan', 0.5);
+    } else showOutcome();
   }
 
   function showOutcome() {
@@ -1089,7 +1223,7 @@ export function battleScreen(app: App): HTMLElement {
           { class: 'outcome-card panel' },
           h('p', { class: 'eyebrow' }, won ? 'MISSION COMPLETE' : 'MISSION FAILED'),
           h('h2', {}, won ? '전투 승리' : '작전 실패'),
-          h('p', { class: 'muted' }, `약점 격파 ${battle.stats.breaks} · 필살기 ${battle.stats.ultimates} · ${battle.stats.turns}턴`),
+          h('p', { class: 'muted' }, `최대 체인 ${battle.stats.maxChain} · 성좌 반응 ${battle.stats.reactions} · ${battle.round} 라운드`),
           button(won ? '계속' : '결과 보기', proceed, { variant: 'primary' }),
         ),
       ),
@@ -1098,7 +1232,6 @@ export function battleScreen(app: App): HTMLElement {
   }
 
   if (battle.outcome !== 'ongoing') showOutcome();
-  else if (!battle.active) void opening();
   else render();
   return root;
 }
