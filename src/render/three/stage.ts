@@ -15,7 +15,7 @@ import { Backdrop, ToonFx } from './toonfx';
 
 export type Framing = 'menu' | 'battle';
 export type ActorPart = 'feet' | 'chest' | 'head' | 'top';
-export type ActorAnim = 'cast' | 'channel' | 'charge' | 'act' | 'hit' | 'die' | 'dash' | 'combo1' | 'combo2' | 'combo3' | 'finish' | 'fire' | 'cast1' | 'cast2' | 'recover';
+export type ActorAnim = 'cast' | 'channel' | 'charge' | 'act' | 'hit' | 'die' | 'dash' | 'combo1' | 'combo2' | 'combo3' | 'finish' | 'fire' | 'cast1' | 'cast2' | 'recover' | 'heal' | 'guard' | 'empower' | 'hex' | 'spin1' | 'spin2' | 'slam' | 'uppercut' | 'lunge' | 'rapid' | 'aim' | 'skyshot';
 
 export interface ActorSpec {
   uid: string;

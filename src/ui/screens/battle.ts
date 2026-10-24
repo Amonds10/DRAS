@@ -3,7 +3,7 @@ import { sound } from '../../audio/sound';
 import { MAX_ATTUNE, cloneBattle, currentPattern, executeRound, getFocus, isAlive, planCost, setFocus, statusStacks } from '../../core/battle';
 import { previewChain } from '../../core/link';
 import { finishBattle } from '../../core/run';
-import type { Ally, BattleEvent, BattleState, Element, Enemy, PlannedCast, SkillTag, Stack, Status, StatusId } from '../../core/types';
+import type { Ally, BattleEvent, BattleState, Element, Enemy, PlannedCast, SkillTag, SpellDef, Stack, Status, StatusId } from '../../core/types';
 import { ELEMENTS, STATUS_COLOR, STATUS_META, reactionById } from '../../data/elements';
 import { FLOORS } from '../../data/encounters';
 import { TRAIT_DESC, enemyById, moveText } from '../../data/enemies';
@@ -12,7 +12,7 @@ import { ROLE_NAMES, unitById } from '../../data/units';
 import { characterBust, characterSvg } from '../../render/characters';
 import { characterMotion } from '../../render/rig';
 import { floorPreset } from '../../render/three/environment';
-import { getStage } from '../../render/three/stage';
+import { getStage, type ActorAnim } from '../../render/three/stage';
 import type { App } from '../app';
 import { h, sleep } from '../dom';
 import { glyph } from '../glyphs';
@@ -78,6 +78,63 @@ function eventText(state: BattleState, ev: BattleEvent): string | null {
 }
 
 const SUPPORT_TAGS = new Set<SkillTag>(['heal', 'shield', 'buff', 'utility', 'charge']);
+/**
+ * 공격 스타일: 같은 술사라도 스킬마다 동작·투사체·카메라가 다르다.
+ * 근접(단검·창·방패) / 총 / 마법(지팡이·구슬)마다 몇 가지를 두고, 유형으로 먼저 고른 뒤 나머지는 스킬 이름으로 나눈다.
+ */
+type AtkStyle = 'combo' | 'rush' | 'spin' | 'uppercut' | 'leap' | 'lunge' | 'barrage' | 'snipe' | 'rain' | 'orbs' | 'pillar' | 'eruption' | 'beam';
+
+const hashId = (id: string) => [...id].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7);
+
+function styleFor(sp: SpellDef, motion: string): AtkStyle {
+  const pick = (opts: AtkStyle[]) => opts[hashId(sp.id) % opts.length];
+  if (motion === 'shoot') {
+    if (sp.tag === 'multi') return 'barrage';
+    if (sp.tag === 'aoe' || sp.tag === 'delayed') return 'rain';
+    if (sp.tag === 'pierce' || sp.tag === 'execute' || sp.tag === 'finisher') return 'snipe';
+    return pick(['barrage', 'snipe']);
+  }
+  if (motion === 'raise') {
+    if (sp.tag === 'aoe') return 'eruption';
+    if (sp.tag === 'multi') return 'orbs';
+    if (sp.tag === 'strike' || sp.tag === 'execute' || sp.tag === 'finisher') return 'pillar';
+    return pick(['orbs', 'beam', 'eruption']);
+  }
+  if (sp.tag === 'aoe') return 'spin';
+  if (sp.tag === 'pierce') return 'lunge';
+  if (sp.tag === 'execute') return 'leap';
+  if (sp.tag === 'multi') return 'rush';
+  if (sp.tag === 'finisher') return pick(['leap', 'combo']);
+  return pick(['combo', 'uppercut', 'leap', 'rush']);
+}
+
+/** 한 시전의 연출 상태 */
+interface Choreo {
+  caster: string;
+  color: string;
+  motion: string;
+  melee: boolean;
+  dashed: boolean;
+  hits: number;
+  idx: number;
+  tag: SkillTag;
+  pending: boolean;
+  firstHit: boolean;
+  last: boolean;
+  big: boolean;
+  ult: boolean;
+  style: AtkStyle;
+}
+
+/** 보조 주문(타격 없음)의 동작 */
+function supportPose(tag: SkillTag): ActorAnim {
+  if (tag === 'heal' || tag === 'drain') return 'heal';
+  if (tag === 'shield') return 'guard';
+  if (tag === 'debuff' || tag === 'mark' || tag === 'dot' || tag === 'delayed') return 'hex';
+  if (tag === 'charge') return 'charge';
+  return 'empower';
+}
+
 /** 근접 술사가 돌진해 멈추는 거리: 검기가 날아갈 틈을 남긴다 */
 const MELEE_GAP = 2.7;
 const HEAL_COLOR = '#56c97f';
@@ -757,6 +814,243 @@ export function battleScreen(app: App): HTMLElement {
     plateSlot.replaceChildren(h('div', { class: 'skill-plate enemy' }, h('div', { class: 'sp-body' }, h('small', { class: 'sp-who' }, 'ENEMY'), h('b', { class: 'sp-name' }, def.name), h('div', { class: 'sp-meta' }, h('span', { class: 'sp-tag' }, text)))));
   };
 
+  /**
+   * 스킬 카메라: 스타일마다 다른 화면으로 잡는다(옆에서 따라가기·올려다보기·높이 내려다보기·어깨 너머).
+   * 시전이 끝나면 평소 카메라로 돌아온다.
+   */
+  const castShot = (caster: string, style: AtkStyle | null, tag: SkillTag, targets: string[]) => {
+    const c = chest(caster);
+    const t = targets[0] ? chest(targets[0]) : enemyCenter();
+    const mid = c.clone().lerp(t, 0.5);
+    const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+    let shot: { pos: THREE.Vector3; look: THREE.Vector3; fov: number; roll?: number } | null = null;
+    switch (style) {
+      case 'combo':
+      case 'rush':
+      case 'barrage':
+      case 'beam':
+      case 'orbs':
+        shot = { pos: mid.clone().add(V(0, 1.1, 8.2)), look: mid.clone().add(V(0, 0.1, 0)), fov: 30, roll: style === 'rush' ? 0.03 : 0 };
+        break;
+      case 'leap':
+      case 'uppercut':
+      case 'pillar':
+        shot = { pos: new THREE.Vector3(t.x - 3.4, 0.35, t.z + 6.4), look: t.clone().add(V(-0.6, 1.4, 0)), fov: 34, roll: -0.04 };
+        break;
+      case 'spin':
+      case 'rain':
+      case 'eruption': {
+        const e = enemyCenter();
+        shot = { pos: e.clone().add(V(-3.2, 5.2, 10.5)), look: e.clone().add(V(-0.8, -0.4, 0)), fov: 34 };
+        break;
+      }
+      case 'lunge':
+      case 'snipe':
+        shot = { pos: c.clone().add(V(-2.6, 0.9, 3.8)), look: t.clone(), fov: style === 'snipe' ? 20 : 30, roll: 0.03 };
+        break;
+      default: {
+        // 보조 주문: 치유는 정면 가까이, 방어는 낮은 정면, 강화는 올려다보기, 저주는 대상을 넘겨다보기
+        const pose = supportPose(tag);
+        const ft = feet(caster);
+        if (pose === 'heal') shot = { pos: c.clone().add(V(1.6, 0.5, 5.2)), look: c.clone().add(V(0.1, 0.6, 0)), fov: 26 };
+        else if (pose === 'guard') shot = { pos: ft.clone().add(V(2.6, 0.4, 4.8)), look: c.clone().add(V(0.2, 0.3, 0)), fov: 28, roll: 0.04 };
+        else if (pose === 'hex') shot = { pos: c.clone().add(V(-2.2, 1.2, 4.2)), look: t.clone(), fov: 28 };
+        else shot = { pos: ft.clone().add(V(2.2, 0.3, 5)), look: c.clone().add(V(0, 0.9, 0)), fov: 26, roll: -0.05 };
+      }
+    }
+    stage.cinematic({ ...shot, smooth: 0.2 });
+  };
+
+  /** 한 타격 단계: 스타일마다 동작·투사체·기다림이 다르다 */
+  async function playStage(c: Choreo, index: number, total: number, last: boolean, tgt: string | null, aims: string[], p: THREE.Vector3) {
+    const col = c.color;
+    const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+    const from = chest(c.caster).add(V(0.8, 0.15, 0.1));
+    const finish = last && total > 1;
+    switch (c.style) {
+      case 'combo':
+      case 'rush': {
+        const rush = c.style === 'rush';
+        const pose = finish ? 'finish' : (['combo1', 'combo2', 'combo3'] as const)[index % 3];
+        if (tgt) stage.dash(c.caster, tgt, rush ? 0.06 : 0.1, rush ? (index % 2 ? 0.9 : 2) : MELEE_GAP);
+        stage.anim(c.caster, pose);
+        if (rush) stage.afterimage(c.caster, col, 1);
+        sound.swing(c.motion, pose === 'finish');
+        await wait(pose === 'finish' ? 300 : rush ? 90 : 150);
+        const f2 = chest(c.caster).add(V(0.9, pose === 'finish' ? 0.5 : 0.15, 0.1));
+        aims.forEach((t, j) => meleeProjectile(c.motion, f2, chest(t), col, pose, j * 0.04));
+        stage.kick(pose === 'finish' ? 0.05 : 0.03, pose === 'finish' ? 0.9 : 0.5);
+        await wait(pose === 'finish' ? 170 : rush ? 80 : 120);
+        const roll = { combo1: -0.9, combo2: 2.3, combo3: 0.1, finish: -1.35 }[pose];
+        stage.toon.slash(p, col, pose === 'finish' ? 4.6 : 3.4, roll);
+        if (index % 3 === 1) stage.toon.slash(p, col, 3.1, roll + 1.7, 0.06);
+        if (pose === 'finish') stage.toon.slash(p, col, 4, roll + 0.5, 0.04);
+        break;
+      }
+      case 'spin': {
+        // 회전 베기: 몸을 돌리며 사방으로 검기를 흩뿌린다
+        stage.anim(c.caster, index % 2 ? 'spin2' : 'spin1');
+        sound.swing(c.motion, finish);
+        await wait(140);
+        const at = chest(c.caster);
+        stage.toon.spawn('ring', { pos: at, size: finish ? 7 : 5, color: col, life: 0.4 });
+        stage.toon.slash(at, col, 3.6, index * 1.3);
+        aims.forEach((t, j) => stage.toon.wave(at.clone().add(V(0.5, 0, 0)), chest(t), col, 2.8, 0.13, j * 0.03, (index % 2 ? 0.6 : -0.6) + j * 0.3));
+        stage.fx?.ring(feet(c.caster), col, 0.5, 5.5, 0.5);
+        await wait(130);
+        break;
+      }
+      case 'uppercut': {
+        // 올려치기: 첫 타격은 아래에서 위로 퍼 올리고, 마지막은 공중에서 내리친다
+        const pose = finish ? 'slam' : index === 0 ? 'uppercut' : 'combo3';
+        if (tgt) stage.dash(c.caster, tgt, 0.1, 1.8);
+        stage.anim(c.caster, pose);
+        sound.swing(c.motion, finish);
+        await wait(pose === 'slam' ? 320 : 150);
+        const low = feet(c.caster).add(V(1, 0.4, 0.1));
+        aims.forEach((t, j) => {
+          if (pose === 'uppercut') stage.toon.wave(low, chest(t).add(V(0, 1.2, 0)), col, 2.6, 0.12, j * 0.04, Math.PI / 2.2);
+          else if (pose === 'slam') stage.toon.wave(chest(t).add(V(-0.4, 3.2, 0)), feet(t).add(V(0, 0.4, 0)), col, 3.4, 0.12, j * 0.04, 0);
+          else meleeProjectile(c.motion, from, chest(t), col, pose, j * 0.04);
+        });
+        if (pose === 'slam' && tgt) {
+          stage.fx?.ring(feet(tgt), col, 0.6, 6, 0.6, 'rune');
+          stage.shake(0.35);
+        }
+        await wait(120);
+        stage.toon.slash(p, col, pose === 'slam' ? 4.6 : 3.4, pose === 'uppercut' ? 1.6 : -1.2);
+        break;
+      }
+      case 'leap': {
+        // 도약: 높이 뛰어올라 위에서 내리꽂는다(땅이 갈라지듯 충격파)
+        if (tgt) stage.dash(c.caster, tgt, 0.12, 1.4);
+        stage.anim(c.caster, 'slam');
+        sound.swing(c.motion, true);
+        await wait(300);
+        aims.forEach((t, j) => stage.toon.wave(chest(t).add(V(-0.3, 3.6, 0)), feet(t).add(V(0, 0.3, 0)), col, finish ? 4 : 3.2, 0.11, j * 0.04, 0));
+        await wait(110);
+        aims.forEach((t) => {
+          stage.fx?.ring(feet(t), col, 0.5, finish ? 7 : 5, 0.6, 'rune');
+          stage.fx?.shards(feet(t).add(V(0, 0.4, 0)), col, 8, 6);
+        });
+        stage.toon.slash(p, col, 4.4, -1.5);
+        stage.shake(finish ? 0.45 : 0.3);
+        stage.kick(0.04, 1);
+        break;
+      }
+      case 'lunge': {
+        // 관통 돌격: 적을 꿰뚫고 지나가며 긴 빛줄기를 남긴다
+        if (tgt) stage.dash(c.caster, tgt, 0.09, -0.6);
+        stage.anim(c.caster, 'lunge');
+        stage.afterimage(c.caster, col, 2);
+        sound.swing(c.motion, true);
+        await wait(110);
+        aims.forEach((t, j) => {
+          const to = chest(t);
+          stage.toon.beam(from, to.clone().add(V(3, 0, 0)), col, 0.45, 0.35, j * 0.03);
+          stage.fx?.comet(from, to, col, 0.08, j * 0.03);
+        });
+        await wait(100);
+        if (tgt) stage.dash(c.caster, tgt, 0.16, 2.4);
+        break;
+      }
+      case 'barrage': {
+        // 연사: 짧은 반동을 반복하며 탄을 흩뿌린다
+        stage.anim(c.caster, 'rapid');
+        const n = finish ? 3 : 2;
+        for (let i = 0; i < n; i++) {
+          aims.forEach((t, j) => {
+            const to = chest(t).add(V(0, (Math.random() - 0.5) * 0.6, 0));
+            stage.fx?.comet(from, to, col, 0.11, i * 0.07 + j * 0.03);
+            stage.toon.shot(from, to, col, 0.11, i * 0.07 + j * 0.03);
+          });
+          sound.swing('shoot', false);
+          await wait(70);
+        }
+        await wait(80);
+        break;
+      }
+      case 'snipe': {
+        // 저격: 숨을 멈추고 조준선이 겨눈 뒤 한 방
+        if (index === 0) {
+          aims.forEach((t) => stage.toon.beam(from, chest(t), col, 0.05, 0.5));
+          await wait(320);
+        }
+        stage.anim(c.caster, 'fire');
+        aims.forEach((t, j) => {
+          stage.toon.beam(from, chest(t), col, finish ? 0.8 : 0.5, 0.4, j * 0.03);
+          stage.fx?.comet(from, chest(t), col, 0.1, j * 0.03);
+        });
+        stage.kick(-0.03, -0.6);
+        sound.swing('shoot', true);
+        await wait(140);
+        break;
+      }
+      case 'rain': {
+        // 하늘로 쏘아 올린 탄이 적 머리 위로 쏟아진다
+        stage.anim(c.caster, 'skyshot');
+        stage.fx?.comet(from, from.clone().add(V(2, 9, -1)), col, 0.16);
+        sound.swing('shoot', finish);
+        await wait(180);
+        aims.forEach((t, j) => setTimeout(() => stage.fx?.meteor(chest(t), col), (j * 60) / app.speed));
+        await wait(220);
+        break;
+      }
+      case 'pillar': {
+        // 낙뢰 기둥: 대상 발밑에 마법진이 열리고 하늘에서 빛기둥이 내리꽂힌다
+        stage.anim(c.caster, 'cast2');
+        aims.forEach((t) => stage.fx?.magicCircle(feet(t), col, 3.4, 0.9, 'rune'));
+        sound.swing('raise', finish);
+        await wait(200);
+        aims.forEach((t, j) => {
+          stage.toon.beam(chest(t).add(V(0, 9, 0)), feet(t), col, finish ? 1.4 : 1, 0.45, j * 0.03);
+          stage.toon.pillar(feet(t), col, 8, finish ? 2.6 : 2, 0.7, j * 0.03);
+        });
+        stage.shake(finish ? 0.35 : 0.2);
+        await wait(140);
+        break;
+      }
+      case 'eruption': {
+        // 분출: 땅의 마법진이 부풀다 아래에서 위로 터진다
+        stage.anim(c.caster, 'hex');
+        aims.forEach((t) => stage.fx?.magicCircle(feet(t), col, finish ? 4.4 : 3.2, 0.8, 'rune_hex'));
+        sound.swing('raise', finish);
+        await wait(220);
+        aims.forEach((t, j) => {
+          stage.toon.pillar(feet(t), col, 5, finish ? 2.4 : 1.8, 0.6, j * 0.04);
+          stage.fx?.shards(feet(t).add(V(0, 0.4, 0)), col, 6, 7);
+        });
+        await wait(120);
+        break;
+      }
+      case 'beam': {
+        // 광선: 손끝에서 곧은 빛줄기를 내뿜는다
+        stage.anim(c.caster, 'cast1');
+        aims.forEach((t, j) => {
+          stage.toon.beam(from, chest(t), col, finish ? 0.9 : 0.6, 0.5, j * 0.04);
+          stage.fx?.beam(from, chest(t), col);
+        });
+        sound.whoosh('beam');
+        await wait(220);
+        break;
+      }
+      default: {
+        // 구체: 빛 구체가 호를 그리며 날아간다
+        stage.anim(c.caster, index % 2 ? 'cast2' : 'cast1');
+        aims.forEach((t, j) => {
+          const to = chest(t);
+          if (finish && c.big) stage.toon.beam(from, to, col, 0.7, 0.4, j * 0.04);
+          stage.fx?.projectile(from, to, col, 0.26, 0.9 + j * 0.2, j * 0.06);
+          stage.toon.spawn('star', { pos: from, size: 1.2, color: col, life: 0.26, delay: j * 0.06, path: (k) => from.clone().lerp(to, k).add(V(0, Math.sin(k * Math.PI) * (0.9 + j * 0.2), 0)) });
+        });
+        stage.fx?.magicCircle(chest(c.caster).add(V(0.6, 0.2, 0.2)), col, 1.6, 0.5, 'rune');
+        sound.swing(c.motion, finish && c.big);
+        await wait(finish ? 280 : 260);
+      }
+    }
+    if (c.tag === 'aoe' && last && c.style !== 'spin') stage.fx?.sweep(enemyCenter(), col, 6.5);
+  }
+
   /** 근접 투사체: 단검은 초승달 검기, 창은 꿰뚫는 창기, 방패는 땅을 타고 가는 충격파 */
   const meleeProjectile = (motion: string, from: THREE.Vector3, to: THREE.Vector3, col: string, pose: string, delay: number) => {
     const fin = pose === 'finish';
@@ -895,7 +1189,7 @@ export function battleScreen(app: App): HTMLElement {
     let startShown = false;
     const castTotal = events.filter((x) => x.type === 'cast' || x.type === 'skip').length;
     const stats = { dmg: 0, casts: 0, reactions: 0, chain: 0 };
-    let choreo: { caster: string; color: string; motion: string; melee: boolean; dashed: boolean; hits: number; idx: number; tag: SkillTag; pending: boolean; firstHit: boolean; last: boolean; big: boolean; ult: boolean } | null = null;
+    let choreo: Choreo | null = null;
     const trackSlots = () => hudSlot.querySelectorAll('.q-slot');
     const stageTargets = (from: number): string[] => {
       const out: string[] = [];
@@ -932,6 +1226,7 @@ export function battleScreen(app: App): HTMLElement {
       stage.anim(c.caster, 'recover');
       stage.setBackdrop(null);
       if (c.ult) endCinema();
+      else stage.cinematic(null);
     };
 
     for (let k = 0; k < events.length; k++) {
@@ -990,14 +1285,19 @@ export function battleScreen(app: App): HTMLElement {
           stage.setBackdrop(color, SUPPORT_TAGS.has(sp.tag) ? 0.55 : sp.cost >= 2 ? 0.9 : 0.75);
           showSkillPlate(ev.allyUid, ev.spellId, ev.linked ? `LINK ${ev.chain} · ×${ev.mult}` : ev.sealed ? '성식 — 링크 끊김' : prevCaster ? '링크 끊김 · 새 체인' : `CHAIN 1${ev.mult !== 1 ? ` · ×${ev.mult}` : ''}`, ev.linked, castSummary(events, k), `${castIdx + 1} / ${castTotal}`);
           await wait(420);
-          choreo = { caster: ev.allyUid, color, motion, melee, dashed: false, hits: targets.length, idx: 0, tag: sp.tag, pending: false, firstHit: false, last: false, big: sp.cost >= 2, ult };
+          const style = styleFor(sp, motion);
+          choreo = { caster: ev.allyUid, color, motion, melee, dashed: false, hits: targets.length, idx: 0, tag: sp.tag, pending: false, firstHit: false, last: false, big: sp.cost >= 2, ult, style };
+          if (!ult) castShot(ev.allyUid, staged ? style : null, sp.tag, targets);
           if (melee && targets[0]) {
+            // 스타일마다 다가서는 법이 다르다: 회전 베기는 적진 가운데로, 관통은 멀리서 노린다
+            const gap = style === 'spin' ? 2.2 : style === 'lunge' ? 4.2 : style === 'rush' ? 1.6 : MELEE_GAP;
             stage.anim(ev.allyUid, 'dash');
-            stage.dash(ev.allyUid, targets[0], 0.16, MELEE_GAP);
+            stage.dash(ev.allyUid, targets[0], 0.16, gap);
             stage.afterimage(ev.allyUid, color, 2);
             sound.whoosh('sweep');
             choreo.dashed = true;
-          } else stage.anim(ev.allyUid, sp.tag === 'charge' ? 'charge' : SUPPORT_TAGS.has(sp.tag) ? 'channel' : staged ? (motion === 'shoot' ? 'fire' : 'cast1') : 'cast');
+          } else if (staged) stage.anim(ev.allyUid, style === 'snipe' ? 'aim' : style === 'rain' ? 'skyshot' : motion === 'shoot' ? 'fire' : style === 'eruption' ? 'hex' : 'cast1');
+          else stage.anim(ev.allyUid, supportPose(sp.tag));
           sound.cast(unit.element, ev.chain, motion);
           if (ev.linked) sound.link(ev.chain, prevOut ?? unit.element);
           stage.fx?.magicCircle(feet(ev.allyUid), color, 2.6, 1.1, 'rune_hex');
@@ -1005,11 +1305,34 @@ export function battleScreen(app: App): HTMLElement {
           resetHits();
           stats.casts++;
           if (!staged) {
-            stage.fx?.flare(chest(ev.allyUid), color, 1.4, 0.35);
-            stage.fx?.ring(feet(ev.allyUid), color, 0.4, 4.2, 0.6);
-            stage.toon.pillar(feet(ev.allyUid), color, 6, 2, 1.1);
-            stage.toon.spawn('ring', { pos: chest(ev.allyUid), size: 4.5, color, life: 0.6 });
-            stage.focus(null);
+            const pose = supportPose(sp.tag);
+            const at = chest(ev.allyUid);
+            const ft = feet(ev.allyUid);
+            if (pose === 'heal') {
+              // 치유: 머리 위에서 빛이 쏟아지고 발밑에 축복의 원
+              stage.toon.pillar(ft, HEAL_COLOR, 6, 1.5, 1.1);
+              stage.fx?.magicCircle(ft, HEAL_COLOR, 3.6, 1.3, 'rune_hex');
+              stage.fx?.motes(at.clone().add(new THREE.Vector3(0, 1.2, 0)), HEAL_COLOR);
+            } else if (pose === 'guard') {
+              // 방어: 앞쪽에 빛의 벽이 서고 충격파가 퍼진다
+              stage.fx?.shield(at.clone().add(new THREE.Vector3(0.9, 0, 0.2)), color, 3.1);
+              stage.toon.spawn('ring', { pos: at, size: 5, color, life: 0.5 });
+              stage.fx?.ring(ft, color, 0.6, 5, 0.7, 'rune');
+              stage.shake(0.15);
+            } else if (pose === 'hex') {
+              // 저주: 대상 발밑에 어두운 마법진, 손끝에서 연기가 뻗는다
+              const f = getFocus(battle);
+              if (f) {
+                stage.fx?.magicCircle(feet(f.uid), color, 3, 1.2, 'rune');
+                stage.fx?.drainReturn(chest(ev.allyUid), chest(f.uid), color);
+              }
+            } else {
+              // 강화·축적: 솟구치는 빛기둥과 고리
+              stage.toon.pillar(ft, color, 6, 2, 1.1);
+              stage.toon.spawn('ring', { pos: at, size: 4.5, color, life: 0.6 });
+              stage.fx?.flare(at, color, 1.4, 0.35);
+            }
+            stage.fx?.ring(ft, color, 0.4, 4.2, 0.6);
           } else if (targets[0]) stage.focus(new Set(targets).size > 1 ? enemyCenter() : chest(targets[0]), 0.55);
           await wait(staged ? 140 : 420);
           prevCaster = ev.allyUid;
@@ -1032,52 +1355,9 @@ export function battleScreen(app: App): HTMLElement {
           c.pending = true;
           c.firstHit = true;
           c.last = last;
-          const col = c.color;
           const p = tgt ? chest(tgt) : enemyCenter();
-          if (c.melee) {
-            const pose = last && ev.total > 1 ? 'finish' : (['combo1', 'combo2', 'combo3'] as const)[ev.index % 3];
-            if (tgt && c.tag !== 'aoe') stage.dash(c.caster, tgt, 0.1, MELEE_GAP);
-            stage.anim(c.caster, pose);
-            sound.swing(c.motion, pose === 'finish');
-            await wait(pose === 'finish' ? 300 : 150);
-            // 휘두른 무기에서 검기·창기·충격파가 날아가 꽂힌다
-            const from = chest(c.caster).add(new THREE.Vector3(0.9, pose === 'finish' ? 0.5 : 0.15, 0.1));
-            const aims = here.length ? [...new Set(here)] : tgt ? [tgt] : [];
-            aims.forEach((t, j) => meleeProjectile(c.motion, from, chest(t), col, pose, j * 0.04));
-            stage.kick(pose === 'finish' ? 0.05 : 0.03, pose === 'finish' ? 0.9 : 0.5);
-            await wait(pose === 'finish' ? 170 : 120);
-            const roll = { combo1: -0.9, combo2: 2.3, combo3: 0.1, finish: -1.35 }[pose];
-            stage.toon.slash(p, col, pose === 'finish' ? 4.6 : 3.4, roll);
-            if (ev.index % 3 === 1) stage.toon.slash(p, col, 3.1, roll + 1.7, 0.06);
-            if (pose === 'finish') stage.toon.slash(p, col, 4, roll + 0.5, 0.04);
-            if (last) stage.afterimage(c.caster, col, 2);
-          } else {
-            stage.anim(c.caster, c.motion === 'shoot' ? 'fire' : ev.index % 2 ? 'cast2' : 'cast1');
-            const from = chest(c.caster).add(new THREE.Vector3(0.7, 0.15, 0));
-            const aims = here.length ? [...new Set(here)] : tgt ? [tgt] : [];
-            const magic = c.motion !== 'shoot';
-            aims.forEach((t, j) => {
-              const to = chest(t);
-              if (last && ev.total > 1 && c.big) {
-                // 큰 주문의 마지막 일격: 굵은 광선 + 큰 마법 구체
-                stage.toon.beam(from, to, col, 0.7, 0.4, j * 0.04);
-                if (magic) stage.fx?.projectile(from, to, col, 0.2, 0.3, j * 0.05);
-                else stage.fx?.comet(from, to, col, 0.14, j * 0.04);
-              } else if (magic) {
-                // 지팡이·구슬: 빛 구체가 호를 그리며 날아간다
-                stage.fx?.projectile(from, to, col, 0.26, 0.9 + j * 0.2, j * 0.06);
-                stage.toon.spawn('star', { pos: from, size: 1.2, color: col, life: 0.26, delay: j * 0.06, path: (k) => from.clone().lerp(to, k).add(new THREE.Vector3(0, Math.sin(k * Math.PI) * (0.9 + j * 0.2), 0)) });
-              } else {
-                // 총: 혜성 꼬리를 끄는 탄 + 예광
-                stage.fx?.comet(from, to, col, 0.13, j * 0.05);
-                stage.toon.shot(from, to, col, 0.13, j * 0.05);
-              }
-            });
-            if (magic) stage.fx?.magicCircle(chest(c.caster).add(new THREE.Vector3(0.6, 0.2, 0.2)), col, 1.6, 0.5, 'rune');
-            if (c.tag === 'aoe' && last) stage.fx?.sweep(enemyCenter(), col, 6.5);
-            sound.swing(c.motion, last && c.big);
-            await wait(magic ? (last && ev.total > 1 ? 280 : 260) : last && ev.total > 1 ? 240 : 170);
-          }
+          const aims = here.length ? [...new Set(here)] : tgt ? [tgt] : [];
+          await playStage(c, ev.index, ev.total, last, tgt, aims, p);
           break;
         }
         case 'reaction': {

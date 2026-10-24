@@ -163,6 +163,30 @@ const CLIPS = {
   cast1: clip([0, 0.07, 0.2], [Z, { armF: 0.88, body: -0.19, x: 17.0, y: 6.4, sq: 0.06, tail: -0.24 }, { armF: 0.69, body: -0.13, x: 13.6, y: 4.8 }], true),
   // 주문 높이 들기
   cast2: clip([0, 0.07, 0.2], [Z, { armF: 1.62, head: 0.23, body: 0.13, y: 16.0, sq: 0.09, hair: -0.32 }, { armF: 1.38, head: 0.16, y: 12.8 }], true),
+  // ── 스킬별 동작 ──
+  // 치유: 두 팔을 벌려 하늘을 우러르며 떠오른다
+  heal: clip([0, 0.25, 0.6, 1.1], [Z, { armF: 1.9, armB: 0.9, head: 0.3, body: 0.12, y: 14, tail: -0.3, hair: -0.3, sq: 0.06 }, { armF: 2.1, armB: 1.0, head: 0.34, body: 0.14, y: 20, tail: -0.36, hair: -0.36 }, { armF: 1.7, armB: 0.8, head: 0.26, y: 16 }], true),
+  // 방어: 몸을 낮추고 무기·방패를 앞으로 세워 버틴다
+  guard: clip([0, 0.12, 0.3, 0.6], [Z, { y: -14, body: -0.24, armF: 1.0, armB: 0.5, x: -6, sq: -0.1, head: -0.08 }, { y: -12, body: -0.2, armF: 0.95, armB: 0.45, x: -4, sq: -0.08 }, { y: -12, body: -0.22, armF: 0.98, armB: 0.48, x: -5, sq: -0.09 }], true),
+  // 강화: 웅크렸다가 팔을 치켜들며 솟구친다
+  empower: clip([0, 0.14, 0.3, 0.5, 0.8], [Z, { y: -14, body: -0.16, armF: -0.4, head: -0.16, sq: -0.12 }, { y: 18, body: 0.14, armF: 2.2, armB: 0.6, head: 0.28, tail: -0.4, hair: -0.4, sq: 0.12 }, { y: 14, armF: 2.0, armB: 0.5, head: 0.22 }, { y: 10, armF: 1.8, head: 0.18 }], true),
+  // 저주: 손을 내밀어 비틀며 움켜쥔다
+  hex: clip([0, 0.12, 0.24, 0.36, 0.6], [Z, { armF: 1.1, body: -0.2, x: 14, head: -0.12, sq: 0.04 }, { armF: 0.7, body: -0.28, x: 18, head: -0.18, sq: -0.05 }, { armF: 0.95, body: -0.24, x: 16 }, { armF: 0.8, body: -0.22, x: 15 }], true),
+  // 회전 베기 두 박자(몸이 좌우로 크게 돈다)
+  spin1: clip([0, 0.06, 0.16], [{ armF: -0.6, body: -0.2 }, { armF: 2.2, body: 0.45, x: 6, tail: -0.5, hair: -0.5, sq: 0.08 }, { armF: -1.3, body: -0.5, x: 22, tail: 0.6, hair: 0.5, sq: -0.08 }], true),
+  spin2: clip([0, 0.06, 0.16], [{ armF: -1.3, body: -0.5 }, { armF: -1.4, body: 0.4, x: 10, y: 6, tail: 0.5, sq: -0.06 }, { armF: 2.1, body: -0.45, x: 26, y: 4, tail: -0.5, hair: -0.4, sq: 0.08 }], true),
+  // 뛰어올라 내리찍기
+  slam: clip([0, 0.1, 0.24, 0.32, 0.5], [Z, { y: -14, body: -0.18, armF: -0.6, sq: -0.12 }, { y: 80, body: 0.3, armF: 2.3, armB: 0.8, x: 14, tail: -0.6, hair: -0.6, sq: 0.12 }, { y: -18, body: -0.55, armF: -1.3, x: 40, tail: 0.6, sq: -0.16 }, { y: -12, body: -0.45, armF: -1.1, x: 36 }], true),
+  // 올려치기: 낮게 숙였다가 위로 퍼 올린다
+  uppercut: clip([0, 0.08, 0.2, 0.36], [Z, { y: -16, body: -0.3, armF: -1.2, x: 10, sq: -0.12 }, { y: 36, body: 0.34, armF: 2.3, x: 30, head: 0.24, tail: -0.5, hair: -0.5, sq: 0.12 }, { y: 28, body: 0.26, armF: 2.0, x: 26 }], true),
+  // 관통 돌격: 몸을 길게 뻗어 꿰뚫는다
+  lunge: clip([0, 0.1, 0.2, 0.4], [Z, { body: 0.2, armF: 0.5, x: -16, y: -6, sq: -0.1 }, { body: -0.55, armF: -0.4, armB: 0.6, x: 120, tail: 0.7, hair: 0.6, sq: 0.12 }, { body: -0.45, armF: -0.3, x: 110 }], true),
+  // 연사: 짧은 반동을 빠르게
+  rapid: clip([0, 0.03, 0.08, 0.12], [{ armF: 0.1 }, { armF: 0.3, body: 0.1, x: -10, sq: 0.03 }, { armF: 0.12, body: 0.03, x: -3 }, { armF: 0.25, body: 0.08, x: -8 }], true),
+  // 조준: 숨을 멈추고 몸을 고정한다
+  aim: clip([0, 0.2, 0.5], [Z, { armF: 0.08, body: -0.08, head: -0.08, y: -4, sq: -0.04, x: -4 }, { armF: 0.08, body: -0.09, head: -0.09, y: -5, sq: -0.05, x: -5 }], true),
+  // 하늘로 쏘기
+  skyshot: clip([0, 0.08, 0.2, 0.36], [Z, { armF: 1.5, body: 0.3, head: 0.34, y: -6, sq: -0.05 }, { armF: 1.8, body: 0.42, head: 0.4, x: -14, y: -10, sq: 0.06 }, { armF: 1.6, body: 0.34, head: 0.34, x: -8 }], true),
   // 제자리로(유지하던 자세를 풀고 대기로)
   recover: clip([0, 0.3], [Z, Z]),
 };
