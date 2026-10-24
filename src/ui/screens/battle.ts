@@ -585,15 +585,21 @@ export function battleScreen(app: App): HTMLElement {
       em.innerHTML = reactionEmblem(rx.id);
       ribbon = h('span', { class: 'c7-hint reaction', style: { '--from': elColor(rx.from), '--to': elColor(rx.to) } }, em, h('b', {}, rx.name));
     } else ribbon = h('span', { class: `c7-hint ${hint.kind}` }, hint.kind === 'link' ? `링크 ${hint.text.replace('LINK ', '').replace(' ', ' · ')}` : hint.text);
+    // 극딜 준비: 쓸 수 있는 극딜은 테두리가 돌고, 고유 중첩이 가득하면 더 밝게 (붕괴: 스타레일의 궁극기 준비 표시)
+    const st = stackOf(a);
+    const charged = !!st && statusStacks(a, st.id) >= st.max;
+    const ready = sp.tag === 'finisher' && !tooCostly;
     const el = h(
       'button',
       {
         type: 'button',
-        class: `card7 ${chosen ? 'on' : ''} ${rx ? 'react' : ''} hint-${hint.kind} tg-${tagGroup(sp.tag)}`,
+        class: `card7 ${chosen ? 'on' : ''} ${rx ? 'react' : ''} hint-${hint.kind} tg-${tagGroup(sp.tag)} ${tooCostly ? 'costly' : ''} ${ready ? 'ult-ready' : ''} ${ready && charged ? 'charged' : ''}`,
         style: { '--el': elColor(unit.element), '--in': flowColor(sp.input), '--out': flowColor(sp.output), ...(rx ? { '--from': elColor(rx.from), '--to': elColor(rx.to) } : {}) },
-        disabled: busy || tooCostly,
+        disabled: busy,
+        'aria-disabled': tooCostly ? 'true' : 'false',
         'data-sfx': 'none',
         onclick: () => {
+          if (tooCostly) return refuseCard(el, sp.cost - remaining() - myCost);
           pickSpell(a, id);
           showDesc(a.uid, id);
         },
@@ -610,6 +616,18 @@ export function battleScreen(app: App): HTMLElement {
     );
     el.dataset.key = `${a.uid}:${id}`;
     return el;
+  };
+
+  /** 못 내는 카드: 흔들고, 성진 칸을 깜빡이고, 얼마나 모자란지 말해 준다 */
+  const refuseCard = (el: HTMLElement, short: number) => {
+    sound.ui('card_remove', 0.3);
+    for (const x of [el, dockSlot.querySelector('.dust7')]) {
+      if (!x) continue;
+      x.classList.remove('nope');
+      void (x as HTMLElement).offsetWidth;
+      x.classList.add('nope');
+    }
+    showToast(`성진이 ${short} 모자랍니다 · 앞 주문을 빼거나 대기로 모으세요`);
   };
 
   /** 카드 설명(가리킨 카드 위에 뜨는 쪽지): 문장 설명 + 이 카드가 일으키는 반응 + 다음에 이어질 반응 */
@@ -676,7 +694,19 @@ export function battleScreen(app: App): HTMLElement {
     let n = 0;
     return h(
       'div',
-      { class: 'dock7', onmouseleave: () => window.matchMedia('(hover: hover)').matches && hideDesc() },
+      {
+        class: 'dock7',
+        onmouseleave: () => window.matchMedia('(hover: hover)').matches && hideDesc(),
+        // 가리킨 카드가 손끝 쪽으로 살짝 기운다(발라트로식 카드 손맛)
+        onpointermove: (e: PointerEvent) => {
+          if (e.pointerType !== 'mouse') return;
+          const c = (e.target as HTMLElement).closest('.card7') as HTMLElement | null;
+          if (!c) return;
+          const r = c.getBoundingClientRect();
+          c.style.setProperty('--tx', `${(((e.clientX - r.left) / r.width - 0.5) * 16).toFixed(1)}deg`);
+          c.style.setProperty('--ty', `${((0.5 - (e.clientY - r.top) / r.height) * 12).toFixed(1)}deg`);
+        },
+      },
       h(
         'div',
         { class: 'd7-hands' },
@@ -755,6 +785,7 @@ export function battleScreen(app: App): HTMLElement {
   }
 
   const showToast = (text: string) => {
+    root.querySelectorAll('.toast').forEach((x) => x.remove());
     const t = h('div', { class: 'toast', role: 'status' }, text);
     root.append(t);
     setTimeout(() => t.remove(), 1600);
@@ -828,11 +859,39 @@ export function battleScreen(app: App): HTMLElement {
     return pts.reduce((s, p) => s.add(p), new THREE.Vector3()).multiplyScalar(1 / Math.max(1, pts.length));
   };
   let hitTotal = { n: 0, dmg: 0 };
+  let shownDmg = 0;
+  let rollRaf = 0;
+  /** 총 피해: 숫자가 굴러 올라가고, 커질수록 글자가 커지고 흔들린다 (발라트로식 점수 표기) */
   const bumpHits = (amount: number, color: string) => {
     hitTotal = { n: hitTotal.n + 1, dmg: hitTotal.dmg + amount };
-    hitSlot.replaceChildren(h('div', { class: 'hit-total', style: { '--el': color } }, h('b', {}, `${hitTotal.dmg}`), h('small', {}, `${hitTotal.n} HIT${hitTotal.n > 1 ? 'S' : ''} · 총 피해`)));
+    const tier = hitTotal.dmg >= 300 ? 'huge' : hitTotal.dmg >= 120 ? 'big' : '';
+    let box = hitSlot.querySelector('.hit-total:not(.out)') as HTMLElement | null;
+    if (!box) {
+      shownDmg = 0;
+      box = h('div', { class: 'hit-total' }, h('b', {}, '0'), h('small', {}));
+      hitSlot.replaceChildren(box);
+    }
+    box.style.setProperty('--el', color);
+    box.className = `hit-total ${tier}`;
+    void box.offsetWidth;
+    box.classList.add('bump');
+    box.querySelector('small')!.textContent = `${hitTotal.n} HIT${hitTotal.n > 1 ? 'S' : ''} · 총 피해`;
+    const num = box.querySelector('b')!;
+    const from = shownDmg;
+    const to = hitTotal.dmg;
+    const t0 = performance.now();
+    const dur = Math.min(420, 140 + (to - from) * 3) / app.speed;
+    cancelAnimationFrame(rollRaf);
+    const step = (now: number) => {
+      const k = Math.min(1, (now - t0) / dur);
+      shownDmg = Math.round(from + (to - from) * (1 - (1 - k) ** 3));
+      num.textContent = `${shownDmg}`;
+      if (k < 1) rollRaf = requestAnimationFrame(step);
+    };
+    rollRaf = requestAnimationFrame(step);
   };
   const resetHits = () => {
+    cancelAnimationFrame(rollRaf);
     hitTotal = { n: 0, dmg: 0 };
     hitSlot.querySelector('.hit-total')?.classList.add('out');
   };
@@ -1879,6 +1938,8 @@ export function battleScreen(app: App): HTMLElement {
               stage.shake(c.last ? 0.3 : 0.15);
             }
             if (first) {
+              // 흔들림은 피해 크기에 비례한다(작은 타격은 살짝, 큰 타격은 크게)
+              stage.shake(Math.min(0.42, 0.06 + ev.amount / 110) * (c.ult ? 0.7 : 1));
               sound.impact(c.motion, finale || crit);
               stage.kick((c.idx % 2 ? 1 : -1) * (0.025 + 0.01 * Math.min(c.idx, 3)), c.last ? 1.1 : 0.55);
               stage.hitStop(c.last ? 0.1 : 0.05);

@@ -71,6 +71,6 @@ export function titleScreen(app: App): HTMLElement {
       gfxItem(),
       soundItem(),
     ),
-    h('footer', { class: 'title-foot' }, '프로토타입 v0.6'),
+    h('footer', { class: 'title-foot' }, '프로토타입 v0.7'),
   );
 }
