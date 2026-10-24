@@ -1,4 +1,4 @@
-import { enemyHitAmount } from '../core/battle';
+import { STACK_IDS, enemyHitAmount } from '../core/battle';
 import type { Ally, Element, Enemy, Intent, SkillTag, SpellDef, SpellInput, SpellOutput, Status } from '../core/types';
 import { ELEMENTS, STATUS_META } from '../data/elements';
 import { moveText } from '../data/enemies';
@@ -205,7 +205,7 @@ export function tagLabel(spell: SpellDef): HTMLElement {
 }
 
 /** 설명 속 각인·중첩 이름과 "2·3" 같은 수치를 색으로 짚는다 */
-const HL_IDS = Object.keys(STATUS_META).filter((id) => STATUS_META[id].keyword || ['solarCore', 'aim', 'tide', 'hunger', 'fortitude', 'wave'].includes(id));
+const HL_IDS = Object.keys(STATUS_META).filter((id) => STATUS_META[id].keyword || (STACK_IDS as string[]).includes(id));
 const HL_BY_NAME = new Map(HL_IDS.map((id) => [STATUS_META[id].name, id]));
 const HL_RE = new RegExp(`(${[...HL_BY_NAME.keys()].sort((a, b) => b.length - a.length).join('|')}|위력 \\d+|\\d+·\\d+|[+×]?\\d+(?:\\.\\d+)?%|[+×]\\d+(?:\\.\\d+)?)`, 'g');
 

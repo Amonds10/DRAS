@@ -1,6 +1,6 @@
 import type { Role, UnitDef } from '../core/types';
 
-/** 술사 6명. 각자 주문서 9장(그중 5장 장착)과 패시브를 가진다. */
+/** 술사 8명. 각자 주문서 9장(그중 5장 장착)과 패시브를 가진다. */
 const list: UnitDef[] = [
   {
     id: 'solea',
@@ -90,6 +90,36 @@ const list: UnitDef[] = [
     pool: ['bulwark_bash', 'constellation_echo', 'star_aegis', 'star_judgement', 'galaxy_ward', 'taunt_star', 'counter_stance', 'guiding_star', 'constellation_mark'],
     passive: { name: '불굴', desc: '보호막을 얻거나 공격받을 때마다 불굴 +1(최대 8). 반격 피해 +불굴×2.' },
     stack: { id: 'fortitude', max: 8 },
+  },
+  {
+    id: 'kairen',
+    name: '카이렌',
+    code: 'KAIREN',
+    concept: '루네의 쌍둥이 오빠. 동생이 치료할 상처가 생기기 전에 먼저 벤다.',
+    element: 'luna',
+    role: 'striker',
+    maxHp: 90,
+    atk: 16,
+    def: 5,
+    spells: ['kairen_draw', 'silver_rend', 'twin_moon', 'moonlit_iai', 'eclipse_draw'],
+    pool: ['kairen_draw', 'silver_rend', 'crescent_sweep', 'moon_shadow_cut', 'moonlit_iai', 'fallen_moon_stance', 'twin_moon', 'moon_blade_dance', 'eclipse_draw'],
+    passive: { name: '월하', desc: '링크를 이어받아 시전하면 검기 +1, 약화·노출·기절한 적을 베면 검기 +1(시전마다 한 번, 최대 6). 검기 1당 카이렌의 피해 +10%. 월하일섬이 모두 쓴다.' },
+    stack: { id: 'edge', max: 6 },
+  },
+  {
+    id: 'riko',
+    name: '리코',
+    code: 'RIKO',
+    concept: '솔레아의 소꿉친구이자 자칭 라이벌. 솔레아보다 한 발 먼저 쏘는 게 인생 목표.',
+    element: 'sol',
+    role: 'striker',
+    maxHp: 80,
+    atk: 14,
+    def: 4,
+    spells: ['quick_draw', 'twin_fan', 'hammer_fan', 'sun_barrage', 'covering_fire'],
+    pool: ['quick_draw', 'twin_fan', 'ricochet', 'blaze_shell', 'sun_barrage', 'smoke_roll', 'hammer_fan', 'high_noon', 'covering_fire'],
+    passive: { name: '과열', desc: '적을 맞힐 때마다 과열 +1(시전마다 최대 2, 최대 8). 과열 1당 리코의 피해 +6%. 태양 탄막이 모두 쏟는다.' },
+    stack: { id: 'heat', max: 8 },
   },
 ];
 

@@ -40,11 +40,18 @@ const DEBUFFS: StatusId[] = ['stun', 'weaken', 'expose', 'doom', ...KEYWORDS];
 export const KEYWORD_MAX_VALUE = 20;
 export const KEYWORD_MAX_TURNS = 10;
 /** 술사 고유 중첩 상한 */
-export const STACK_MAX: Record<Stack, number> = { solarCore: 6, aim: 6, tide: 10, hunger: 10, fortitude: 8, wave: 3 };
+export const STACK_MAX: Record<Stack, number> = { solarCore: 6, aim: 6, tide: 10, hunger: 10, fortitude: 8, wave: 3, edge: 6, heat: 8 };
+/** 술사 고유 중첩 전부(표시·자동 계획용) */
+export const STACK_IDS = Object.keys(STACK_MAX) as Stack[];
 export const MAX_ATTUNE = 10;
 /** 조준 1당 벨라 피해, 허기 1당 녹스 피해, 공명파동 1당 다음 시전 */
 const AIM_STEP = 0.06;
 const HUNGER_STEP = 0.05;
+/** 카이렌: 검기 1당 피해 +10% */
+const EDGE_STEP = 0.1;
+/** 리코: 과열 1당 피해 +6%, 과열은 시전마다 최대 2까지 오른다 */
+const HEAT_STEP = 0.06;
+const HEAT_PER_CAST = 2;
 const WAVE_STEP = 0.2;
 /** 진동 폭발이 기절을 거는 위력 */
 export const TREMOR_STUN = 8;
@@ -315,6 +322,8 @@ interface CastContext {
   /** 이번 시전에서 이미 정해진 추가 배율(예열 소모, 공명 해방)과 추가 위력(성진 소모) */
   extraMult?: number;
   extraPower?: number;
+  /** 이번 시전에서 패시브로 얻은 중첩(카이렌 검기·리코 과열의 시전당 상한용) */
+  passiveGained?: number;
 }
 
 export function statusStacks(u: Unit, id: StatusId): number {
@@ -347,6 +356,8 @@ function allyHitAmount(state: BattleState, ctx: CastContext, eff: DamageEffect, 
   // 패시브: 벨라는 조준, 녹스는 허기만큼 강해진다
   if (ctx.caster.defId === 'vela') raw *= 1 + statusStacks(ctx.caster, 'aim') * AIM_STEP;
   if (ctx.caster.defId === 'nox') raw *= 1 + statusStacks(ctx.caster, 'hunger') * HUNGER_STEP;
+  if (ctx.caster.defId === 'kairen') raw *= 1 + statusStacks(ctx.caster, 'edge') * EDGE_STEP;
+  if (ctx.caster.defId === 'riko') raw *= 1 + statusStacks(ctx.caster, 'heat') * HEAT_STEP;
   if (!ctx.pierce && !eff.pierce && !st.pierce) raw *= defFactor(target.def);
   if (hasStatus(target, 'expose')) raw *= EXPOSE_FACTOR;
   // 성좌 방패: 체인 3 미만이면 절반. 중첩을 모아 쏘는 일격(배율 2배 이상)은 방패를 뚫는다.
@@ -532,7 +543,7 @@ function applyEffects(state: BattleState, effects: Effect[], ctx: CastContext, r
             targets = living.length ? [rng.pick(living)] : [];
           }
           for (const t of targets) {
-            const had = { burn: !!keyword(t, 'burn'), rupture: !!keyword(t, 'rupture'), moon: keyword(t, 'moonshade') };
+            const had = { burn: !!keyword(t, 'burn'), rupture: !!keyword(t, 'rupture'), moon: keyword(t, 'moonshade'), down: (['stun', 'weaken', 'expose'] as const).some((d) => hasStatus(t, d)) };
             dealt += dealDamage(state, t, allyHitAmount(state, hctx, eff, t, st), 'ally', events);
             if (had.rupture) spendKeyword(t, 'rupture');
             // 집어삼킨 각인은 첫 타에 사라진다
@@ -545,6 +556,15 @@ function applyEffects(state: BattleState, effects: Effect[], ctx: CastContext, r
             // 패시브: 솔레아는 화상 걸린 적을, 벨라는 균열 걸린 적을 때리면 고유 중첩이 쌓인다
             if (ctx.caster.defId === 'solea' && had.burn) gainStack(ctx.caster, 'solarCore', 1, events);
             if (ctx.caster.defId === 'vela' && had.rupture) gainStack(ctx.caster, 'aim', 1, events);
+            // 카이렌은 약화·노출·기절한 적을 베면(시전마다 한 번), 리코는 맞힐 때마다(시전마다 최대 2) 쌓인다
+            if (ctx.caster.defId === 'kairen' && had.down && !ctx.passiveGained) {
+              ctx.passiveGained = 1;
+              gainStack(ctx.caster, 'edge', 1, events);
+            }
+            if (ctx.caster.defId === 'riko' && (ctx.passiveGained ?? 0) < HEAT_PER_CAST) {
+              ctx.passiveGained = (ctx.passiveGained ?? 0) + 1;
+              gainStack(ctx.caster, 'heat', 1, events);
+            }
             if (isAlive(t)) for (const r of [...(eff.onHit ?? []), ...(st.onHit ?? [])]) applyRider(state, ctx, r, t, events);
             // 처치 시: 시전당 한 번
             if (!isAlive(t) && ctx.spell?.kill && !ctx.killed) {
@@ -691,6 +711,8 @@ function runPlayerPhase(state: BattleState, plan: PlannedCast[], rng: Rng, event
     boost = 0;
     events.push({ type: 'cast', allyUid: ally.uid, spellId: spell.id, linked: step.linked, chain: step.chain, mult, outElement: step.outElement, sealed: step.sealed });
     const reaction = step.reactionId ? reactionById(step.reactionId) : null;
+    // 카이렌의 패시브: 링크를 이어받아 시전하면 검기 +1
+    if (ally.defId === 'kairen' && step.linked) gainStack(ally, 'edge', 1, events);
     // 공명파동: 쌓인 만큼 이번 시전을 강화하고 사라진다
     const wave = statusStacks(ally, 'wave');
     if (wave) ally.statuses = ally.statuses.filter((s) => s.id !== 'wave');

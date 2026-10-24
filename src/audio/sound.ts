@@ -75,6 +75,9 @@ const SONGS: Record<Mood, Song> = {
   quiet: { bpm: 60, root: 50, scale: AEOLIAN, prog: [0, 5], arp: 0.15, drums: 0, pad: 0.6, bell: 3.5 },
 };
 
+/** 새 무기 동작은 가장 가까운 기존 소리를 쓴다: 검은 단검, 쌍권총은 총 */
+const baseMotion = (m: string) => (m === 'blade' ? 'slash' : m === 'pistol' ? 'shoot' : m);
+
 class SoundSystem {
   private ctx: AudioContext | null = null;
   private master!: GainNode;
@@ -347,6 +350,7 @@ class SoundSystem {
 
   /** 휘두르기·쏘기·던지기: 무기마다 다른 소리 */
   swing(motion: string, big = false): void {
+    motion = baseMotion(motion);
     if (!this.ok) return;
     if (motion === 'slash') this.sfx('swing', big ? 0.75 : 0.6, big ? 0.85 : 1.1);
     else if (motion === 'thrust') this.sfx('thrust', big ? 0.75 : 0.6, big ? 0.9 : 1);
@@ -365,6 +369,7 @@ class SoundSystem {
 
   /** 맞은 순간: 무기·마법마다 다른 충돌음, 큰 일격은 폭발음을 겹친다 */
   impact(motion: string, big = false): void {
+    motion = baseMotion(motion);
     if (!this.ok) return;
     const t = this.now();
     if (motion === 'slash') {
@@ -436,7 +441,7 @@ class SoundSystem {
     this.bell(base, t, 0.18, 1.8, 3.5);
     if (chain >= 2) this.bell(base + 12, t + 0.06, 0.1, 1.4, 2);
     this.hiss(t, 0.35, 0.12, 'bandpass', 600, 4000, 1.4, 0.2, 0.12);
-    this.play(motion === 'slash' ? 'draw_blade' : Math.random() < 0.5 ? 'cloth' : 'cloth2', 0.45);
+    this.play(baseMotion(motion) === 'slash' ? 'draw_blade' : Math.random() < 0.5 ? 'cloth' : 'cloth2', 0.45);
   }
 
   /** 링크: 체인 단계마다 오음음계로 한 칸씩 올라가는 화음 */

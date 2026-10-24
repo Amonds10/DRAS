@@ -23,12 +23,12 @@ export type StatusId =
   // 적 각인
   | 'burn' | 'rupture' | 'erosion' | 'tremor' | 'moonshade'
   // 술사 고유 중첩
-  | 'solarCore' | 'aim' | 'tide' | 'hunger' | 'fortitude' | 'wave';
+  | 'solarCore' | 'aim' | 'tide' | 'hunger' | 'fortitude' | 'wave' | 'edge' | 'heat';
 
 /** 적에게 거는 각인(위력·횟수를 가진다) */
 export type Keyword = 'burn' | 'rupture' | 'erosion' | 'tremor' | 'moonshade';
 /** 술사에게 쌓이는 중첩 */
-export type Stack = 'solarCore' | 'aim' | 'tide' | 'hunger' | 'fortitude' | 'wave';
+export type Stack = 'solarCore' | 'aim' | 'tide' | 'hunger' | 'fortitude' | 'wave' | 'edge' | 'heat';
 
 export interface Status {
   id: StatusId;

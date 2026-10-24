@@ -125,6 +125,8 @@ export const STATUS_META: Record<string, { name: string; glyph: string; debuff: 
   tide: { name: '만조', glyph: '≈', debuff: false, desc: '루네: 그믐의 종장이 모두 풀어 1당 피해 +20%' },
   hunger: { name: '허기', glyph: '◉', debuff: false, desc: '녹스: 1당 피해 +5%, 심연의 만찬이 모두 써서 1당 +10%' },
   fortitude: { name: '불굴', glyph: '⛉', debuff: false, desc: '아스트라: 반격 +2씩, 방패 강타가 모두 써서 1당 +12%' },
+  edge: { name: '검기', glyph: '⚔', debuff: false, desc: '카이렌: 1당 피해 +10%, 월하일섬이 모두 써서 1당 +60%' },
+  heat: { name: '과열', glyph: '♨', debuff: false, desc: '리코: 1당 피해 +6%, 태양 탄막이 모두 쏟아 1당 +45%' },
   wave: { name: '공명파동', glyph: '∿', debuff: false, desc: '다음 시전의 피해·회복·보호막 +20%(중첩당), 시전하면 사라진다' },
 };
 

@@ -561,6 +561,185 @@ const list: SpellDef[] = [
       gain('fortitude', 1, 'self', kinds(3)),
     ],
   },
+  // ── 카이렌 · 달(검) ──
+  {
+    id: 'kairen_draw', name: '발도', cost: 1, input: 'none', output: 'luna', tag: 'strike',
+    desc: '칼집에서 뽑는 한 호흡에 두 번 베어 위력 11의 피해를 준다. 대상에게 각인이 있으면 첫 칼에 검기를 1 얻고, 검기가 3 이상이면 두 번째 칼이 1턴 노출을 남긴다. 적을 쓰러뜨리면 검기 2와 성진 1을 얻는다. 체인을 연다.',
+    effects: [{ kind: 'damage', power: 0, target: 'focus', stages: [
+      S(6, [got('edge', 1, has('any'))]),
+      S(5, [debuff('expose', 1, me('edge', 3))]),
+    ] }],
+    kill: [gain('edge', 2), dust(1)],
+  },
+  {
+    id: 'silver_rend', name: '은빛 난무', cost: 2, input: 'sol', output: 'luna', tag: 'multi',
+    desc: '은빛 칼날을 네 번 몰아쳐 위력 13의 피해를 준다. 앞의 두 칼은 월영 1·2를 새기고, 마지막 칼은 검기가 3 이상이면 50% 강해진다. 링크로 이어 받았다면 세 번째 칼이 대상을 1턴 약화시킨다.',
+    effects: [{ kind: 'damage', power: 0, target: 'focus', stages: [
+      S(3, [ink('moonshade', 1, 2)]),
+      S(3, [ink('moonshade', 1, 2)]),
+      S(3, [debuff('weaken', 1, LINKED)]),
+      S(4, [], up(me('edge', 3), 1.5)),
+    ] }],
+  },
+  {
+    id: 'crescent_sweep', name: '초승 회전참', cost: 2, input: 'comet', output: 'luna', tag: 'aoe',
+    desc: '몸을 돌려 초승달 모양으로 모든 적을 두 번 베어 위력 7의 피해를 주고, 첫 칼에 1턴 약화를 남긴다. 검기가 2 이상이면 세 번째 칼이 위력 3의 피해와 월영 1·1을 더한다. 약화된 적은 25% 더 깊게 베인다.',
+    effects: [{ kind: 'damage', power: 0, target: 'allEnemies', vsDebuffed: 1.25, stages: [
+      S(4, [debuff('weaken', 1)]),
+      S(3),
+      S(3, [ink('moonshade', 1, 1)], only(me('edge', 2))),
+    ] }],
+  },
+  {
+    id: 'moon_shadow_cut', name: '월영 일섬', cost: 2, input: 'void', output: 'luna', tag: 'pierce',
+    desc: '그림자를 밟고 지나가며 방어를 무시하는 두 칼로 위력 13의 피해를 준다. 대상 체력이 절반 이하면 두 번째 칼이 50% 강해진다. 적을 쓰러뜨리면 검기 1과 성진 1을 얻는다.',
+    effects: [{ kind: 'damage', power: 0, target: 'focus', pierce: true, stages: [
+      S(7),
+      S(6, [], up(hpT(0.5), 1.5)),
+    ] }],
+    kill: [gain('edge', 1), dust(1)],
+  },
+  {
+    id: 'moonlit_iai', name: '월하일섬', cost: 3, input: 'nebula', output: 'luna', tag: 'finisher',
+    desc: '모은 검기를 모두 실어 단 한 번 칼을 뽑는다. 검기 1당 피해가 60% 증가해, 방어를 무시하는 일섬과 한 박자 뒤 터지는 칼자국 셋으로 위력 18의 피해를 준다. 마지막 칼자국은 대상에게 월영이 있으면 50% 강해진다. 적을 쓰러뜨리면 성진 2를 돌려받는다.',
+    effects: [{ kind: 'damage', power: 0, target: 'focus', consume: { stack: 'edge', per: 0.6 }, stages: [
+      S(8, [], { pierce: true }),
+      S(3),
+      S(3),
+      S(4, [], up(has('moonshade'), 1.5)),
+    ] }],
+    kill: [dust(2)],
+  },
+  {
+    id: 'fallen_moon_stance', name: '낙월 자세', cost: 1, input: 'none', output: 'luna', tag: 'buff',
+    desc: '라운드가 시작될 때 먼저 칼끝을 낮추고 반격 5 태세를 갖춘다. 시전하면 자신에게 보호막 6을 두르고 검기를 2 얻는다. 검기가 4 이상이면 다음 시전의 배율이 0.2 오른다. 체인을 연다.',
+    start: [counter(5)],
+    effects: [shield(6, 'self'), gain('edge', 2), boost(0.2, me('edge', 4))],
+  },
+  {
+    id: 'twin_moon', name: '쌍월', cost: 1, input: 'luna', output: 'void', tag: 'strike',
+    desc: '달빛을 받아 두 자루 칼처럼 엇갈려 베어 위력 10의 피해를 주고 월영 2·2를 새긴다. 링크로 이어 받았다면 두 번째 칼에 검기를 1 얻는다. 루네의 달빛을 이어받아 공허로 넘기면 월몰이 터진다.',
+    effects: [{ kind: 'damage', power: 0, target: 'focus', stages: [
+      S(5, [ink('moonshade', 2, 2)]),
+      S(5, [got('edge', 1, LINKED)]),
+    ] }],
+  },
+  {
+    id: 'moon_blade_dance', name: '월광 검무', cost: 1, input: 'nebula', output: 'luna', tag: 'mark',
+    desc: '달빛 아래 검무를 추며 두 번 베어 위력 8의 피해와 월영 3·3을 새긴다. 대상 월영이 3 이상이면 두 번째 칼이 1턴 약화를 남긴다. 월영이 걸린 적을 때린 아군은 위력만큼 회복한다. 체인 2 이상에서 쓰면 검기를 1 얻는다.',
+    effects: [
+      { kind: 'damage', power: 0, target: 'focus', stages: [
+        S(4, [ink('moonshade', 3, 3)]),
+        S(4, [debuff('weaken', 1, has('moonshade', 3))]),
+      ] },
+      gain('edge', 1, 'self', chain(2)),
+    ],
+  },
+  {
+    id: 'eclipse_draw', name: '월식 발도', cost: 2, input: 'sol', output: 'luna', tag: 'execute',
+    desc: '해를 가리는 달처럼 빛을 삼키며 두 번 베어 위력 12의 피해를 준다. 대상 체력이 35% 이하라면 피해가 두 배가 되고, 두 번째 칼은 방어를 무시한다. 적을 쓰러뜨리면 검기 2와 성진 1을 얻는다. 태양을 이어받아 달로 넘기면 일식이 터진다.',
+    effects: [{ kind: 'damage', power: 0, target: 'focus', execute: 2, stages: [
+      S(6),
+      S(6, [], { pierce: true }),
+    ] }],
+    kill: [gain('edge', 2), dust(1)],
+  },
+
+  // ── 리코 · 태양(쌍권총) ──
+  {
+    id: 'quick_draw', name: '속사', cost: 1, input: 'none', output: 'sol', tag: 'strike',
+    desc: '누구보다 먼저 뽑아 세 발을 쏘아 위력 9의 피해를 주고, 마지막 발이 화상 1·2를 남긴다. 과열이 3 이상이면 세 번째 발이 40% 강해진다. 적을 쓰러뜨리면 과열 1과 성진 1을 얻는다. 체인을 연다.',
+    effects: [{ kind: 'damage', power: 0, target: 'focus', stages: [
+      S(3),
+      S(3),
+      S(3, [ink('burn', 1, 2)], up(me('heat', 3), 1.4)),
+    ] }],
+    kill: [gain('heat', 1), dust(1)],
+  },
+  {
+    id: 'twin_fan', name: '쌍권 난사', cost: 2, input: 'comet', output: 'sol', tag: 'multi',
+    desc: '두 자루 총을 번갈아 여섯 발 쏟아 위력 13의 피해를 준다. 홀수 발은 화상 1·1을 남기고, 마지막 발은 과열이 4 이상이면 50% 강해진다. 불타는 적에게는 모든 탄이 20% 더 아프다.',
+    effects: [{ kind: 'damage', power: 0, target: 'focus', bonusVs: [{ keyword: 'burn', mult: 1.2 }], stages: [
+      S(2, [ink('burn', 1, 1)]),
+      S(2),
+      S(2, [ink('burn', 1, 1)]),
+      S(2),
+      S(2, [ink('burn', 1, 1)]),
+      S(3, [], up(me('heat', 4), 1.5)),
+    ] }],
+  },
+  {
+    id: 'ricochet', name: '도탄', cost: 1, input: 'luna', output: 'sol', tag: 'aoe',
+    desc: '벽과 바닥에 튕긴 탄이 모든 적을 두 번 맞혀 위력 6의 피해를 주고 화상 1·1을 남긴다. 과열이 2 이상이면 튕긴 탄 하나가 무작위 적에게 위력 3의 피해를 더한다.',
+    effects: [{ kind: 'damage', power: 0, target: 'allEnemies', stages: [
+      S(3, [ink('burn', 1, 1)]),
+      S(3),
+      S(3, [], { ...only(me('heat', 2)), target: 'random' }),
+    ] }],
+  },
+  {
+    id: 'blaze_shell', name: '화염탄', cost: 1, input: 'nebula', output: 'comet', tag: 'dot',
+    desc: '불붙는 특수탄 두 발로 위력 7의 피해를 주고 화상 2·3을 새긴 뒤, 두 번째 발이 균열 1·2를 낸다. 과열이 4 이상이면 대상의 화상 횟수가 1 늘어난다.',
+    effects: [
+      { kind: 'damage', power: 0, target: 'focus', stages: [
+        S(4, [ink('burn', 2, 3)]),
+        S(3, [ink('rupture', 1, 2)]),
+      ] },
+      amplify(0, 1, 'focus', me('heat', 4)),
+    ],
+  },
+  {
+    id: 'sun_barrage', name: '태양 탄막', cost: 3, input: 'void', output: 'sol', tag: 'finisher',
+    desc: '과열을 모두 쏟아 총을 돌리며 탄막을 퍼붓는다. 과열 1당 피해가 45% 증가해 일곱 발로 위력 17의 피해를 주고, 두 자루를 겹쳐 쏘는 마지막 일격은 방어를 무시한다. 이어서 대상의 화상을 한꺼번에 터뜨린다(위력×횟수). 적을 쓰러뜨리면 성진 2를 돌려받는다.',
+    effects: [
+      { kind: 'damage', power: 0, target: 'focus', consume: { stack: 'heat', per: 0.45 }, stages: [
+        S(2, [ink('burn', 1, 1)]),
+        S(2),
+        S(2, [ink('burn', 1, 1)]),
+        S(2),
+        S(2),
+        S(2),
+        S(5, [], { pierce: true }),
+      ] },
+      burst('burn', 1),
+    ],
+    kill: [dust(2)],
+  },
+  {
+    id: 'smoke_roll', name: '연막 구르기', cost: 1, input: 'none', output: 'comet', tag: 'shield',
+    desc: '연막탄을 터뜨리며 굴러 자신에게 보호막 8을 두르고 과열을 2 얻는다. 과열이 5 이상이면 다음 시전의 배율이 0.2 오른다. 체인을 연다.',
+    effects: [shield(8, 'self'), gain('heat', 2), boost(0.2, me('heat', 5))],
+  },
+  {
+    id: 'hammer_fan', name: '해머 팬', cost: 2, input: 'sol', output: 'comet', tag: 'multi',
+    desc: '공이를 손바닥으로 연달아 쳐 네 발을 쏘아 위력 12의 피해를 준다. 마지막 발은 방어를 무시하고, 대상 화상이 3 이상이면 50% 강해진다. 태양을 이어받아 혜성으로 넘기면 홍염이 터진다.',
+    effects: [{ kind: 'damage', power: 0, target: 'focus', stages: [
+      S(3),
+      S(3),
+      S(3),
+      S(3, [], { pierce: true, ...up(has('burn', 3), 1.5) }),
+    ] }],
+  },
+  {
+    id: 'high_noon', name: '하이 눈', cost: 2, input: 'luna', output: 'sol', tag: 'execute',
+    desc: '정오의 결투. 두 발로 위력 12의 피해를 주고, 대상 체력이 35% 이하라면 피해가 두 배가 된다. 첫 발은 방어를 무시한다. 적을 쓰러뜨리면 과열 2와 성진 1을 얻는다.',
+    effects: [{ kind: 'damage', power: 0, target: 'focus', execute: 2, stages: [
+      S(7, [], { pierce: true }),
+      S(5),
+    ] }],
+    kill: [gain('heat', 2), dust(1)],
+  },
+  {
+    id: 'covering_fire', name: '엄호 사격', cost: 1, input: 'comet', output: 'nebula', tag: 'buff',
+    desc: '동료가 파고들 틈을 만드는 견제 사격. 두 발로 위력 5의 피해를 주고, 아군 전원에게 보호막 5를 씌우며 공격을 1턴 동안 2 올린다. 과열이 3 이상이면 공격이 1 더 오른다. 혜성을 이어받아 성운으로 넘기면 유성우가 터진다.',
+    effects: [
+      { kind: 'damage', power: 0, target: 'focus', stages: [S(3), S(2)] },
+      shield(5, 'allAllies'),
+      atkUp(2, 1, 'allAllies'),
+      atkUp(1, 1, 'allAllies', me('heat', 3)),
+    ],
+  },
+
 ];
 
 export const SPELLS: Record<string, SpellDef> = Object.fromEntries(list.map((s) => [s.id, s]));

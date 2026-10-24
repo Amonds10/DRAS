@@ -31,6 +31,9 @@ export interface FrameShot {
   lift?: number;
   /** 가장자리 여유 배율 */
   pad?: number;
+  /** 화면 가운데를 시전자(-1) ~ 대상(+1) 쪽으로 옮긴다: 컷 동안 pan0 → pan1로 흐른다(2D 패닝) */
+  pan0?: number;
+  pan1?: number;
 }
 export type ActorPart = 'feet' | 'chest' | 'head' | 'top';
 export type ActorAnim = 'cast' | 'channel' | 'charge' | 'act' | 'hit' | 'die' | 'dash' | 'combo1' | 'combo2' | 'combo3' | 'finish' | 'fire' | 'cast1' | 'cast2' | 'recover' | 'heal' | 'guard' | 'empower' | 'hex' | 'spin1' | 'spin2' | 'slam' | 'uppercut' | 'lunge' | 'rapid' | 'aim' | 'skyshot';
@@ -631,7 +634,7 @@ export class Stage {
       this.shot = null;
       return;
     }
-    this.shot = { uids: o.uids, yaw: o.yaw ?? 0, pitch: o.pitch ?? 0.12, fov: o.fov ?? 30, roll: o.roll ?? 0, orbit: o.orbit ?? 0, push0: o.push0 ?? 1, push1: o.push1 ?? 1, dur: o.dur ?? 1.2, smooth: o.smooth ?? 0.22, lift: o.lift ?? 0, pad: o.pad ?? 1, t: 0 };
+    this.shot = { uids: o.uids, yaw: o.yaw ?? 0, pitch: o.pitch ?? 0.06, fov: o.fov ?? 30, roll: o.roll ?? 0, orbit: o.orbit ?? 0, push0: o.push0 ?? 1, push1: o.push1 ?? 1, dur: o.dur ?? 1.2, smooth: o.smooth ?? 0.22, lift: o.lift ?? 0, pad: o.pad ?? 1, pan0: o.pan0 ?? 0, pan1: o.pan1 ?? o.pan0 ?? 0, t: 0 };
   }
 
   /** 투샷이 바라볼 자리와 카메라 위치 */
@@ -655,17 +658,19 @@ export class Stage {
     const cam = this.camera;
     const portrait = cam.aspect < 1;
     const fov = portrait ? Math.min(56, sh.fov * 1.45) : sh.fov;
-    // 세로 화면은 옆으로 나란히 담으면 너무 멀어진다: 각도를 어깨 너머 쪽으로 돌려 둘 사이를 깊이로 접는다
-    const base = portrait ? Math.sign(sh.yaw || -1) * Math.max(0.8, Math.abs(sh.yaw)) : sh.yaw;
-    const yaw = base + sh.orbit * e * (portrait ? 0.5 : 1);
-    const pitch = portrait ? Math.min(sh.pitch, 0.3) : sh.pitch;
-    const center = new THREE.Vector3((minX + maxX) / 2, top * 0.48 + sh.lift, (minZ + maxZ) / 2);
-    // 화면에 들어가야 할 반너비·반높이(여유를 둔다)
-    const halfW = (((maxX - minX) / 2) * Math.abs(Math.cos(yaw)) + ((maxZ - minZ) / 2) * Math.abs(Math.sin(yaw))) * (portrait ? 0.85 : 1) + (portrait ? 0.7 : 1.25) * sh.pad;
+    // 인물이 평면 그림이라 카메라는 늘 정면에서 본다(옆으로 돌면 납작함이 드러난다).
+    // 다채로움은 줌·패닝·높낮이·기울기로 낸다. yaw·orbit은 아주 작게만(시차 정도) 쓴다.
+    const yaw = THREE.MathUtils.clamp(sh.yaw + sh.orbit * e, -0.06, 0.06);
+    const pitch = THREE.MathUtils.clamp(sh.pitch, -0.08, 0.14);
+    const span = (maxX - minX) / 2;
+    const pan = sh.pan0 + (sh.pan1 - sh.pan0) * e;
+    const center = new THREE.Vector3((minX + maxX) / 2 + pan * Math.max(0, span - 1), top * 0.48 + sh.lift, (minZ + maxZ) / 2);
+    // 화면에 들어가야 할 반너비·반높이(여유를 둔다). 패닝한 만큼 반대쪽은 화면 밖으로 조금 나가도 된다.
+    const halfW = (span * (1 - Math.abs(pan) * 0.45)) * (portrait ? 0.78 : 1) + (portrait ? 0.6 : 1.2) * sh.pad;
     const halfH = top * 0.55 + 0.5 * sh.pad;
     const vt = Math.tan(THREE.MathUtils.degToRad(fov / 2));
     const ht = vt * cam.aspect;
-    const dist = Math.max(halfW / ht, halfH / vt, 5) * (sh.push0 + (sh.push1 - sh.push0) * e);
+    const dist = Math.max(halfW / ht, halfH / vt, 4.5) * (sh.push0 + (sh.push1 - sh.push0) * e);
     const dir = new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
     const pos = center.clone().addScaledVector(dir, dist);
     pos.y = Math.max(0.25, pos.y);

@@ -1,5 +1,5 @@
 /**
- * 술사 6명의 2D 일러스트(SVG)를 뼈대별 조각으로 나눈 것.
+ * 술사 8명의 2D 일러스트(SVG)를 뼈대별 조각으로 나눈 것.
  * 얼굴은 그림자 속에 두고, 머리 모양·외투·무기로 구분하는 검은 실루엣이다.
  * 무대에서는 조각마다 판을 만들어 관절을 돌려 움직이고(컷아웃 애니메이션),
  * UI에서는 조각을 한 장으로 합쳐 그린다.
@@ -25,7 +25,7 @@ export const BONES: Record<Bone, { pivot: [number, number]; parent: Bone | null 
 /** 뒤에서 앞으로 그리는 순서 */
 export const DRAW_ORDER: Bone[] = ['tail', 'hair', 'armB', 'legs', 'body', 'head', 'armF'];
 
-export type Motion = 'thrust' | 'raise' | 'shoot' | 'slash' | 'bash';
+export type Motion = 'thrust' | 'raise' | 'shoot' | 'slash' | 'bash' | 'blade' | 'pistol';
 
 const SHADOW = '#101217';
 const BASE = '#1d2029';
@@ -35,11 +35,11 @@ const LIGHT = '#454c60';
 interface Look {
   accent: string;
   /** 머리 모양 */
-  hair: 'ponytail' | 'long' | 'beret' | 'short' | 'hood' | 'helm';
+  hair: 'ponytail' | 'long' | 'beret' | 'short' | 'hood' | 'helm' | 'band' | 'hat';
   /** 외투 */
-  coat: 'short' | 'robe' | 'cape' | 'long' | 'cloak' | 'armor';
+  coat: 'short' | 'robe' | 'cape' | 'long' | 'cloak' | 'armor' | 'haori' | 'vest';
   /** 무기·소품 */
-  weapon: 'spear' | 'staff' | 'orbs' | 'rifle' | 'dagger' | 'shield';
+  weapon: 'spear' | 'staff' | 'orbs' | 'rifle' | 'dagger' | 'shield' | 'sword' | 'pistols';
   /** 앞팔 자세 */
   arm: 'forward' | 'down' | 'raised';
 }
@@ -51,9 +51,11 @@ const LOOKS: Record<string, Look> = {
   vela: { accent: '#74cdbd', hair: 'short', coat: 'long', weapon: 'rifle', arm: 'forward' },
   nox: { accent: '#a891e6', hair: 'hood', coat: 'cloak', weapon: 'dagger', arm: 'down' },
   astra: { accent: '#f1e6c8', hair: 'helm', coat: 'armor', weapon: 'shield', arm: 'forward' },
+  kairen: { accent: '#c9d8f2', hair: 'band', coat: 'haori', weapon: 'sword', arm: 'forward' },
+  riko: { accent: '#ff9a4a', hair: 'hat', coat: 'vest', weapon: 'pistols', arm: 'forward' },
 };
 
-const MOTION: Record<Look['weapon'], Motion> = { spear: 'thrust', staff: 'raise', orbs: 'raise', rifle: 'shoot', dagger: 'slash', shield: 'bash' };
+const MOTION: Record<Look['weapon'], Motion> = { spear: 'thrust', staff: 'raise', orbs: 'raise', rifle: 'shoot', dagger: 'slash', shield: 'bash', sword: 'blade', pistols: 'pistol' };
 
 function legs(): string {
   return `
@@ -61,6 +63,12 @@ function legs(): string {
     <path d="M104 170 L112 238 L118 298 L116 308 L140 308 L134 298 L128 236 L120 168 Z" fill="${BASE}"/>
     <path d="M76 296 L98 296 L97 310 L72 310 Z" fill="${SHADOW}"/>
     <path d="M114 296 L136 296 L142 310 L112 310 Z" fill="${MID}"/>`;
+}
+
+/** 리코의 목도리: 목에서 뒤로 날린다(따로 흔들린다) */
+function scarf(a: string): string {
+  return `<path d="M86 96 C 62 98, 44 110, 26 130 L32 138 C 50 122, 66 112, 90 106 Z" fill="${a}" opacity=".9"/>
+    <path d="M84 102 C 66 110, 54 124, 46 142 L52 146 C 60 130, 70 118, 88 110 Z" fill="${a}" opacity=".7"/>`;
 }
 
 /** 망토의 뒷자락(따로 흔들린다) */
@@ -101,6 +109,25 @@ function coat(kind: Look['coat'], a: string): string {
         <path d="M100 42 C 140 52, 146 110, 150 200 L158 300 L104 300 Z" fill="${BASE}"/>
         <path d="M42 300 L158 300" stroke="${a}" stroke-width="2.5" opacity=".9"/>
         <path d="M86 120 L118 120" stroke="${a}" stroke-width="2"/>`;
+    case 'haori':
+      // 카이렌: 소매 넓은 겉옷, 허리띠, 등 뒤로 비스듬한 칼집
+      return `
+        <path d="M70 152 L26 200" stroke="${LIGHT}" stroke-width="6" stroke-linecap="round"/>
+        <path d="M72 96 L128 96 L138 176 L144 238 L104 228 L96 238 L56 238 L62 176 Z" fill="${BASE}"/>
+        <path d="M100 98 L128 96 L138 176 L144 238 L104 228 Z" fill="${MID}"/>
+        <path d="M100 98 L90 152" stroke="${SHADOW}" stroke-width="3"/>
+        <path d="M64 148 L136 148 L136 160 L64 160 Z" fill="${a}" opacity=".9"/>
+        <path d="M120 160 L130 184" stroke="${a}" stroke-width="3" opacity=".8"/>`;
+    case 'vest':
+      // 리코: 짧은 조끼, 탄띠, 허리 권총집, 짧은 치마
+      return `
+        <path d="M76 96 L124 96 L128 162 L72 162 Z" fill="${BASE}"/>
+        <path d="M100 98 L124 96 L128 162 L102 162 Z" fill="${MID}"/>
+        <path d="M80 98 L74 132 L88 112 Z" fill="${LIGHT}"/>
+        <path d="M78 104 L122 146" stroke="${a}" stroke-width="3" opacity=".85"/>
+        <path d="M70 158 L130 158 L130 168 L70 168 Z" fill="${a}"/>
+        <path d="M70 168 L130 168 L138 200 L62 200 Z" fill="${BASE}"/>
+        <rect x="122" y="166" width="11" height="22" rx="2" fill="${SHADOW}"/>`;
     case 'armor':
       return `
         <path d="M66 94 L134 94 L140 176 L126 224 L74 224 L60 176 Z" fill="${BASE}"/>
@@ -131,12 +158,19 @@ function frontArm(pose: Look['arm']): string {
 }
 
 /** 머리 뒤로 늘어져 흔들리는 머리카락(꽁지, 긴 머리) */
-function hairBack(hair: Look['hair']): string {
+function hairBack(hair: Look['hair'], a: string): string {
   switch (hair) {
     case 'ponytail':
       return `<path d="M84 50 C 60 46, 44 64, 30 92 C 52 78, 66 68, 86 62 Z" fill="${MID}"/>`;
     case 'long':
       return `<path d="M80 54 C 78 30, 124 30, 120 56 L124 140 L98 120 L76 140 Z" fill="${MID}"/>`;
+    case 'band':
+      // 머리띠 끈 두 가닥
+      return `<path d="M84 48 C 66 48, 50 58, 36 76 L42 80 C 56 66, 70 58, 86 56 Z" fill="${a}"/>
+        <path d="M84 52 C 70 58, 60 70, 54 88 L60 90 C 66 74, 74 64, 86 58 Z" fill="${a}" opacity=".75"/>`;
+    case 'hat':
+      // 모자 밑으로 묶은 짧은 꽁지
+      return `<path d="M86 60 C 70 62, 62 74, 58 92 C 68 82, 76 74, 90 68 Z" fill="${MID}"/>`;
     default:
       return '';
   }
@@ -170,6 +204,16 @@ function head(hair: Look['hair'], a: string): string {
         <path d="M100 38 C 124 40, 128 76, 122 92 L104 92 C 112 70, 112 50, 100 38 Z" fill="${MID}"/>
         <ellipse cx="104" cy="66" rx="12" ry="15" fill="#07080b"/>
         <path d="M106 64 L114 64" stroke="${a}" stroke-width="2" stroke-linecap="round"/>`;
+    case 'band':
+      return `${face}
+        <path d="M82 62 C 78 36, 120 32, 120 58 L114 50 L110 62 L104 50 L98 60 L92 50 L86 60 Z" fill="${MID}"/>
+        <path d="M82 50 L120 46" stroke="${a}" stroke-width="3.5"/>`;
+    case 'hat':
+      return `${face}
+        <path d="M86 62 C 84 52, 92 48, 100 48 L116 56 L112 68 C 104 58, 94 58, 88 70 Z" fill="${MID}"/>
+        <path d="M80 46 C 82 24, 116 22, 120 46 Z" fill="${MID}"/>
+        <ellipse cx="100" cy="47" rx="36" ry="6.5" fill="${BASE}"/>
+        <path d="M82 42 L118 42" stroke="${a}" stroke-width="3"/>`;
     case 'helm':
       return `${face}
         <path d="M80 64 C 78 36, 122 34, 120 62 L120 70 L80 70 Z" fill="${LIGHT}"/>
@@ -201,6 +245,17 @@ function weapon(kind: Look['weapon'], a: string): string {
     case 'dagger':
       return `<path d="M136 186 L160 214" stroke="${LIGHT}" stroke-width="3.5" stroke-linecap="round"/>
         <path d="M158 212 L178 236 L164 216 Z" fill="${a}"/>`;
+    case 'sword':
+      // 카타나: 손에서 앞위로 길게 뻗은 칼날, 칼날 등에 달빛
+      return `<path d="M166 142 L158 164" stroke="${SHADOW}" stroke-width="6" stroke-linecap="round"/>
+        <path d="M160 136 L178 142" stroke="${a}" stroke-width="4" stroke-linecap="round"/>
+        <path d="M170 138 C 182 110, 190 80, 198 50 L194 50 C 186 80, 178 108, 166 136 Z" fill="${LIGHT}"/>
+        <path d="M168 134 C 180 108, 188 80, 196 52" stroke="${a}" stroke-width="1.5" fill="none" opacity=".9"/>`;
+    case 'pistols':
+      // 앞손 권총(뒷손 권총은 backProp)
+      return `<path d="M164 130 L194 130 L194 139 L178 139 L176 152 L166 152 L168 139 L164 139 Z" fill="${LIGHT}"/>
+        <path d="M168 133 L192 133" stroke="${a}" stroke-width="2"/>
+        <circle cx="172" cy="141" r="2.5" fill="${SHADOW}"/>`;
     case 'shield':
       return `<path d="M140 92 L188 100 L186 220 L160 254 L136 226 Z" fill="${LIGHT}"/>
         <path d="M146 100 L182 106 L180 216 L160 242 L142 220 Z" fill="${MID}"/>
@@ -208,11 +263,11 @@ function weapon(kind: Look['weapon'], a: string): string {
   }
 }
 
-/** 녹스의 뒷손에 뜬 공허 구슬 */
+/** 뒷손 소품: 녹스의 공허 구슬, 리코의 두 번째 권총 */
 function backProp(L: Look): string {
-  return L.weapon === 'dagger'
-    ? `<circle cx="66" cy="182" r="10" fill="${L.accent}" opacity=".85"/><circle cx="66" cy="182" r="16" fill="none" stroke="${L.accent}" stroke-width="1.2" opacity=".6"/>`
-    : '';
+  if (L.weapon === 'dagger') return `<circle cx="66" cy="182" r="10" fill="${L.accent}" opacity=".85"/><circle cx="66" cy="182" r="16" fill="none" stroke="${L.accent}" stroke-width="1.2" opacity=".6"/>`;
+  if (L.weapon === 'pistols') return `<path d="M60 180 L86 180 L86 188 L74 188 L72 200 L62 200 L64 188 L60 188 Z" fill="${MID}"/><path d="M64 183 L84 183" stroke="${L.accent}" stroke-width="1.5"/>`;
+  return '';
 }
 
 const cache = new Map<string, Partial<Record<Bone, string>>>();
@@ -223,8 +278,8 @@ function parts(id: string): Partial<Record<Bone, string>> {
     const L = LOOKS[id] ?? LOOKS.solea;
     const a = L.accent;
     p = {
-      tail: L.coat === 'cape' ? capeBack() : '',
-      hair: hairBack(L.hair),
+      tail: L.coat === 'cape' ? capeBack() : L.coat === 'vest' ? scarf(a) : '',
+      hair: hairBack(L.hair, a),
       armB: backArm() + backProp(L),
       legs: legs(),
       body: coat(L.coat, a),
