@@ -200,7 +200,10 @@ body {
 
 .deck-card {
   scroll-snap-align: start;
-  grid-template-rows: auto auto 1fr auto;
+}
+
+.deck-units {
+  align-items: flex-start;
 }
 
 .deck-plan {
