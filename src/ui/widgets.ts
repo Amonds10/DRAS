@@ -1,6 +1,6 @@
 import { enemyHitAmount } from '../core/battle';
 import type { Ally, Element, Enemy, Intent, SkillTag, SpellDef, SpellInput, SpellOutput, Status } from '../core/types';
-import { ELEMENTS, STATUS_META, reactionById } from '../data/elements';
+import { ELEMENTS, STATUS_META } from '../data/elements';
 import { moveText } from '../data/enemies';
 import { TAG_NAMES } from '../data/spells';
 import { unitById } from '../data/units';
@@ -159,19 +159,6 @@ export function intentView(intent: Intent | null, enemy: Enemy, allies: Ally[]):
     h('small', { class: 'intent-name' }, intent.name),
     h('span', { class: 'intent-main' }, ...main),
     riders.length ? h('span', { class: 'intent-riders' }, riders.map(([text, kind]) => h('i', { class: kind }, text))) : null,
-  );
-}
-
-export function reactionChip(id: string): HTMLElement {
-  const r = reactionById(id);
-  return h(
-    'span',
-    { class: 'reaction-chip', style: { '--from': elColor(r.from), '--to': elColor(r.to) }, title: r.desc },
-    ELEMENTS[r.from].glyph,
-    '→',
-    ELEMENTS[r.to].glyph,
-    ' ',
-    r.name,
   );
 }
 

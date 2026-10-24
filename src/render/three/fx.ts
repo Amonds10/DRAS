@@ -87,6 +87,8 @@ export class FxSystem {
     // 상한을 넘으면 새 입자를 버린다(오래된 큰 빛무리가 남아 화면을 가리는 일을 막는다)
     if (this.parts.length >= this.maxParts) return;
     const additive = o.additive ?? true;
+    // 입자가 붐빌수록 새 빛 입자는 흐리게(가산 혼합이 겹쳐 화면이 하얗게 타지 않게)
+    const crowd = additive ? Math.max(0.4, 1 - (this.parts.length / this.maxParts) * 0.75) : 1;
     const s0 = Array.isArray(o.size) ? new THREE.Vector2(...o.size) : new THREE.Vector2(o.size, o.size);
     const to = o.to ?? o.size;
     const s1 = Array.isArray(to) ? new THREE.Vector2(...to) : new THREE.Vector2(to, to);
@@ -124,7 +126,7 @@ export class FxSystem {
       s0,
       s1,
       spin: o.spin ?? 0,
-      alpha: o.alpha ?? 1,
+      alpha: (o.alpha ?? 1) * crowd,
       curve: o.curve ?? 'fade',
       path: o.path,
     });
@@ -419,6 +421,187 @@ export class FxSystem {
       }
     }
     this.light(pos, color, 2.4 * scale, 0.45);
+  }
+
+  /**
+   * 성속별 타격 잔향: 매 타격마다 가볍게 얹는다(signature보다 작고 잦다).
+   * 태양은 불씨가 솟고, 달은 초승달이 번쩍이며 은빛이 내려앉고, 성운은 꽃잎이 흩날리고,
+   * 혜성은 얼음 조각이 튀고, 공허는 작은 소용돌이가 빨아들인다.
+   */
+  elementHit(element: string, pos: THREE.Vector3, color: THREE.ColorRepresentation, scale = 1): void {
+    const R = (a: number) => (Math.random() - 0.5) * a;
+    switch (element) {
+      case 'sol':
+        this.sprite({ tex: 'sunburst', color, pos, size: 0.6 * scale, to: 2.4 * scale, life: 0.32, rot: Math.random() * 6, curve: 'flash', alpha: 0.45 });
+        this.embers(pos, color, Math.round(8 * scale), 1.2);
+        break;
+      case 'luna':
+        this.crescent(pos, color, 1.6 * scale, Math.random() * 6);
+        for (let i = 0; i < 6 * scale; i++) this.sprite({ tex: 'star_05', color: 0xeaf2ff, pos: pos.clone().add(new THREE.Vector3(R(1.6), 0.4 + Math.random(), 0.1)), size: 0.22, to: 0.04, life: 0.9, delay: i * 0.03, vel: new THREE.Vector3(R(0.6), -0.8, 0), spin: 2 });
+        break;
+      case 'nebula':
+        this.petals(pos, color, Math.round(9 * scale), 4 * scale);
+        this.sprite({ tex: 'smoke_04', color, pos, size: 0.8 * scale, to: 2.6 * scale, life: 0.7, alpha: 0.35, spin: 1.2 });
+        break;
+      case 'comet':
+        for (let i = 0; i < 7 * scale; i++) {
+          const a = Math.random() * Math.PI * 2;
+          const sp = 4 + Math.random() * 4;
+          this.sprite({ tex: 'shard', color, pos, size: [0.16, 0.42], to: [0.06, 0.2], life: 0.5, rot: a - Math.PI / 2, vel: new THREE.Vector3(Math.cos(a) * sp, Math.sin(a) * sp * 0.7 + 1, 0), gravity: 9, drag: 1 });
+        }
+        this.sprite({ tex: 'flare4', color, pos, size: 0.6, to: 2.2 * scale, life: 0.24, rot: Math.random(), curve: 'flash', alpha: 0.5 });
+        break;
+      case 'void':
+        this.vortex(pos, color, 1.1 * scale, 0.5);
+        for (let i = 0; i < 5; i++) this.sprite({ tex: 'smoke_07', color: 0x120a1e, pos: pos.clone().add(new THREE.Vector3(R(1.4), R(1), 0)), size: 0.8, to: 0.2, life: 0.5, delay: i * 0.04, additive: false, alpha: 0.6, path: undefined, vel: new THREE.Vector3(0, 0.4, 0) });
+        break;
+      default:
+        for (let i = 0; i < 5; i++) this.sprite({ tex: 'star_04', color, pos: pos.clone().add(new THREE.Vector3(R(1.8), R(1.4), 0.1)), size: 0.1, to: 0.5, life: 0.4, delay: i * 0.05, curve: 'flash', spin: 3 });
+    }
+  }
+
+  /** 성속별 꼬리: 투사체가 지나간 길에 남는 입자(불씨·달빛 가루·꽃잎·얼음·연기) */
+  elementTrail(element: string, from: THREE.Vector3, to: THREE.Vector3, color: THREE.ColorRepresentation, travel = 0.25, delay = 0): void {
+    const n = 12;
+    for (let i = 0; i < n; i++) {
+      const k = i / n;
+      const p = from.clone().lerp(to, k);
+      const d = delay + travel * k;
+      switch (element) {
+        case 'sol':
+          this.sprite({ tex: 'flame_02', color, pos: p, size: 0.5, to: 0.1, life: 0.4, delay: d, vel: new THREE.Vector3(0, 1.4, 0), rot: Math.random() * 6, alpha: 0.7 });
+          break;
+        case 'luna':
+          this.sprite({ tex: 'star_05', color: 0xeaf2ff, pos: p, size: 0.18, to: 0.02, life: 0.6, delay: d, vel: new THREE.Vector3(0, -0.6, 0), spin: 3 });
+          break;
+        case 'nebula':
+          this.sprite({ tex: 'petal', color, pos: p, size: [0.16, 0.26], to: [0.05, 0.08], life: 0.7, delay: d, rot: Math.random() * 6, spin: 4, vel: new THREE.Vector3((Math.random() - 0.5), 0.6, 0) });
+          break;
+        case 'comet':
+          this.sprite({ tex: 'spark_06', color, pos: p, size: 0.28, to: 0.03, life: 0.35, delay: d, vel: new THREE.Vector3(-1.5, (Math.random() - 0.5) * 1.2, 0) });
+          break;
+        case 'void':
+          this.sprite({ tex: 'smoke_07', color: 0x140b22, pos: p, size: 0.5, to: 0.9, life: 0.45, delay: d, additive: false, alpha: 0.45 });
+          break;
+        default:
+          this.sprite({ tex: 'soft', color, pos: p, size: 0.2, to: 0.02, life: 0.4, delay: d });
+      }
+    }
+  }
+
+  /** 시전 기운: 성속마다 다른 모습으로 술사 둘레에 피어오른다 */
+  castAura(element: string, feet: THREE.Vector3, color: THREE.ColorRepresentation, big = false): void {
+    const k = big ? 1.4 : 1;
+    const R = (a: number) => (Math.random() - 0.5) * a;
+    switch (element) {
+      case 'sol':
+        for (let i = 0; i < 14 * k; i++) this.sprite({ tex: 'flame_01', color, pos: feet.clone().add(new THREE.Vector3(R(1.6), 0.2, 0.2)), size: 0.5, to: 0.1, life: 0.7, delay: i * 0.025, vel: new THREE.Vector3(R(0.4), 2.6 + Math.random() * 1.5, 0), rot: R(1), alpha: 0.75 });
+        this.sprite({ tex: 'sunburst', color, pos: feet.clone().add(new THREE.Vector3(0, 2.4, -0.2)), size: 1, to: 4 * k, life: 0.6, spin: 0.6, alpha: 0.45, behind: true });
+        break;
+      case 'luna':
+        this.sprite({ tex: 'crescent', color: 0xeaf2ff, pos: feet.clone().add(new THREE.Vector3(0.2, 3.3, -0.2)), size: 0.6, to: 1.8 * k, life: 0.9, rot: -0.5, curve: 'pulse', behind: true, alpha: 0.85 });
+        for (let i = 0; i < 12 * k; i++) this.sprite({ tex: 'star_05', color, pos: feet.clone().add(new THREE.Vector3(R(2), 3 + Math.random(), 0.2)), size: 0.2, to: 0.03, life: 1, delay: i * 0.04, vel: new THREE.Vector3(0, -1.6, 0), spin: 2 });
+        break;
+      case 'nebula':
+        for (let i = 0; i < 14 * k; i++) {
+          const a0 = (i / 14) * Math.PI * 2;
+          const c0 = feet.clone().add(new THREE.Vector3(0, 1.4, 0));
+          this.sprite({ tex: 'petal', color, pos: c0, size: [0.18, 0.3], to: [0.06, 0.1], life: 0.9, delay: i * 0.02, rot: a0, spin: 5, path: (t) => c0.clone().add(new THREE.Vector3(Math.cos(a0 + t * 5) * (1.4 - t * 0.6), t * 1.6 - 0.4, Math.sin(a0 + t * 5) * 0.5)) });
+        }
+        break;
+      case 'comet':
+        for (let i = 0; i < 3; i++) {
+          const c0 = feet.clone().add(new THREE.Vector3(0, 1.5, 0));
+          const ph = (i / 3) * Math.PI * 2;
+          this.sprite({ tex: 'flare_01', color, pos: c0, size: 0.5, to: 0.3, life: 0.8, delay: i * 0.05, path: (t) => c0.clone().add(new THREE.Vector3(Math.cos(ph + t * 9) * 1.2, Math.sin(t * 6 + ph) * 0.4 + t, Math.sin(ph + t * 9) * 0.5)) });
+        }
+        this.sparks(feet.clone().add(new THREE.Vector3(0, 1, 0)), color, 10, 4, 0.16);
+        break;
+      case 'void':
+        this.vortex(feet.clone().add(new THREE.Vector3(0, 0.05, 0)), color, 2.4 * k, 0.9, true);
+        for (let i = 0; i < 8 * k; i++) this.sprite({ tex: 'smoke_07', color: 0x100818, pos: feet.clone().add(new THREE.Vector3(R(2), 0.3, 0.2)), size: 0.6, to: 1.6, life: 0.8, delay: i * 0.04, additive: false, alpha: 0.5, vel: new THREE.Vector3(0, 1.2, 0) });
+        break;
+      default:
+        this.linger(feet.clone().add(new THREE.Vector3(0, 1.4, 0)), color, 10, 1.6);
+    }
+  }
+
+  /** 불씨: 위로 흔들리며 솟는 작은 불꽃 */
+  embers(pos: THREE.Vector3, color: THREE.ColorRepresentation, n = 10, spread = 1): void {
+    for (let i = 0; i < n; i++) {
+      this.sprite({ tex: 'spark_05', color, pos: pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * spread, (Math.random() - 0.5) * spread * 0.6, 0.1)), size: 0.16, to: 0.03, life: 0.7 + Math.random() * 0.4, delay: i * 0.02, vel: new THREE.Vector3((Math.random() - 0.5) * 1.2, 1.6 + Math.random() * 1.6, 0), drag: 0.8 });
+    }
+  }
+
+  /** 꽃잎이 흩날린다 */
+  petals(pos: THREE.Vector3, color: THREE.ColorRepresentation, n = 10, speed = 4): void {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = speed * (0.5 + Math.random() * 0.6);
+      this.sprite({ tex: 'petal', color, pos, size: [0.2, 0.32], to: [0.08, 0.12], life: 0.9 + Math.random() * 0.4, rot: a, spin: (Math.random() - 0.5) * 8, vel: new THREE.Vector3(Math.cos(a) * sp, Math.sin(a) * sp * 0.6 + 0.6, 0), gravity: -0.4, drag: 2.2 });
+    }
+  }
+
+  /** 초승달 섬광 */
+  crescent(pos: THREE.Vector3, color: THREE.ColorRepresentation, size = 1.6, rot = 0): void {
+    this.sprite({ tex: 'crescent', color, pos, size: size * 0.4, to: size, life: 0.38, rot, spin: -3, curve: 'flash', alpha: 0.55 });
+  }
+
+  /** 소용돌이: 안으로 말려 들며 줄어든다(inward=false면 바깥으로 퍼진다) */
+  vortex(pos: THREE.Vector3, color: THREE.ColorRepresentation, size = 2, life = 0.6, ground = false): void {
+    this.sprite({ tex: 'vortex', color, pos, size, to: size * 0.25, life, spin: 7, curve: 'pulse', ground, alpha: 0.7 });
+  }
+
+  /** 갈라진 땅 + 튀어 오르는 흙먼지와 돌조각 */
+  groundCrack(feet: THREE.Vector3, color: THREE.ColorRepresentation, scale = 1): void {
+    const g = new THREE.Vector3(feet.x, 0.04, feet.z);
+    this.sprite({ tex: 'crack', color, pos: g, size: 1.2 * scale, to: 4.2 * scale, life: 1.1, rot: Math.random() * 6, ground: true, curve: 'flash' });
+    this.dust(g, 10 * scale, 1.4 * scale);
+    for (let i = 0; i < 8 * scale; i++) {
+      const a = Math.random() * Math.PI;
+      this.sprite({ tex: 'shard', color: 0x2a2228, pos: g.clone().add(new THREE.Vector3(0, 0.3, 0.2)), size: [0.14, 0.24], to: [0.1, 0.18], life: 0.7, rot: Math.random() * 6, spin: 6, additive: false, vel: new THREE.Vector3(Math.cos(a) * 3, 3 + Math.random() * 3, 0), gravity: 12 });
+    }
+    this.light(g, color, 2, 0.5);
+  }
+
+  /** 흙먼지: 발밑에서 옆으로 퍼지는 연한 연기 */
+  dust(feet: THREE.Vector3, n = 8, spread = 1): void {
+    for (let i = 0; i < n; i++) {
+      const dir = (i % 2 ? 1 : -1) * (0.6 + Math.random());
+      this.sprite({ tex: 'smoke_01', color: 0xb8a890, pos: new THREE.Vector3(feet.x, 0.3, feet.z + 0.3), size: 0.5 * spread, to: 1.6 * spread, life: 0.7 + Math.random() * 0.3, delay: i * 0.015, additive: false, alpha: 0.32, vel: new THREE.Vector3(dir * 2.4, 0.5 + Math.random() * 0.6, 0), drag: 2.4 });
+    }
+  }
+
+  /** 속도선: 돌진 방향으로 길게 그어지는 빛줄 */
+  speedLines(from: THREE.Vector3, to: THREE.Vector3, color: THREE.ColorRepresentation, n = 6): void {
+    const rot = this.screenAngle(from, to) - Math.PI / 2;
+    const len = from.distanceTo(to);
+    for (let i = 0; i < n; i++) {
+      const off = new THREE.Vector3(0, (Math.random() - 0.5) * 1.6, 0.2);
+      const mid = from.clone().lerp(to, 0.3 + Math.random() * 0.4).add(off);
+      this.sprite({ tex: 'trace_06', color, pos: mid, size: [0.06, len * 0.5], to: [0.02, len * 0.8], life: 0.22, delay: i * 0.02, rot, curve: 'flash', alpha: 0.7 });
+    }
+  }
+
+  /** 총구 섬광 */
+  muzzle(pos: THREE.Vector3, color: THREE.ColorRepresentation, toward: THREE.Vector3, delay = 0): void {
+    const rot = this.screenAngle(pos, toward) - Math.PI / 2;
+    this.sprite({ tex: 'muzzle_01', color, pos, size: 0.3, to: 1.4, life: 0.1, delay, rot, curve: 'flash' });
+    this.sprite({ tex: 'flare4', color, pos, size: 0.3, to: 1.1, life: 0.1, delay, curve: 'flash', alpha: 0.5 });
+    this.sprite({ tex: 'smoke_04', color: 0xd8d0c8, pos, size: 0.3, to: 1, life: 0.5, delay: delay + 0.05, additive: false, alpha: 0.22, vel: new THREE.Vector3(0.4, 0.6, 0) });
+  }
+
+  /** 반짝임: 보호·강화가 걸린 자리에 작은 별이 몇 번 반짝인다 */
+  twinkle(pos: THREE.Vector3, color: THREE.ColorRepresentation, n = 6, spread = 1.4): void {
+    for (let i = 0; i < n; i++) this.sprite({ tex: 'flare4', color, pos: pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * spread, (Math.random() - 0.5) * spread * 1.4, 0.2)), size: 0.1, to: 0.6, life: 0.36, delay: i * 0.06, rot: Math.random(), curve: 'flash', alpha: 0.7 });
+  }
+
+  /** 빛비: 하늘에서 가늘게 내려오는 빛(치유) */
+  lightRain(feet: THREE.Vector3, color: THREE.ColorRepresentation, n = 12, width = 1.6): void {
+    for (let i = 0; i < n; i++) {
+      const p = feet.clone().add(new THREE.Vector3((Math.random() - 0.5) * width, 4.5 + Math.random() * 1.5, 0.2));
+      this.sprite({ tex: 'trace_06', color, pos: p, size: [0.05, 0.9], to: [0.03, 0.5], life: 0.6, delay: i * 0.04, vel: new THREE.Vector3(0, -6, 0), alpha: 0.8 });
+    }
   }
 
   /** 혜성처럼 긴 꼬리를 남기는 투사체(벨라의 사격, 혜성 성속) */

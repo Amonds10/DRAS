@@ -1,7 +1,8 @@
 import { CHAIN_MULT } from '../core/link';
 import { ELEMENT_ORDER, ELEMENTS, REACTIONS } from '../data/elements';
 import { h } from './dom';
-import { elBadge, modal, reactionChip } from './widgets';
+import { reactionBox, reactionWheel } from './reactions';
+import { elBadge, modal } from './widgets';
 
 export function showHelp(): void {
   const body = h(
@@ -9,13 +10,13 @@ export function showHelp(): void {
     { class: 'help' },
     h('section', {}, h('h3', {}, '한 라운드의 흐름'), h('ol', {},
       h('li', {}, '술사마다 주문서 9장이 있고, 편성 화면에서 그중 ', h('b', {}, '5장을 장착'), '합니다. 매 라운드 장착한 5장 중 ', h('b', {}, '2장을 카드로'), ' 뽑습니다.'),
-      h('li', {}, '카드를 누른 순서대로 위쪽 ', h('b', {}, '체인 트랙'), '에 쌓입니다. 술사 한 명당 한 장, 쉬게 할 술사는 비워 둡니다.'),
+      h('li', {}, '카드를 누른 순서대로 위쪽 ', h('b', {}, '성좌 트랙'), '에 별로 놓입니다. 술사 한 명당 한 장, 쉬게 할 술사는 비워 둡니다.'),
       h('li', {}, '스킬마다 받는 성속 → 넘기는 성속이 있습니다. 앞 스킬이 넘긴 성속을 다음 스킬이 받으면 ', h('b', {}, '링크'), '가 이어져 배율이 오르고, 특정 조합은 ', h('b', {}, '성좌 반응'), '을 일으킵니다.'),
       h('li', {}, h('b', {}, '시전(Space)'), '을 누르면 순서대로 스킬이 나가고, 이어서 적이 행동합니다.'),
     )),
     h('section', {}, h('h3', {}, '화면 읽기'),
       h('ul', {},
-        h('li', {}, '카드 아래 띠는 ', h('b', {}, '지금 넣으면 어떻게 이어지는지'), ' 알려 줍니다. 금색은 링크, 흰색은 성좌 반응, 빨강은 끊김.'),
+        h('li', {}, '카드 아래 띠는 ', h('b', {}, '지금 넣으면 어떻게 이어지는지'), ' 알려 줍니다. 금색은 링크, 두 성속 색 무지개는 성좌 반응, 빨강은 끊김. 카드에 마우스를 올리면 위에 설명 쪽지가 뜹니다.'),
         h('li', {}, '체력·상태·고유 중첩은 캐릭터 발밑에 있습니다. 캐릭터를 누르면 강조되고 오른쪽에 상세 정보(상태 설명, 패시브, 장착 주문 5장)가 뜹니다. 적을 누르면 집중 대상이 됩니다.'),
         h('li', {}, '적 HP 막대의 빗금은 지금 계획대로 시전했을 때 남는 체력입니다.'),
         h('li', {}, '단축키: ', h('b', {}, '1~8'), ' 카드, ', h('b', {}, 'Space'), ' 시전, ', h('b', {}, 'Backspace'), ' 마지막 취소, ', h('b', {}, 'Tab'), ' 대상 바꾸기, ', h('b', {}, 'L'), ' 전투 기록.'),
@@ -60,7 +61,9 @@ export function showHelp(): void {
       h('p', {}, '4명이 모두 끊김 없이 이어지면 ', h('b', {}, '성좌 완성'), ': 모든 적에게 추가 피해를 주고 성진 1을 돌려받습니다.'),
     ),
     h('section', {}, h('h3', {}, '성좌 반응'),
-      h('ul', { class: 'help-reactions' }, REACTIONS.map((r) => h('li', {}, reactionChip(r.id), h('span', {}, r.desc)))),
+      h('p', {}, '바깥 고리(태양 → 달 → 공허 → 혜성 → 성운 → 태양)를 따라 이으면 반응이 연달아 터집니다. 반응이 나는 카드는 아래 띠가 반응 문장으로 바뀌고, 위쪽 트랙 끝에 다음에 받으면 터질 반응이 보입니다.'),
+      reactionWheel(),
+      h('div', { class: 'rx-list' }, REACTIONS.map((r) => reactionBox(r.id))),
     ),
     h('section', {}, h('h3', {}, '적의 행동'),
       h('ul', {},

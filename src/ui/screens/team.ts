@@ -10,7 +10,8 @@ import { characterSvg } from '../../render/characters';
 import type { App } from '../app';
 import { h } from '../dom';
 import { showHelp } from '../help';
-import { NUM, button, costPips, elBadge, elColor, highlight, reactionChip, spellFlow, spellText, tagChip } from '../widgets';
+import { reactionTag } from '../reactions';
+import { NUM, button, costPips, elBadge, elColor, highlight, spellFlow, spellText, tagChip } from '../widgets';
 
 /** 주문서 한 장: 유형, 이름, 받는→넘기는 성속, 성진, 설명. 누르면 장착하거나 뺀다. */
 function spellLine(spellId: string, equipped: boolean, locked: boolean, onToggle: () => void): HTMLElement {
@@ -117,7 +118,7 @@ function synergyPanel(selected: string[], loadouts: Record<string, string[]>): H
       h('div', { class: 'syn-stat' }, h('span', { class: 'syn-label' }, '가능한 최대 체인'), h('span', { class: `syn-value ${syn.maxChain >= 4 ? 'full' : ''}` }, syn.maxChain)),
       h('div', { class: 'syn-stat' }, h('span', { class: 'syn-label' }, '링크 쌍'), h('span', { class: 'syn-value' }, syn.linkPairs)),
     ),
-    h('div', { class: 'syn-block' }, h('h4', {}, '발동 가능한 성좌 반응'), syn.reactions.length ? h('div', { class: 'chip-row' }, syn.reactions.map(reactionChip)) : h('p', { class: 'syn-none' }, '아직 없음')),
+    h('div', { class: 'syn-block' }, h('h4', {}, '발동 가능한 성좌 반응'), syn.reactions.length ? h('div', { class: 'chip-row' }, syn.reactions.map((id) => reactionTag(id))) : h('p', { class: 'syn-none' }, '아직 없음')),
     syn.bestSequence.length > 1
       ? h(
           'div',

@@ -6,6 +6,7 @@ import '@fontsource/noto-serif-kr/700.css';
 import '@fontsource/noto-serif-kr/900.css';
 import './styles.css';
 import './theme.css';
+import './battle7.css';
 import { installSound } from './audio/sound';
 import { App } from './ui/app';
 

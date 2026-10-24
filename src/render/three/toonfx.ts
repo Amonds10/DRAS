@@ -166,10 +166,10 @@ function material(kind: ToonKind): THREE.ShaderMaterial {
     depthTest: false,
     // 빛 효과는 가산 혼합(겹칠수록 밝아진다). 배경 덮개만 보통 혼합으로 어둡게 깐다.
     blending: kind === 'backdrop' ? THREE.NormalBlending : THREE.AdditiveBlending,
-    uniforms: { uT: { value: 0 }, uSeed: { value: Math.random() * 10 }, uA: { value: new THREE.Color() }, uB: { value: new THREE.Color() } },
+    uniforms: { uT: { value: 0 }, uSeed: { value: Math.random() * 10 }, uA: { value: new THREE.Color() }, uB: { value: new THREE.Color() }, uG: { value: 1 } },
     vertexShader: VERT,
     // 가산 혼합은 스프라이트 빛무리(fx.ts)와 겹쳐 쌓이므로, 이 층은 모양을 잡는 정도로만 밝게 둔다
-    fragmentShader: `${COMMON}\nvoid main() {\n${BODIES[kind]}\n  gl_FragColor = vec4(col, a * ${kind === 'backdrop' ? '1.0' : GAIN[kind].toFixed(2)});\n}`,
+    fragmentShader: `${COMMON}\nuniform float uG;\nvoid main() {\n${BODIES[kind]}\n  gl_FragColor = vec4(col, a * ${kind === 'backdrop' ? '1.0' : `${GAIN[kind].toFixed(2)} * uG`});\n}`,
   });
 }
 
@@ -214,6 +214,8 @@ export class ToonFx {
     const mat = material(kind);
     const a = new THREE.Color(o.color);
     mat.uniforms.uA.value.copy(a);
+    // 이미 많이 겹쳐 있으면 새 효과는 흐리게: 가산 혼합이 쌓여 하얗게 타는 것을 막는다
+    mat.uniforms.uG.value = Math.max(0.4, Math.min(1, 1.3 - this.live.length / 22));
     mat.uniforms.uB.value.copy(o.light !== undefined ? new THREE.Color(o.light) : a.clone().lerp(new THREE.Color(0xffffff), 0.55));
     const mesh = new THREE.Mesh(this.geo, mat);
     const [w, h] = Array.isArray(o.size) ? o.size : [o.size, o.size];

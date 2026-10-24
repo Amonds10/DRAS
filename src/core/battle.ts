@@ -704,8 +704,9 @@ function runPlayerPhase(state: BattleState, plan: PlannedCast[], rng: Rng, event
       pierce: reaction?.pierce ?? false,
       extraMult: wave ? 1 + wave * WAVE_STEP : undefined,
     };
-    if (reaction) events.push({ type: 'reaction', reactionId: reaction.id, allyUid: ally.uid });
     boost += applyEffects(state, spell.effects, ctx, rng, events);
+    // 반응은 주문이 다 맞은 뒤에 터진다(초신성의 배율은 이미 이 주문에 실렸다)
+    if (reaction) events.push({ type: 'reaction', reactionId: reaction.id, allyUid: ally.uid });
     if (reaction && reaction.effects.length) applyEffects(state, reaction.effects, { ...ctx, spell: null, damageMult: 1, pierce: false }, rng, events);
     if (reaction) state.stats.reactions++;
     state.stats.maxChain = Math.max(state.stats.maxChain, step.chain);

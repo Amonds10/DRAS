@@ -10,7 +10,7 @@ export const FX_NAMES = [
 ] as const;
 
 /** 직접 그린 효과 텍스처(캔버스). 모두 흰색과 알파라 색으로 물들여 쓴다. */
-export const DRAWN = ['rune', 'rune_hex', 'shard', 'flare4', 'trail', 'bloom'] as const;
+export const DRAWN = ['rune', 'rune_hex', 'shard', 'flare4', 'trail', 'bloom', 'crescent', 'crack', 'petal', 'vortex', 'sunburst'] as const;
 export type Drawn = (typeof DRAWN)[number];
 
 export type FxName = (typeof FX_NAMES)[number] | 'soft' | 'blob' | Drawn;
@@ -190,6 +190,120 @@ function drawFx(name: Drawn, ctx: CanvasRenderingContext2D, s: number): void {
       ctx.beginPath();
       ctx.arc(0, 0, c * 0.35, 0, Math.PI * 2);
       ctx.fill();
+      break;
+    }
+    case 'crescent': {
+      // 초승달: 큰 원에서 어긋난 원을 도려내고, 바깥 테를 은은히 번지게
+      ctx.translate(c, c);
+      ctx.shadowColor = '#fff';
+      ctx.shadowBlur = s * 0.06;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(0, 0, c * 0.72, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.shadowBlur = s * 0.03;
+      ctx.beginPath();
+      ctx.arc(c * 0.3, -c * 0.12, c * 0.64, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case 'crack': {
+      // 갈라진 땅: 가운데서 뻗어 나가며 가지 치는 금
+      let r = 91;
+      const rnd = () => ((r = (r * 16807) % 2147483647) / 2147483647);
+      ctx.translate(c, c);
+      ctx.strokeStyle = '#fff';
+      ctx.lineCap = 'round';
+      ctx.shadowColor = '#fff';
+      ctx.shadowBlur = s * 0.02;
+      const branch = (x: number, y: number, a: number, len: number, w: number, depth: number) => {
+        let px = x, py = y;
+        const steps = 5;
+        ctx.lineWidth = w;
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        for (let i = 0; i < steps; i++) {
+          a += (rnd() - 0.5) * 0.8;
+          px += Math.cos(a) * (len / steps);
+          py += Math.sin(a) * (len / steps);
+          ctx.lineTo(px, py);
+          if (depth > 0 && rnd() < 0.35) {
+            ctx.stroke();
+            branch(px, py, a + (rnd() < 0.5 ? -1 : 1) * (0.5 + rnd() * 0.6), len * 0.45, w * 0.6, depth - 1);
+            ctx.lineWidth = w;
+            ctx.beginPath();
+            ctx.moveTo(px, py);
+          }
+        }
+        ctx.stroke();
+      };
+      for (let i = 0; i < 7; i++) branch(0, 0, (i / 7) * Math.PI * 2 + rnd() * 0.5, c * (0.6 + rnd() * 0.35), s * 0.014, 2);
+      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, c * 0.25);
+      g.addColorStop(0, 'rgba(255,255,255,0.9)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(-c, -c, s, s);
+      break;
+    }
+    case 'petal': {
+      // 꽃잎(성운): 끝이 뾰족한 잎, 가운데 결이 밝다
+      ctx.translate(c, c);
+      const g = ctx.createLinearGradient(0, -c * 0.9, 0, c * 0.9);
+      g.addColorStop(0, 'rgba(255,255,255,0.35)');
+      g.addColorStop(0.5, 'rgba(255,255,255,1)');
+      g.addColorStop(1, 'rgba(255,255,255,0.5)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(0, -c * 0.9);
+      ctx.bezierCurveTo(c * 0.55, -c * 0.4, c * 0.45, c * 0.5, 0, c * 0.9);
+      ctx.bezierCurveTo(-c * 0.45, c * 0.5, -c * 0.55, -c * 0.4, 0, -c * 0.9);
+      ctx.fill();
+      break;
+    }
+    case 'vortex': {
+      // 소용돌이(공허): 가운데로 말려 드는 팔 넷
+      ctx.translate(c, c);
+      ctx.strokeStyle = '#fff';
+      ctx.lineCap = 'round';
+      for (let arm = 0; arm < 4; arm++) {
+        for (let i = 0; i < 40; i++) {
+          const k = i / 40;
+          const a = arm * (Math.PI / 2) + k * Math.PI * 2.2;
+          const rad = c * (0.1 + 0.82 * k);
+          const a2 = a + 0.09;
+          const rad2 = c * (0.1 + 0.82 * (k + 0.025));
+          ctx.globalAlpha = Math.sin(k * Math.PI) * 0.9;
+          ctx.lineWidth = s * (0.008 + 0.03 * (1 - k));
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(a) * rad, Math.sin(a) * rad);
+          ctx.lineTo(Math.cos(a2) * rad2, Math.sin(a2) * rad2);
+          ctx.stroke();
+        }
+      }
+      break;
+    }
+    case 'sunburst': {
+      // 햇살(태양): 길고 짧은 빛살이 번갈아 뻗는 원반
+      ctx.translate(c, c);
+      for (let i = 0; i < 24; i++) {
+        const a = (i / 24) * Math.PI * 2;
+        const len = c * (i % 2 ? 0.55 : 0.95);
+        const g = ctx.createLinearGradient(0, 0, Math.cos(a) * len, Math.sin(a) * len);
+        g.addColorStop(0, 'rgba(255,255,255,0.9)');
+        g.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.strokeStyle = g;
+        ctx.lineWidth = s * (i % 2 ? 0.012 : 0.022);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(Math.cos(a) * len, Math.sin(a) * len);
+        ctx.stroke();
+      }
+      const core = ctx.createRadialGradient(0, 0, 0, 0, 0, c * 0.3);
+      core.addColorStop(0, 'rgba(255,255,255,1)');
+      core.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = core;
+      ctx.fillRect(-c, -c, s, s);
       break;
     }
   }

@@ -61,14 +61,17 @@ interface Actor {
   flash: number;
   alpha: number;
   dead: boolean;
+  /** 연출 조명: 1이면 평소, 낮을수록 컷 밖으로 물러나 흐려진다 */
+  spot: number;
 }
 
 /** 아군 자리(x, z): 앞뒤로 엇갈려 선다 */
+// 앞줄(z=+1)은 원근 때문에 바깥으로 벌어져 보이므로 안쪽으로 당겨, 화면에서 네 명이 고른 간격으로 보이게 한다
 const ALLY_SLOTS: [number, number][] = [
-  [-6.7, -1.0],
-  [-4.9, 1.0],
-  [-3.1, -1.0],
-  [-1.3, 1.0],
+  [-6.9, -0.8],
+  [-4.55, 0.8],
+  [-3.2, -0.8],
+  [-1.0, 0.8],
 ];
 
 function enemySlots(specs: ActorSpec[]): [number, number][] {
@@ -366,6 +369,10 @@ export class Stage {
   private xScale = 1;
   /** 무대 아래쪽을 덮는 UI 높이(px). 이 절반만큼 화면을 위로 민다. */
   private safeBottom = 0;
+  /** 화면에 실제로 적용 중인 아래 여백(목표값을 부드럽게 따라간다) */
+  private safeCur = -1;
+  /** 연출 중 화면에 남길 유닛(null이면 모두) */
+  private spotSet: Set<string> | null = null;
   presetId: ScenePreset | null = null;
 
   constructor() {
@@ -517,7 +524,7 @@ export class Stage {
     this.scene.add(this.env.group);
     this.scene.fog = this.env.fog;
     this.fx = new FxSystem(this.camera, this.env.lights, this.env.staticLightCount);
-    this.fx.maxParts = this.quality.tier === 'high' ? 420 : 220;
+    this.fx.maxParts = this.quality.tier === 'high' ? 700 : this.quality.tier === 'low' ? 260 : 480;
     this.toonFx.dispose();
     this.backdrop.set(null);
     this.scene.add(this.fx.group);
@@ -589,6 +596,16 @@ export class Stage {
     this.safeBottom = bottom;
   }
 
+  /** 이 유닛이 지금 연출 컷 안에 있는가(컷이 없으면 모두 안) */
+  inShot(uid: string): boolean {
+    return !this.cine || !this.spotSet || this.spotSet.has(uid);
+  }
+
+  /** 연출 조명: 고른 유닛만 또렷하게 두고 나머지는 흐리게 물린다(null이면 모두 원래대로) */
+  spotlight(uids: Iterable<string> | null): void {
+    this.spotSet = uids ? new Set(uids) : null;
+  }
+
   onFrame(cb: () => void): () => void {
     this.frameCbs.add(cb);
     return () => this.frameCbs.delete(cb);
@@ -638,6 +655,7 @@ export class Stage {
   setActors(specs: ActorSpec[]): void {
     this.lastSpecs = specs;
     this.clearActors();
+    this.spotSet = null;
     const allies = specs.filter((s) => s.side === 'ally');
     const enemies = specs.filter((s) => s.side === 'enemy');
     const eSlots = enemySlots(enemies);
@@ -711,6 +729,7 @@ export class Stage {
         order,
         travelX: 0,
         travel: null,
+        spot: 1,
       };
       if (puppet && spec.dead) puppet.play('die');
       this.actors.set(spec.uid, actor);
@@ -864,7 +883,12 @@ export class Stage {
 
   /** 연출 배경: 색을 주면 무대 뒤가 어두워지며 그 색 무늬가 깔리고, null이면 걷힌다 */
   setBackdrop(color: THREE.ColorRepresentation | null, strength = 0.82): void {
-    this.backdrop.set(color, strength);
+    // 달빛·별빛처럼 흰색에 가까운 색은 화면을 하얗게 덮으므로 약하게 깐다
+    const lum = color === null ? 0 : (() => {
+      const c = new THREE.Color(color);
+      return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+    })();
+    this.backdrop.set(color, lum > 0.55 ? strength * 0.6 : strength);
   }
 
   /** 타격 반동: roll(라디안)만큼 기울이고 zoom만큼 앞으로 튕긴다 */
@@ -1020,7 +1044,9 @@ export class Stage {
       this.outline.uniforms.uPaintFar.value = d + 30;
     }
     // 아래 UI에 가려지는 만큼 시야 창을 내려, 장면이 남은 영역의 가운데에 오게 한다.
-    const shift = this.framing === 'battle' ? Math.min(this.safeBottom * 0.5, this.size.y * 0.3) : 0;
+    const goal = this.framing === 'battle' ? Math.min(this.safeBottom * 0.5, this.size.y * 0.3) : 0;
+    this.safeCur = this.safeCur < 0 ? goal : this.safeCur + (goal - this.safeCur) * Math.min(1, dt * 6);
+    const shift = Math.round(this.safeCur);
     if (shift > 0) cam.setViewOffset(this.size.x, this.size.y, 0, shift, this.size.x, this.size.y);
     else cam.clearViewOffset();
     cam.updateProjectionMatrix();
@@ -1092,13 +1118,16 @@ export class Stage {
       }
       const yaw = Math.atan2(this.camera.position.x - a.base.x, this.camera.position.z - a.base.z);
       a.flash = Math.max(0, a.flash - dt * 4);
-      const tone = a.dead && isAlly ? 0.45 : 1;
+      const spotGoal = !this.spotSet || this.spotSet.has(a.spec.uid) ? 1 : 0.16;
+      a.spot += (spotGoal - a.spot) * Math.min(1, dt * 9);
+      const tone = (a.dead && isAlly ? 0.45 : 1) * (0.55 + 0.45 * a.spot);
+      const alpha = a.alpha * a.spot;
       if (a.puppet) {
         a.puppet.update(this.t, dt, a.phase);
         a.obj.position.set(a.base.x + a.offset.x + a.travelX, a.hover + a.offset.y, a.base.z);
         a.obj.rotation.y = yaw;
         a.puppet.caster.rotation.y = lightYaw - yaw;
-        a.puppet.setColor(tone + a.flash * 2.2, a.alpha);
+        a.puppet.setColor(tone + a.flash * 2.2, alpha);
       } else {
         const bob = a.hover > 0 ? Math.sin(this.t * 1.4 + a.phase) * 0.08 : 0;
         const breathe = 1 + Math.sin(this.t * 2 + a.phase) * 0.025;
@@ -1113,11 +1142,11 @@ export class Stage {
         const caster = m.children[0];
         if (caster) caster.rotation.y = lightYaw - yaw;
         a.mat!.color.setScalar(tone + a.flash * 2.2);
-        a.mat!.opacity = a.alpha;
+        a.mat!.opacity = alpha;
       }
       const reach = (a.puppet ? a.puppet.reach : 0) + a.travelX;
       a.shadow.position.set(a.base.x + a.offset.x + reach, 0.02, a.base.z);
-      (a.shadow.material as THREE.MeshBasicMaterial).opacity = a.alpha * (a.hover > 0 ? 0.6 : 1) * (this.quality.shadows && this.env?.preset.scenery !== 'neon' ? 0.6 : 1);
+      (a.shadow.material as THREE.MeshBasicMaterial).opacity = alpha * (a.hover > 0 ? 0.6 : 1) * (this.quality.shadows && this.env?.preset.scenery !== 'neon' ? 0.6 : 1);
       this.updateAura(a, dt);
     }
   }
@@ -1136,13 +1165,13 @@ export class Stage {
     const s = a.height * (0.75 + k * 0.55) * pulse;
     au.glow.scale.set(s * 0.8, s * 1.15, 1);
     au.glow.material.color.copy(col);
-    au.glow.material.opacity = (0.08 + k * 0.22) * a.alpha;
+    au.glow.material.opacity = (0.08 + k * 0.22) * a.alpha * a.spot;
     au.ring.position.set(x, 0.05, a.base.z);
     au.ring.rotation.z += dt * (0.6 + k * 2.4);
     const rs = 1.4 + k * 1.6;
     au.ring.scale.set(rs, rs, 1);
     (au.ring.material as THREE.MeshBasicMaterial).color.copy(col);
-    (au.ring.material as THREE.MeshBasicMaterial).opacity = (0.2 + k * 0.45) * a.alpha;
+    (au.ring.material as THREE.MeshBasicMaterial).opacity = (0.2 + k * 0.45) * a.alpha * a.spot;
     // 불씨: 중첩당 초당 2개
     if (!this.fx || a.dead) return;
     au.emit += dt * au.shown * 1.2;
