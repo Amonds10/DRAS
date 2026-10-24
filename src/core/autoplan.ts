@@ -1,6 +1,5 @@
 import { spellById } from '../data/spells';
-import { unitById } from '../data/units';
-import { KEYWORDS, cloneBattle, executeRound, isAlive, ready, statusStacks } from './battle';
+import { KEYWORDS, cloneBattle, executeRound, isAlive, statusStacks } from './battle';
 import type { BattleState, PlannedCast } from './types';
 
 function score(state: BattleState): number {
@@ -22,8 +21,8 @@ function extensions(state: BattleState, prefix: PlannedCast[]): PlannedCast[][] 
   const out: PlannedCast[][] = [];
   for (const ally of state.allies) {
     if (!isAlive(ally) || prefix.some((p) => p.allyUid === ally.uid)) continue;
-    for (const spellId of unitById(ally.defId).spells) {
-      if (!ready(ally, spellId) || cost + spellById(spellId).cost > state.stardust) continue;
+    for (const spellId of state.hands[ally.uid] ?? []) {
+      if (cost + spellById(spellId).cost > state.stardust) continue;
       out.push([...prefix, { allyUid: ally.uid, spellId }]);
     }
   }

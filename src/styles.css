@@ -1,37 +1,38 @@
 /* ───────── 토큰 ───────── */
 :root {
-  /* 리버스 1999 계열: 필름 같은 검정 바탕, 크림색 글씨, 미색 종이, 녹슨 주홍 한 가닥 + 별·마법의 금선 */
-  --bg: #0b0a09;
-  --panel: rgba(0, 0, 0, 0.72);
-  --panel-solid: #141210;
-  --panel-2: #1d1a17;
-  --line: rgba(255, 253, 233, 0.16);
-  --line-strong: rgba(255, 253, 233, 0.32);
-  --text: #fffde9;
-  --muted: #c9c2b4;
-  --dim: #8c8d8c;
-  --accent: #b55829;
-  --accent-bright: #db6f39;
-  --accent-ink: #fffde9;
-  --info: #9cc3d8;
-  --danger: #f56064;
-  --violet: #a99bd9;
-  --night: rgba(8, 7, 6, 0.72);
-  --night-solid: #12100e;
-  /* 별·마법 장식선 */
-  --gold: #d8c08a;
-  --gold-dim: rgba(216, 192, 138, 0.5);
-  --gold-faint: rgba(216, 192, 138, 0.2);
-  --paper: #e9dccd;
-  --ink: #171310;
-  --ink-muted: #5b544b;
-  --heal: #8ec755;
-  --shield: #9cc3d8;
-  --cut: 10px;
-  --font-ui: 'Noto Serif KR', 'Nanum Myeongjo', serif;
-  --font-serif: 'Noto Serif KR', 'Nanum Myeongjo', 'AppleMyungjo', serif;
-  --font-num: 'Bodoni Moda', 'Noto Serif KR', serif;
-  --font-latin: 'Bodoni Moda', 'Noto Serif KR', serif;
+  /* 읽히는 어두운 화면: 거의 검정 바탕, 밝기 단계로만 나뉘는 불투명 판, 흰 글씨. 색은 데이터(성속·체력·링크)에만. */
+  --bg: #0b0b0c;
+  --panel: #141415;
+  --panel-solid: #141415;
+  --panel-2: #1f1f21;
+  --raised: #2a2a2d;
+  --line: rgba(255, 255, 255, 0.1);
+  --line-strong: rgba(255, 255, 255, 0.22);
+  --text: #ffffff;
+  --muted: #c4c4c8;
+  --dim: #9a9aa0;
+  --accent: #f2c14e;
+  --accent-bright: #ffd36b;
+  --accent-ink: #111111;
+  --info: #8cc8ff;
+  --danger: #ff6b6b;
+  --violet: #b9a8ff;
+  --night: #141415;
+  --night-solid: #141415;
+  --gold: #f2c14e;
+  --gold-dim: rgba(242, 193, 78, 0.55);
+  --gold-faint: rgba(242, 193, 78, 0.18);
+  --paper: #1f1f21;
+  --ink: #ffffff;
+  --ink-muted: #c4c4c8;
+  --heal: #7ee08a;
+  --shield: #8cc8ff;
+  --cut: 0px;
+  --radius: 14px;
+  --font-ui: 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
+  --font-serif: 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
+  --font-num: 'Inter', 'Noto Sans KR', system-ui, sans-serif;
+  --font-latin: 'Inter', 'Noto Sans KR', system-ui, sans-serif;
   color-scheme: dark;
 }
 

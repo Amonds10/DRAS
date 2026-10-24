@@ -209,8 +209,6 @@ export interface SpellDef {
   /** [처치 시] 이 주문의 타격으로 적을 쓰러뜨리면(시전당 한 번) */
   kill?: Effect[];
   /** 한 줄 소개 */
-  /** 쓴 뒤 다시 쓸 수 없는 라운드 수(0이면 매 라운드) */
-  cooldown: number;
   /** 문장형 설명 */
   desc: string;
   tag: SkillTag;
@@ -229,7 +227,7 @@ export interface UnitDef {
   maxHp: number;
   atk: number;
   def: number;
-  /** 술사의 고정 스킬 4개(전투 내내 모두 보이고, 쿨타임으로 제한된다) */
+  /** 술사의 스킬 4개. 매 라운드 이 중 2장을 손패로 뽑는다. */
   spells: string[];
   /** 고유 패시브(전투 중 늘 켜져 있다) */
   passive: { name: string; desc: string };
@@ -281,8 +279,6 @@ export interface Ally {
   def: number;
   shield: number;
   statuses: Status[];
-  /** 스킬별 남은 쿨타임(라운드) */
-  cooldowns: Record<string, number>;
 }
 
 export interface Enemy {
@@ -319,6 +315,8 @@ export interface BattleState {
   stardust: number;
   maxStardust: number;
   focusUid: string | null;
+  /** 이번 라운드 손패: 아군 uid → 뽑은 스킬 */
+  hands: Record<string, string[]>;
   /** 이번 아군 턴 동안 봉인된 성속(성식) */
   seal: Element | null;
   /** 성속 각인: 전투 내내 그 성속을 내보낸 시전 수(최대 10). 공명 주문이 이 값을 쓴다. */

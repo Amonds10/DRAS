@@ -18,7 +18,7 @@ function skillLine(spellId: string): HTMLElement {
   return h(
     'div',
     { class: 'spell-line kit-line' },
-    h('div', { class: 'spell-line-head' }, h('span', { class: 'kit-slot' }, TAG_NAMES[sp.tag]), h('span', { class: 'spell-name' }, sp.name), spellFlow(sp), h('span', { class: 'kit-cost' }, sp.cooldown ? `쿨타임 ${sp.cooldown}` : '매 라운드'), costPips(sp.cost)),
+    h('div', { class: 'spell-line-head' }, h('span', { class: 'kit-slot' }, TAG_NAMES[sp.tag]), h('span', { class: 'spell-name' }, sp.name), spellFlow(sp), costPips(sp.cost)),
     spellText(sp),
   );
 }
@@ -86,7 +86,7 @@ function unitDetail(unit: UnitDef, order: number, full: boolean, onToggle: () =>
         button(selected ? `편성에서 빼기 (${order + 1}번)` : full ? '팀이 가득 찼습니다' : '편성에 넣기', onToggle, { variant: selected ? 'ghost' : 'primary', disabled: !selected && full, class: 'detail-toggle' }),
       ),
     ),
-    h('div', { class: 'unit-spells' }, h('p', { class: 'unit-spells-head' }, '스킬 4개 · 전투 내내 모두 쓸 수 있고, 쿨타임으로 제한됩니다'), unit.spells.map(skillLine)),
+    h('div', { class: 'unit-spells' }, h('p', { class: 'unit-spells-head' }, '스킬 4개 · 매 라운드 이 중 2장을 손패로 뽑습니다'), unit.spells.map(skillLine)),
   );
   detail.querySelector('.detail-fig')!.innerHTML = characterSvg(unit.id);
   return detail;

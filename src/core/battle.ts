@@ -96,11 +96,12 @@ export function createBattle(allies: Ally[], enemyIds: string[], mods: BattleMod
   });
   const state: BattleState = {
     round: 1,
-    allies: allies.map((a) => ({ ...a, shield: 0, statuses: [], cooldowns: {} })),
+    allies: allies.map((a) => ({ ...a, shield: 0, statuses: [] })),
     enemies,
     stardust: Math.min(mods.startStardust, MAX_STARDUST),
     maxStardust: MAX_STARDUST,
     focusUid: enemies[0]?.uid ?? null,
+    hands: {},
     seal: null,
     attune: { sol: 0, luna: 0, nebula: 0, comet: 0, void: 0 },
     outcome: 'ongoing',
@@ -108,6 +109,7 @@ export function createBattle(allies: Ally[], enemyIds: string[], mods: BattleMod
     mods,
     stats: { maxChain: 0, reactions: 0, fullChains: 0 },
   };
+  drawHands(state);
   rollIntents(state);
   return state;
 }
@@ -123,9 +125,17 @@ function withRng<T>(state: BattleState, fn: (rng: Rng) => T): T {
   return out;
 }
 
-/** 이 술사가 지금 쓸 수 있는 스킬인지(쿨타임) */
-export function ready(ally: Ally, spellId: string): boolean {
-  return (ally.cooldowns[spellId] ?? 0) <= 0;
+export const HAND_SIZE = 2;
+
+/** 살아 있는 술사마다 스킬 4개 중 2장을 손패로 뽑는다. */
+export function drawHands(state: BattleState): void {
+  withRng(state, (rng) => {
+    state.hands = {};
+    for (const a of state.allies) {
+      if (!isAlive(a)) continue;
+      state.hands[a.uid] = rng.shuffle(unitById(a.defId).spells).slice(0, HAND_SIZE);
+    }
+  });
 }
 
 export function rollIntents(state: BattleState): void {
@@ -167,8 +177,7 @@ export function validatePlan(state: BattleState, plan: PlannedCast[]): string | 
     if (!ally) return '알 수 없는 술사입니다.';
     if (!isAlive(ally)) return '쓰러진 술사는 시전할 수 없습니다.';
     if (seen.has(c.allyUid)) return '술사는 한 턴에 한 번만 시전할 수 있습니다.';
-    if (!unitById(ally.defId).spells.includes(c.spellId)) return '이 술사의 스킬이 아닙니다.';
-    if ((ally.cooldowns[c.spellId] ?? 0) > 0) return '아직 쿨타임입니다.';
+    if (!state.hands[c.allyUid]?.includes(c.spellId)) return '이번 라운드 손패에 없는 스킬입니다.';
     seen.add(c.allyUid);
   }
   if (planCost(plan) > state.stardust) return '성진이 부족합니다.';
@@ -793,13 +802,7 @@ export function executeRound(state: BattleState, plan: PlannedCast[]): BattleEve
   }
   state.round++;
   state.stardust = Math.min(state.maxStardust, state.stardust + state.mods.stardustPerTurn);
-  // 쿨타임: 지난 라운드 것은 하나 줄고, 이번 라운드에 쓴 스킬은 새로 건다
-  for (const a of state.allies) for (const id of Object.keys(a.cooldowns)) a.cooldowns[id] = Math.max(0, a.cooldowns[id] - 1);
-  for (const c of plan) {
-    const ally = state.allies.find((x) => x.uid === c.allyUid);
-    const cd = spellById(c.spellId).cooldown;
-    if (ally && cd > 0 && events.some((e) => e.type === 'cast' && e.allyUid === c.allyUid)) ally.cooldowns[c.spellId] = cd;
-  }
+  drawHands(state);
   rollIntents(state);
   events.push({ type: 'round', round: state.round });
   return events;

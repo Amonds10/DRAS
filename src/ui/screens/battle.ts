@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { sound } from '../../audio/sound';
-import { MAX_ATTUNE, cloneBattle, executeRound, getFocus, isAlive, planCost, ready, setFocus, statusStacks } from '../../core/battle';
+import { MAX_ATTUNE, cloneBattle, executeRound, getFocus, isAlive, planCost, setFocus, statusStacks } from '../../core/battle';
 import { previewChain } from '../../core/link';
 import { finishBattle } from '../../core/run';
 import type { Ally, BattleEvent, BattleState, Element, Enemy, PlannedCast, SkillTag, Stack, Status } from '../../core/types';
@@ -18,7 +18,7 @@ import { h, sleep } from '../dom';
 import { glyph } from '../glyphs';
 import { cycleGraphics, graphicsLabel } from '../graphics';
 import { showHelp } from '../help';
-import { NUM, allyName, button, costPips, elBadge, elColor, highlight, hpBar, intentView, modal, spellFlow, statusRow, updateHpBar } from '../widgets';
+import { NUM, allyName, button, elBadge, elColor, highlight, hpBar, intentView, modal, spellFlow, statusRow, updateHpBar } from '../widgets';
 
 /*
  * 전투 화면 v4: 라운드 계획 + 링크.
@@ -67,7 +67,6 @@ function eventText(state: BattleState, ev: BattleEvent): string | null {
 
 const SUPPORT_TAGS = new Set<SkillTag>(['heal', 'shield', 'buff', 'utility', 'charge']);
 const STACKS: Stack[] = ['solarCore', 'aim', 'tide', 'hunger', 'fortitude', 'wave'];
-const SKILL_KEYS = ['Q', 'W', 'E', 'R'];
 
 type Hint = { kind: 'link' | 'reaction' | 'break' | 'start'; text: string };
 
@@ -79,14 +78,10 @@ export function battleScreen(app: App): HTMLElement {
   let plan: PlannedCast[] = [];
   let busy = false;
   const log: string[] = [`— ${battle.round} 라운드 —`];
-  /** 아래 스킬 패널에 보이는 술사 */
-  let picked: string = battle.allies.find(isAlive)?.uid ?? 'a0';
-  /** 설명 카드에 띄울 스킬(가리키거나 고른 것) */
-  let hover: string | null = null;
   /** 상세 정보를 보는 유닛 */
   let inspect: string | null = null;
 
-  const root = h('main', { class: 'battle-wrap bx v4' });
+  const root = h('main', { class: 'battle-wrap bx v5' });
   const scene = h('section', { class: `scene floor-${floor.kind}`, 'aria-label': '전장' });
   const actorLayer = h('div', { class: 'actor-layer' });
   const callout = h('div', { class: 'callout-layer', 'aria-live': 'polite' });
@@ -94,7 +89,7 @@ export function battleScreen(app: App): HTMLElement {
   const infoSlot = h('div', { class: 'bx-info-slot' });
   const plateSlot = h('div', { class: 'plate-slot', 'aria-live': 'polite' });
   const hitSlot = h('div', { class: 'hit-slot' });
-  const dockSlot = h('div', { class: 'cmd-slot' });
+  const dockSlot = h('div', { class: 'dock5-slot' });
   scene.append(actorLayer, hudSlot, plateSlot, hitSlot, callout, infoSlot);
   root.append(scene, dockSlot);
 
@@ -113,7 +108,7 @@ export function battleScreen(app: App): HTMLElement {
     ...battle.allies.map((a) => ({ uid: a.uid, side: 'ally' as const, defId: a.defId, dead: !isAlive(a) })),
     ...battle.enemies.map((e) => ({ uid: e.uid, side: 'enemy' as const, defId: e.defId, dead: !isAlive(e), boss: !!enemyById(e.defId).traits?.length })),
   ]);
-  const fitSafeArea = () => stage.setSafeArea(window.matchMedia('(max-width: 760px)').matches ? 330 : 200);
+  const fitSafeArea = () => stage.setSafeArea(window.matchMedia('(max-width: 760px)').matches ? 380 : 340);
   fitSafeArea();
   const resizeObs = new ResizeObserver(fitSafeArea);
   resizeObs.observe(root);
@@ -156,8 +151,6 @@ export function battleScreen(app: App): HTMLElement {
     return { kind: 'break', text: st.sealed ? '봉인됨' : '끊김' };
   };
 
-  const nextUnplanned = () => battle.allies.find((a) => isAlive(a) && !plan.some((p) => p.allyUid === a.uid))?.uid ?? null;
-
   const pickSpell = (ally: Ally, spellId: string) => {
     if (busy || !isAlive(ally)) return;
     const idx = plan.findIndex((p) => p.allyUid === ally.uid);
@@ -167,17 +160,13 @@ export function battleScreen(app: App): HTMLElement {
     } else {
       const sp = spellById(spellId);
       const myCost = idx >= 0 ? spellById(plan[idx].spellId).cost : 0;
-      if (!ready(ally, spellId) || sp.cost > remaining() + myCost) return;
+      if (sp.cost > remaining() + myCost) return;
       if (idx >= 0) plan[idx] = { allyUid: ally.uid, spellId };
       else plan.push({ allyUid: ally.uid, spellId });
       sound.ui('card_place', 0.55);
       const st = steps()[plan.findIndex((p) => p.allyUid === ally.uid)];
       if (st?.linked) sound.link(st.chain, st.outElement ?? 'star');
-      // 다음 술사로 넘어간다
-      const next = nextUnplanned();
-      if (next) picked = next;
     }
-    hover = null;
     render();
   };
 
@@ -217,7 +206,7 @@ export function battleScreen(app: App): HTMLElement {
     if (uid.startsWith('e')) {
       const e = enemyOf(uid);
       if (e && isAlive(e)) setFocus(battle, uid);
-    } else if (isAlive(allyOf(uid)!)) picked = uid;
+    }
     inspect = inspect === uid ? null : uid;
     sound.ui('ui_toggle', 0.35);
     render();
@@ -248,10 +237,10 @@ export function battleScreen(app: App): HTMLElement {
       'button',
       {
         type: 'button',
-        class: `actor ally bx-unit bx-i${i % 2} ${alive ? '' : 'dead'} ${picked === a.uid && !busy ? 'turn' : ''} ${inspect === a.uid ? 'inspected' : ''}`,
+        class: `actor ally bx-unit bx-i${i % 2} ${alive ? '' : 'dead'} ${order >= 0 ? 'queued' : ''} ${inspect === a.uid ? 'inspected' : ''}`,
         style: { '--el': elColor(unit.element) },
         disabled: !alive,
-        'aria-label': `${unit.name} 고르기·상세 보기`,
+        'aria-label': `${unit.name} 상세 보기`,
         onclick: () => onUnitClick(a.uid),
       },
       h(
@@ -394,14 +383,14 @@ export function battleScreen(app: App): HTMLElement {
         h(
           'section',
           {},
-          h('h4', {}, '스킬'),
+          h('h4', {}, '스킬 4개 · 매 라운드 2장을 뽑는다'),
           unit.spells.map((id) => {
             const sp = spellById(id);
-            const cd = ally.cooldowns[id] ?? 0;
+            const inHand = battle.hands[ally.uid]?.includes(id);
             return h(
               'div',
-              { class: 'bx-ab' },
-              h('div', { class: 'bx-ab-head' }, h('small', {}, TAG_NAMES[sp.tag]), h('b', {}, sp.name), spellFlow(sp), h('span', {}, cd ? `쿨타임 ${cd}` : `성진 ${sp.cost}`)),
+              { class: `bx-ab ${inHand ? 'in-hand' : ''}` },
+              h('div', { class: 'bx-ab-head' }, h('small', {}, inHand ? '이번 손패' : TAG_NAMES[sp.tag]), h('b', {}, sp.name), spellFlow(sp), h('span', {}, `성진 ${sp.cost}`)),
               h('p', { class: 'ab-desc' }, highlight(sp.desc)),
             );
           }),
@@ -430,78 +419,53 @@ export function battleScreen(app: App): HTMLElement {
     return null;
   };
 
-  // ── 명령 패널(아래) ──────────────────────────────────────
-  const allyTab = (a: Ally, i: number) => {
-    const unit = unitById(a.defId);
-    const order = plan.findIndex((p) => p.allyUid === a.uid);
-    const bust = h('span', { class: 'ct-face' });
-    bust.innerHTML = characterBust(a.defId);
-    return h(
-      'button',
-      {
-        type: 'button',
-        class: `cmd-tab ${picked === a.uid ? 'on' : ''} ${order >= 0 ? 'planned' : ''} ${isAlive(a) ? '' : 'dead'}`,
-        style: { '--el': elColor(unit.element) },
-        disabled: !isAlive(a) || busy,
-        onclick: () => {
-          picked = a.uid;
-          hover = null;
-          render();
-        },
-        title: `${unit.name} (${i + 1})`,
-      },
-      bust,
-      h('span', { class: 'ct-text' }, h('b', {}, unit.name), h('small', {}, order >= 0 ? `${NUM[order]}번 · ${spellById(plan[order].spellId).name}` : isAlive(a) ? '대기' : '전투 불능')),
-      h('kbd', {}, String(i + 1)),
-    );
-  };
-
-  const skillButton = (a: Ally, id: string, k: number) => {
+  // ── 카드 패(아래): 술사마다 이번 라운드 손패 2장 ─────────────
+  const card = (a: Ally, id: string, n: number) => {
     const sp = spellById(id);
     const unit = unitById(a.defId);
     const idx = plan.findIndex((p) => p.allyUid === a.uid);
     const chosen = idx >= 0 && plan[idx].spellId === id;
     const myCost = idx >= 0 ? spellById(plan[idx].spellId).cost : 0;
-    const cd = a.cooldowns[id] ?? 0;
     const tooCostly = !chosen && sp.cost > remaining() + myCost;
-    const hint = cd ? null : linkHint(a.uid, id);
+    const hint = linkHint(a.uid, id);
     return h(
       'button',
       {
         type: 'button',
-        class: `cmd-skill ${chosen ? 'on' : ''} ${cd ? 'cooling' : ''} ${hint ? `hint-${hint.kind}` : ''}`,
+        class: `card5 ${chosen ? 'on' : ''} hint-${hint.kind}`,
         style: { '--el': elColor(unit.element) },
-        disabled: busy || cd > 0 || tooCostly,
+        disabled: busy || tooCostly,
         'data-sfx': 'none',
         onclick: () => pickSpell(a, id),
-        onmouseenter: () => {
-          hover = id;
-          dockSlot.querySelector('.cmd-desc')?.replaceWith(descCard());
-        },
-        onfocus: () => {
-          hover = id;
-          dockSlot.querySelector('.cmd-desc')?.replaceWith(descCard());
-        },
-        'aria-label': `${sp.name}, ${TAG_NAMES[sp.tag]}, 성진 ${sp.cost}${cd ? `, 쿨타임 ${cd}` : ''}${hint ? `, ${hint.text}` : ''}`,
+        onmouseenter: () => showDesc(a.uid, id),
+        onfocus: () => showDesc(a.uid, id),
+        'aria-label': `${unit.name} ${sp.name}, 성진 ${sp.cost}, ${hint.text}`,
       },
-      h('span', { class: 'cs-top' }, glyph(sp.tag, 'cs-glyph'), costPips(sp.cost), h('kbd', {}, SKILL_KEYS[k])),
-      h('b', { class: 'cs-name' }, sp.name),
-      h('span', { class: 'cs-flow' }, spellFlow(sp), h('small', {}, TAG_EN[sp.tag])),
-      cd ? h('span', { class: 'cs-cd' }, `쿨타임 ${cd}`) : hint ? h('span', { class: `cs-hint ${hint.kind}` }, hint.text) : null,
-      chosen ? h('span', { class: 'cs-order' }, NUM[idx]) : null,
+      h('span', { class: 'c5-top' }, h('span', { class: 'c5-cost', title: `성진 ${sp.cost}` }, `✦${sp.cost}`), h('kbd', {}, String(n))),
+      h('span', { class: 'c5-flow' }, spellFlow(sp)),
+      h('b', { class: 'c5-name' }, sp.name),
+      h('span', { class: 'c5-tag' }, TAG_NAMES[sp.tag]),
+      h('span', { class: `c5-hint ${hint.kind}` }, hint.text),
+      chosen ? h('span', { class: 'c5-order' }, NUM[idx]) : null,
     );
   };
 
+  /** 설명 카드: 가리킨 카드(없으면 마지막으로 고른 카드)를 문장으로 */
+  let descFor: { uid: string; id: string } | null = null;
+  const showDesc = (uid: string, id: string) => {
+    descFor = { uid, id };
+    dockSlot.querySelector('.desc5')?.replaceWith(descCard());
+  };
   const descCard = () => {
-    const a = allyOf(picked);
-    const id = hover ?? (a ? plan.find((p) => p.allyUid === a.uid)?.spellId : null) ?? (a ? unitById(a.defId).spells[0] : null);
-    if (!a || !id) return h('div', { class: 'cmd-desc' });
-    const sp = spellById(id);
+    const pick = descFor ?? (plan.length ? { uid: plan[plan.length - 1].allyUid, id: plan[plan.length - 1].spellId } : null);
+    const a = pick ? allyOf(pick.uid) : null;
+    if (!pick || !a) return h('div', { class: 'desc5 empty' }, h('p', {}, '카드를 가리키면 설명이 나옵니다. 앞 카드가 넘긴 성속을 다음 카드가 받으면 링크가 이어집니다.'));
+    const sp = spellById(pick.id);
     const unit = unitById(a.defId);
     return h(
       'div',
-      { class: 'cmd-desc', style: { '--el': elColor(unit.element) } },
-      h('div', { class: 'cd-head' }, h('small', {}, `${unit.name} · ${TAG_NAMES[sp.tag]}`), h('b', {}, sp.name), spellFlow(sp), h('span', { class: 'cd-meta' }, `성진 ${sp.cost} · ${sp.cooldown ? `쿨타임 ${sp.cooldown}` : '쿨타임 없음'}`)),
+      { class: 'desc5', style: { '--el': elColor(unit.element) } },
+      h('div', { class: 'd5-head' }, h('b', {}, sp.name), spellFlow(sp), h('span', {}, `${unit.name} · ${TAG_NAMES[sp.tag]} · 성진 ${sp.cost}`)),
       h('p', { class: 'ab-desc' }, highlight(sp.desc)),
     );
   };
@@ -513,29 +477,41 @@ export function battleScreen(app: App): HTMLElement {
     const full = chain === 4;
     return h(
       'button',
-      { type: 'button', class: `cmd-cast ${plan.length ? '' : 'pass'} ${full ? 'full' : ''}`, disabled: busy, onclick: () => void execute(), title: plan.length ? '시전 (Space)' : '아무것도 하지 않고 성진만 모은다 (Space)' },
-      h('small', {}, full ? '성좌 완성' : `CHAIN ${plan.length ? chain : 0}${plan.length && last ? ` ×${last.mult}` : ''}`),
+      { type: 'button', class: `cast5 ${plan.length ? '' : 'pass'} ${full ? 'full' : ''}`, disabled: busy, onclick: () => void execute(), title: plan.length ? '시전 (Space)' : '아무것도 하지 않고 성진만 모은다 (Space)' },
       h('b', {}, plan.length ? '시전' : '대기'),
-      h('kbd', {}, 'Space'),
+      h('small', {}, full ? '성좌 완성' : plan.length ? `체인 ${chain} · ×${last?.mult ?? 1}` : '성진만 모으기'),
     );
   };
 
   const dockView = () => {
-    const a = allyOf(picked);
     const left = remaining();
+    let n = 0;
     return h(
       'div',
-      { class: 'cmd' },
+      { class: 'dock5' },
       descCard(),
       h(
         'div',
-        { class: 'cmd-row' },
-        h('div', { class: 'cmd-tabs' }, battle.allies.map(allyTab)),
-        h('div', { class: 'cmd-skills' }, a && isAlive(a) ? unitById(a.defId).spells.map((id, k) => skillButton(a, id, k)) : null),
+        { class: 'd5-row' },
         h(
           'div',
-          { class: 'cmd-side' },
-          h('div', { class: 'cmd-dust', title: `성진 ${battle.stardust}/${battle.maxStardust}, 계획 후 남는 성진 ${left}` }, h('small', {}, '성진'), h('span', {}, Array.from({ length: battle.maxStardust }, (_, i) => h('i', { class: i < left ? 'on' : i < battle.stardust ? 'spend' : '' }))), h('b', {}, `${left}/${battle.stardust}`)),
+          { class: 'd5-hands' },
+          battle.allies.map((a) => {
+            const unit = unitById(a.defId);
+            const face = h('span', { class: 'h5-face' });
+            face.innerHTML = characterBust(a.defId);
+            return h(
+              'div',
+              { class: `hand5 ${isAlive(a) ? '' : 'dead'}`, style: { '--el': elColor(unit.element) } },
+              h('div', { class: 'h5-who' }, face, h('b', {}, unit.name)),
+              h('div', { class: 'h5-cards' }, isAlive(a) ? (battle.hands[a.uid] ?? []).map((id) => card(a, id, ++n)) : h('p', { class: 'h5-down' }, '전투 불능')),
+            );
+          }),
+        ),
+        h(
+          'div',
+          { class: 'd5-side' },
+          h('div', { class: 'd5-dust', title: `성진 ${battle.stardust}/${battle.maxStardust}` }, h('small', {}, '남은 성진'), h('b', {}, `${left}`), h('span', {}, ` / ${battle.stardust}`)),
           castButton(),
         ),
       ),
@@ -545,7 +521,6 @@ export function battleScreen(app: App): HTMLElement {
   function render() {
     actorEls.clear();
     const fc = busy ? new Map<string, number>() : forecast();
-    if (!isAlive(allyOf(picked) ?? { hp: 0 })) picked = battle.allies.find(isAlive)?.uid ?? picked;
     actorLayer.replaceChildren(...battle.allies.map((a, i) => allyActor(a, i)), ...battle.enemies.map((e) => enemyActor(e, fc)));
     hudSlot.replaceChildren(
       h(
@@ -595,7 +570,7 @@ export function battleScreen(app: App): HTMLElement {
   };
   const showLog = () => modal('전투 기록', h('ol', { class: 'log-list' }, log.slice(-80).reverse().map((l) => h('li', {}, l))), () => {});
 
-  // ── 단축키: 1~4 술사, Q W E R 스킬, Space 시전, Backspace 마지막 취소, Tab 대상, Esc 상세 닫기 ──
+  // ── 단축키: 1~8 카드, Space 시전, Backspace 마지막 취소, Tab 대상, Esc 상세 닫기 ──
   const onKey = (e: KeyboardEvent) => {
     if (!root.isConnected) {
       document.removeEventListener('keydown', onKey);
@@ -611,17 +586,10 @@ export function battleScreen(app: App): HTMLElement {
     if (e.target instanceof HTMLElement && e.target.closest('input, textarea')) return;
     const k = e.key.toLowerCase();
     const n = Number(e.key);
-    if (n >= 1 && n <= battle.allies.length) {
-      const a = battle.allies[n - 1];
-      if (isAlive(a)) {
-        picked = a.uid;
-        hover = null;
-        render();
-      }
-    } else if (['q', 'w', 'e', 'r'].includes(k)) {
-      const a = allyOf(picked);
-      const id = a ? unitById(a.defId).spells[['q', 'w', 'e', 'r'].indexOf(k)] : null;
-      if (a && id) pickSpell(a, id);
+    const order = battle.allies.flatMap((a) => (isAlive(a) ? (battle.hands[a.uid] ?? []).map((id) => ({ a, id })) : []));
+    if (n >= 1 && n <= order.length) {
+      showDesc(order[n - 1].a.uid, order[n - 1].id);
+      pickSpell(order[n - 1].a, order[n - 1].id);
     } else if (k === ' ' || k === 'enter') {
       if (e.target instanceof HTMLButtonElement && k === 'enter') return;
       e.preventDefault();
@@ -1196,7 +1164,7 @@ export function battleScreen(app: App): HTMLElement {
     busy = false;
     root.classList.remove('busy', 'executing');
     clearCallout();
-    picked = battle.allies.find(isAlive)?.uid ?? picked;
+    descFor = null;
     if (battle.outcome === 'ongoing') {
       render();
       sound.ui('card_fan', 0.5);

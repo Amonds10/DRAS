@@ -15,8 +15,8 @@ const COMMON = /* glsl */ `
   uniform vec3 uA, uB;
   varying vec2 vUv;
   const vec3 INK = vec3(0.03, 0.02, 0.05);
-  // 흰 핵은 살짝 낮춰 빛 번짐이 화면 전체로 퍼지지 않게 한다
-  const vec3 HOT = vec3(0.92, 0.9, 0.85);
+  // 핵은 흰색이 아니라 성속 색을 밝힌 색: 화면이 하얗게 날아가지 않고 무엇이 터졌는지 보이게
+  #define HOT mix(uA, vec3(0.9), 0.4)
   float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
   float noise(vec2 p) {
     vec2 i = floor(p), f = fract(p);
@@ -202,7 +202,7 @@ export class ToonFx {
   /** 마무리 일격: 만화식 폭발 + 집중선 + 큰 고리 */
   finale(pos: THREE.Vector3, color: THREE.ColorRepresentation, scale = 1): void {
     this.spawn('blast', { pos, size: 2.7 * scale, color, life: 0.6 });
-    this.spawn('burst', { pos, size: 7 * scale, color, life: 0.42, roll: Math.random() * 3 });
+    this.spawn('burst', { pos, size: 5 * scale, color, life: 0.36, roll: Math.random() * 3 });
     this.spawn('ring', { pos, size: 5 * scale, color, life: 0.45 });
     this.spawn('star', { pos, size: 3 * scale, color, life: 0.28, roll: Math.random() * 3 });
   }

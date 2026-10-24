@@ -832,7 +832,7 @@ export class Stage {
 
   /** 잠깐 빛 번짐을 키운다(큰 타격의 화려함) */
   glowPulse(amount = 0.6): void {
-    this.bloomBoost = Math.min(0.6, Math.max(this.bloomBoost, amount));
+    this.bloomBoost = Math.min(0.3, Math.max(this.bloomBoost, amount * 0.6));
   }
 
   /** 돌진: 대상 바로 앞(gap만큼 떨어진 곳)으로. null이면 제자리로 돌아온다. */
@@ -903,7 +903,7 @@ export class Stage {
   }
 
   flashScreen(amount = 1): void {
-    this.screenFlash = Math.max(this.screenFlash, amount);
+    this.screenFlash = Math.max(this.screenFlash, amount * 0.5);
   }
 
   lightning(): void {

@@ -66,11 +66,11 @@ export function titleScreen(app: App): HTMLElement {
       'nav',
       { class: 'title-menu', 'aria-label': '메인 메뉴' },
       saved ? menuItem('이어하기', `${floorIdx + 1}층 · ${FLOORS[floorIdx].name}`, () => app.resume(saved), true) : null,
-      menuItem('새 여정', 'NEW GAME', startNew, !saved),
-      menuItem('플레이 방법', 'GUIDE', () => showHelp()),
+      menuItem('새 여정', '', startNew, !saved),
+      menuItem('플레이 방법', '', () => showHelp()),
       gfxItem(),
       soundItem(),
     ),
-    h('footer', { class: 'title-foot' }, 'PROTOTYPE v0.4'),
+    h('footer', { class: 'title-foot' }, '프로토타입 v0.5'),
   );
 }

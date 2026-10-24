@@ -31,7 +31,7 @@ export function newRun(unitIds: string[], seed: number): RunState {
   if (new Set(unitIds).size !== unitIds.length) throw new Error('같은 술사를 두 번 편성할 수 없습니다.');
   const team: Ally[] = unitIds.map((id, i) => {
     const def = unitById(id);
-    return { uid: `a${i}`, defId: id, hp: def.maxHp, maxHp: def.maxHp, atk: def.atk, def: def.def, shield: 0, statuses: [], cooldowns: {} };
+    return { uid: `a${i}`, defId: id, hp: def.maxHp, maxHp: def.maxHp, atk: def.atk, def: def.def, shield: 0, statuses: [] };
   });
   return {
     version: SAVE_VERSION,
