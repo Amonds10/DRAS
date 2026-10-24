@@ -143,6 +143,8 @@ interface Choreo {
   ult: boolean;
   style: AtkStyle;
   element: string;
+  /** 주문 이름(극딜 마무리 카드용) */
+  spell: string;
 }
 
 /** 보조 주문(타격 없음)의 동작 */
@@ -945,6 +947,13 @@ export function battleScreen(app: App): HTMLElement {
   };
   /** 마무리 타격은 다른 구도로 끊어 한 번 더 조인다 */
   const FINISH_ANGLES = ['punch', 'target', 'dutch', 'low'];
+  /** 타격마다 끊는 컷: 확대(push)·패닝(pan)·기울기(roll) */
+  const HIT_BEATS = [
+    { push: 0.92, pan: 0.12, roll: 0.02 },
+    { push: 0.84, pan: 0.28, roll: -0.03 },
+    { push: 0.96, pan: -0.06, roll: 0.012 },
+    { push: 0.8, pan: 0.36, roll: -0.04 },
+  ];
 
   const pickAngle = (opts: string[], seed: number) => ANGLES[opts[seed % opts.length]];
   const castShot = (caster: string, style: AtkStyle | null, tag: SkillTag, targets: string[], seed: number) => {
@@ -988,6 +997,8 @@ export function battleScreen(app: App): HTMLElement {
     const from = chest(c.caster).add(V(0.8, 0.15, 0.1));
     const finish = last && total > 1;
     if (finish && !c.ult && aims.length) finishShot(c, aims);
+    // 림버스식 타격 컷: 매 타격 확대·패닝·기울기를 번갈아 짧게 끊어 들어간다
+    else if (!c.ult && total > 1) stage.shotBeat({ ...HIT_BEATS[(index + shotCount) % HIT_BEATS.length], smooth: 0.07 });
     switch (c.style) {
       case 'combo':
       case 'rush': {
@@ -1651,6 +1662,8 @@ export function battleScreen(app: App): HTMLElement {
       if (!choreo) return;
       const c = choreo;
       choreo = null;
+      // 극딜은 제자리로 돌아가기 전에, 마지막 자세 그대로 여운을 준다
+      if (c.ult) await ults.outro(c.caster, c.color, c.spell, hitTotal.dmg);
       if (c.dashed) {
         stage.anim(c.caster, 'dash');
         stage.dash(c.caster, null, 0.22);
@@ -1724,7 +1737,7 @@ export function battleScreen(app: App): HTMLElement {
           showSkillPlate(ev.allyUid, ev.spellId, ev.linked ? `LINK ${ev.chain} · ×${ev.mult}` : ev.sealed ? '성식 — 링크 끊김' : prevCaster ? '링크 끊김 · 새 체인' : `CHAIN 1${ev.mult !== 1 ? ` · ×${ev.mult}` : ''}`, ev.linked, castSummary(events, k), `${castIdx + 1} / ${castTotal}`);
           await wait(420);
           const style = styleFor(sp, motion);
-          choreo = { caster: ev.allyUid, color, motion, melee, dashed: false, hits: targets.length, idx: 0, tag: sp.tag, pending: false, firstHit: false, last: false, big: sp.cost >= 2, ult, style, element: unit.element };
+          choreo = { caster: ev.allyUid, color, motion, melee, dashed: false, hits: targets.length, idx: 0, tag: sp.tag, pending: false, firstHit: false, last: false, big: sp.cost >= 2, ult, style, element: unit.element, spell: sp.name };
           if (!ult) castShot(ev.allyUid, staged ? style : null, sp.tag, targets, hashId(sp.id) + battle.round);
           if (melee && targets[0]) {
             // 스타일마다 다가서는 법이 다르다: 회전 베기는 적진 가운데로, 관통은 멀리서 노린다

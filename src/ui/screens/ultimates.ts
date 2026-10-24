@@ -43,6 +43,8 @@ interface Script {
 }
 
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+/** 극딜 박자 배율 */
+const ULT_PACE = 1.4;
 
 /** 카이렌의 화면 가르기: 검은 두 쪽(대각선으로 나뉜)과 그 사이를 긋는 빛줄 */
 const SLICE = `<i class="sl-a"></i><i class="sl-b"></i><i class="sl-cut"></i><i class="sl-glint"></i>`;
@@ -69,7 +71,9 @@ const CONSTELLATION = `<svg viewBox="0 0 100 60" preserveAspectRatio="xMidYMin m
 </svg>`;
 
 export function makeUltimates(d: UltDeps) {
-  const { stage, wait, later, chest, feet } = d;
+  const { stage, later, chest, feet } = d;
+  /** 극딜은 일반 스킬보다 느긋하게: 모든 박자를 늘려 잡는다 */
+  const wait = (ms: number) => d.wait(ms * ULT_PACE);
   const fx = () => stage.fx;
   const shot = (uids: string[], o: Omit<FrameShot, 'uids'>) => {
     stage.cinematic(null);
@@ -416,16 +420,26 @@ export function makeUltimates(d: UltDeps) {
       },
       async climax(b) {
         const from = chest(b.caster).add(V(0.8, 0.15, 0.1));
-        // 마지막 한 발 직전: 리코의 눈으로 — 화면 앞에 두 자루 총구가 들어오고 대상을 겨눈다
-        if (b.tgt) shot([b.tgt], { push0: 0.72, push1: 0.6, fov: 24, pad: 1.4, smooth: 0.1 });
-        stage.spotlight(b.aims);
-        const fps = overlay('ult-fps', 1150, FPS_GUNS, b.color);
-        stage.slowMo(0.5, 0.7);
-        await wait(700);
+        // 마지막 한 발 직전: 카메라가 리코의 눈 자리로 들어간다(1인칭). 무대 자체가 리코의 시점에서 보이고,
+        // 화면 앞에는 두 자루 총구가 들어와 대상을 겨눈다. 리코 자신과 동료는 시야에서 감춘다.
+        const eye = chest(b.caster).add(V(0.2, 0.6, 0.05));
+        const aim = b.tgt ? d.chest(b.tgt) : d.enemyCenter();
+        stage.frameShot(null);
+        stage.cinematic({ pos: eye, look: aim.clone().add(V(0, 0.1, 0)), fov: 48, smooth: 0.07 });
+        stage.spotlight(b.aims, 0);
+        const fps = overlay('ult-fps', 1700, FPS_GUNS, b.color);
+        stage.slowMo(0.5, 1);
+        await wait(520);
+        // 숨을 고르며 조금씩 조여 든다
+        stage.cinematic({ pos: eye.clone().lerp(aim, 0.12), look: aim.clone().add(V(0, 0.1, 0)), fov: 42, smooth: 0.35 });
+        await wait(620);
         fps.classList.add('fire');
         sound.swing('shoot', true);
         stage.flashScreen(0.22);
-        await wait(140);
+        stage.kick(0.03, -1.2);
+        for (const t of b.aims) stage.toon.beam(eye.clone().add(V(0.3, -0.3, 0)), d.chest(t), b.color, 0.5, 0.3);
+        await wait(260);
+        stage.cinematic(null);
         stage.spotlight([b.caster, ...b.aims]);
         if (b.tgt) shot([b.caster, b.tgt], { push0: 0.95, push1: 0.8, dur: 0.5 });
         speedLines(b.color, 500);
@@ -447,8 +461,40 @@ export function makeUltimates(d: UltDeps) {
   };
 
   const pick = (defId: string) => SCRIPTS[defId] ?? SCRIPTS.solea;
+  /** 타격 박자마다 끊어 들어가는 컷(림버스식): 확대·패닝·기울기를 번갈아 */
+  const BEATS = [
+    { push: 0.9, pan: 0.15, roll: 0.025 },
+    { push: 0.8, pan: 0.32, roll: -0.035 },
+    { push: 0.94, pan: -0.05, roll: 0.015 },
+    { push: 0.76, pan: 0.4, roll: -0.045 },
+  ];
   return {
-    intro: (defId: string, uid: string, color: string, target: string | null) => pick(defId).intro(uid, color, target),
-    play: (defId: string, b: UltBeat) => (b.last ? pick(defId).climax(b) : pick(defId).beat(b)),
+    intro: async (defId: string, uid: string, color: string, target: string | null) => {
+      await pick(defId).intro(uid, color, target);
+      // 컷인 직전 한 박자 숨 고르기(극딜이 짧게 느껴지지 않게)
+      await wait(260);
+    },
+    play: async (defId: string, b: UltBeat) => {
+      if (b.last) return pick(defId).climax(b);
+      stage.shotBeat({ ...BEATS[b.index % BEATS.length], smooth: 0.06 });
+      await pick(defId).beat(b);
+      await wait(70);
+    },
+    /**
+     * 마무리 여운: 슬로모션 속에 카메라가 천천히 물러나고, 주문 이름과 총 피해가 크게 떠오른다.
+     * 레터박스가 열리기 전에 한 번 멈춰 서서 '끝났다'는 박자를 준다.
+     */
+    outro: async (uid: string, color: string, spellName: string, total: number) => {
+      stage.shotBeat({ push: 1.12, pan: 0, roll: 0, smooth: 0.9 });
+      stage.slowMo(0.45, 1.1);
+      fx()?.embers(d.chest(uid), color, 18, 2);
+      const card = h('div', { class: 'ult-ov ult-total', style: { '--c': color } }, h('small', {}, spellName), h('b', {}, String(total)), h('span', {}, 'TOTAL DAMAGE'));
+      d.scene.append(card);
+      later(1500, () => {
+        card.classList.add('out');
+        later(300, () => card.remove());
+      });
+      await wait(1450);
+    },
   };
 }

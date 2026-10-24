@@ -396,6 +396,8 @@ export class Stage {
   private safeCur = -1;
   /** 연출 중 화면에 남길 유닛(null이면 모두) */
   private spotSet: Set<string> | null = null;
+  /** 컷 밖 유닛을 얼마나 흐리게(0이면 아예 감춘다) */
+  private spotDim = 0.09;
   presetId: ScenePreset | null = null;
 
   constructor() {
@@ -678,8 +680,24 @@ export class Stage {
   }
 
   /** 연출 조명: 고른 유닛만 또렷하게 두고 나머지는 흐리게 물린다(null이면 모두 원래대로) */
-  spotlight(uids: Iterable<string> | null): void {
+  spotlight(uids: Iterable<string> | null, dim = 0.09): void {
     this.spotSet = uids ? new Set(uids) : null;
+    this.spotDim = dim;
+  }
+
+  /**
+   * 타격 박자 컷(림버스식): 지금 투샷을 그대로 두고 확대·패닝·기울기만 바꿔 빠르게 '끊어' 들어간다.
+   * 한 스킬 안에서 타격마다 번갈아 부르면, 화면이 매 타격 짧게 튀어 들어갔다 흔들린다.
+   */
+  shotBeat(o: { push?: number; pan?: number; roll?: number; lift?: number; smooth?: number }): void {
+    const sh = this.shot;
+    if (!sh) return;
+    if (o.push !== undefined) sh.push0 = sh.push1 = o.push;
+    if (o.pan !== undefined) sh.pan0 = sh.pan1 = o.pan;
+    if (o.roll !== undefined) sh.roll = o.roll;
+    if (o.lift !== undefined) sh.lift = o.lift;
+    sh.smooth = o.smooth ?? 0.06;
+    sh.orbit = 0;
   }
 
   onFrame(cb: () => void): () => void {
@@ -1142,6 +1160,11 @@ export class Stage {
     const ld = this.env?.lightDir ?? new THREE.Vector3(0, 1, 0);
     const lightYaw = Math.atan2(ld.x, ld.z);
     this.updateRimDir();
+    // 인물은 평면 그림이다: 카메라 '위치'가 아니라 카메라가 '보는 방향'에 맞춰 모두 같은 각도로 세운다.
+    // (위치를 향하게 하면 카메라가 옆으로 비켜설 때마다 그림마다 다르게 돌아가 납작함이 드러난다)
+    const view = new THREE.Vector3();
+    this.camera.getWorldDirection(view);
+    const faceYaw = Math.atan2(-view.x, -view.z);
     for (const a of this.actors.values()) {
       a.base.x = a.slotX * this.xScale;
       if (a.travel) {
@@ -1202,9 +1225,9 @@ export class Stage {
           if (a.anim.t > 1.5) a.anim = null;
         }
       }
-      const yaw = Math.atan2(this.camera.position.x - a.base.x, this.camera.position.z - a.base.z);
+      const yaw = faceYaw;
       a.flash = Math.max(0, a.flash - dt * 4);
-      const spotGoal = !this.spotSet || this.spotSet.has(a.spec.uid) ? 1 : 0.09;
+      const spotGoal = !this.spotSet || this.spotSet.has(a.spec.uid) ? 1 : this.spotDim;
       a.spot += (spotGoal - a.spot) * Math.min(1, dt * 9);
       const tone = (a.dead && isAlly ? 0.45 : 1) * (0.55 + 0.45 * a.spot);
       const alpha = a.alpha * a.spot;

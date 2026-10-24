@@ -2017,3 +2017,49 @@
     animation: none;
   }
 }
+
+/* 극딜 마무리 카드: 주문 이름과 총 피해 */
+.ult-total {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 0;
+  text-align: center;
+  animation: ult-total-in 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+.ult-total small {
+  font-family: var(--font-serif);
+  font-size: 22px;
+  font-weight: 900;
+  color: #fff6e0;
+  text-shadow: 0 2px 0 rgba(20, 12, 4, 0.8), 0 0 18px var(--c);
+}
+
+.ult-total b {
+  font-family: var(--font-serif);
+  font-size: 96px;
+  font-weight: 900;
+  line-height: 1;
+  color: #fff;
+  -webkit-text-stroke: 3px rgba(20, 12, 4, 0.85);
+  paint-order: stroke fill;
+  text-shadow: 0 0 30px var(--c), 0 6px 0 rgba(20, 12, 4, 0.6);
+}
+
+.ult-total span {
+  font-size: 12px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--c) 60%, #fff);
+  text-shadow: 0 1px 2px #000;
+}
+
+@keyframes ult-total-in {
+  from { opacity: 0; transform: scale(1.6); letter-spacing: 0.3em; }
+}
+
+@media (max-width: 760px) {
+  .ult-total b {
+    font-size: 64px;
+  }
+}
