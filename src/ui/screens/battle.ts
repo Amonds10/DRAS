@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import { sound } from '../../audio/sound';
-import { MAX_ATTUNE, cloneBattle, executeRound, getFocus, isAlive, planCost, setFocus, statusStacks } from '../../core/battle';
+import { MAX_ATTUNE, cloneBattle, currentPattern, executeRound, getFocus, isAlive, planCost, setFocus, statusStacks } from '../../core/battle';
 import { previewChain } from '../../core/link';
 import { finishBattle } from '../../core/run';
 import type { Ally, BattleEvent, BattleState, Element, Enemy, PlannedCast, SkillTag, Stack, Status } from '../../core/types';
 import { ELEMENTS, STATUS_META, reactionById } from '../../data/elements';
 import { FLOORS } from '../../data/encounters';
-import { TRAIT_DESC, enemyById } from '../../data/enemies';
+import { TRAIT_DESC, enemyById, moveText } from '../../data/enemies';
 import { TAG_EN, TAG_NAMES, spellById } from '../../data/spells';
 import { ROLE_NAMES, unitById } from '../../data/units';
 import { characterBust, characterSvg } from '../../render/characters';
@@ -52,6 +52,18 @@ function eventText(state: BattleState, ev: BattleEvent): string | null {
       return `${unitLabel(state, ev.targetUid)} 회복 ${ev.amount}`;
     case 'enemyStunned':
       return `${unitLabel(state, ev.enemyUid)}은(는) 기절해 움직이지 못한다`;
+    case 'enemyAct':
+      return `${unitLabel(state, ev.enemyUid)}: 「${ev.intent.name}」${ev.intent.targetId ? ` → ${unitLabel(state, ev.intent.targetId)}` : ''}`;
+    case 'phase':
+      return `${unitLabel(state, ev.enemyUid)}의 2단계 「${ev.name}」: 패턴이 바뀌고 공격이 오른다`;
+    case 'shatter':
+      return `${unitLabel(state, ev.targetUid)}의 보호막이 부서졌다`;
+    case 'resist':
+      return `${unitLabel(state, ev.targetUid)}은(는) 버팀 중이라 기절하지 않았다`;
+    case 'steal':
+      return `${unitLabel(state, ev.enemyUid)}이(가) 성진 ${ev.amount}을(를) 빼앗았다`;
+    case 'status':
+      return state.allies.some((a) => a.uid === ev.targetUid) && STATUS_META[ev.status].debuff ? `${unitLabel(state, ev.targetUid)}: ${STATUS_META[ev.status].name}` : null;
     case 'death':
       return `${unitLabel(state, ev.uid)} 쓰러짐`;
     case 'seal':
@@ -124,6 +136,11 @@ export function battleScreen(app: App): HTMLElement {
       el.style.transform = `translate(${box.left.toFixed(1)}px, ${box.top.toFixed(1)}px)`;
       el.style.width = `${box.width.toFixed(1)}px`;
       el.style.height = `${box.height.toFixed(1)}px`;
+      // 가운데에서 좌우로 half만큼 퍼지는 예고·정보판이 화면 밖으로 나가지 않게 민다
+      const half = window.innerWidth < 760 ? 62 : 120;
+      const cx = box.left + box.width / 2;
+      const nudge = Math.min(0, window.innerWidth - 6 - (cx + half)) + Math.max(0, 6 - (cx - half));
+      el.style.setProperty('--nudge', `${Math.round(nudge)}px`);
     }
   });
   const syncAuras = () => {
@@ -131,6 +148,8 @@ export function battleScreen(app: App): HTMLElement {
       const st = stackOf(a);
       stage.setAura(a.uid, isAlive(a) && st ? statusStacks(a, st.id) : 0, elColor(unitById(a.defId).element), st?.max ?? 6);
     }
+    // 2단계에 들어간 적은 붉은 기운을 두른다
+    for (const e of battle.enemies) stage.setAura(e.uid, isAlive(e) && e.enraged ? 6 : 0, '#e0685a', 6);
   };
 
   // ── 계획 ────────────────────────────────────────────────
@@ -214,7 +233,7 @@ export function battleScreen(app: App): HTMLElement {
 
   // ── 발밑 정보판 ──────────────────────────────────────────
   const threatCount = (a: Ally) =>
-    battle.enemies.filter((e) => isAlive(e) && e.intent && ((e.intent.kind === 'attack' && e.intent.targetId === a.uid) || e.intent.kind === 'attackAll')).length;
+    battle.enemies.filter((e) => isAlive(e) && e.intent && (((e.intent.kind === 'attack' || e.intent.kind === 'drain') && e.intent.targetId === a.uid) || e.intent.kind === 'attackAll' || (e.intent.kind === 'steal' && !!e.intent.power))).length;
 
   const stackPips = (a: Ally) => {
     const st = stackOf(a);
@@ -412,11 +431,28 @@ export function battleScreen(app: App): HTMLElement {
           h('div', {}, h('dt', {}, '방어'), h('dd', {}, enemy.def)),
         ),
         h('section', {}, h('h4', {}, '다음 행동'), isAlive(enemy) ? intentView(enemy.intent, enemy, battle.allies) : h('p', {}, '쓰러짐')),
+        isAlive(enemy) ? patternList(enemy) : null,
         h('section', {}, h('h4', {}, '상태'), statusList(enemy.statuses)),
         def.traits?.length ? h('section', {}, h('h4', {}, '특성'), def.traits.map((t) => h('p', {}, TRAIT_DESC[t]))) : null,
       );
     }
     return null;
+  };
+
+  /** 적 행동 패턴: 지금 단계의 순서와(다음 행동 표시) 남은 2단계 예고 */
+  const patternList = (e: Enemy) => {
+    const def = enemyById(e.defId);
+    const pattern = currentPattern(e);
+    const now = e.patternIndex % pattern.length;
+    return h(
+      'section',
+      { class: 'bx-pattern' },
+      h('h4', {}, e.enraged && def.phase2 ? `행동 패턴 · 2단계 「${def.phase2.name}」` : '행동 패턴 · 순서대로 되풀이'),
+      h('ol', {}, pattern.map((m, i) => h('li', { class: i === now ? 'now' : '' }, h('b', {}, m.name), h('span', {}, moveText(m))))),
+      def.phase2 && !e.enraged
+        ? h('p', { class: 'bx-phase-note' }, `체력 ${Math.round(def.phase2.at * 100)}% 이하가 되면 2단계 「${def.phase2.name}」: 공격 +${def.phase2.atk}, ${def.phase2.pattern.map((m) => m.name).join(' → ')}`)
+        : null,
+    );
   };
 
   // ── 카드 패(아래): 술사마다 이번 라운드 손패 2장 ─────────────
@@ -1024,10 +1060,10 @@ export function battleScreen(app: App): HTMLElement {
           break;
         }
         case 'heal': {
-          const unit = allyOf(ev.targetUid);
+          const unit = allyOf(ev.targetUid) ?? enemyOf(ev.targetUid);
           const el = actorEls.get(ev.targetUid);
           if (unit && el) updateHpBar(el, ev.hpAfter, unit.maxHp, unit.shield);
-          stage.fx?.heal(chest(ev.targetUid), feet(ev.targetUid), '#8fe0a5');
+          stage.fx?.heal(chest(ev.targetUid), feet(ev.targetUid), ev.targetUid.startsWith('e') ? '#e0685a' : '#8fe0a5');
           sound.heal();
           floatText(ev.targetUid, `+${ev.amount}`, 'heal');
           await wait(130);
@@ -1073,6 +1109,38 @@ export function battleScreen(app: App): HTMLElement {
           floatText(ev.targetUid, '강화 해제', 'debuff');
           await wait(110);
           break;
+        case 'resist':
+          floatText(ev.targetUid, '버팀 — 기절 안 됨', 'buff');
+          await wait(260);
+          break;
+        case 'shatter':
+          stage.fx?.debuff(chest(ev.targetUid), '#e0685a');
+          sound.hit('blocked');
+          floatText(ev.targetUid, '보호막 파괴', 'debuff');
+          refreshFoot(ev.targetUid);
+          await wait(260);
+          break;
+        case 'steal': {
+          floatText(ev.enemyUid, ev.amount ? `성진 −${ev.amount}` : '성진 없음', 'debuff');
+          stage.fx?.gather(chest(ev.enemyUid), '#f2c14e', 18, 0.4);
+          sound.debuff();
+          const dust = root.querySelector('.d5-dust b');
+          if (dust) dust.textContent = String(battle.stardust);
+          await wait(420);
+          break;
+        }
+        case 'phase': {
+          const def = enemyById(enemyOf(ev.enemyUid)!.defId);
+          stage.lightning();
+          stage.shake(0.5);
+          stage.setAura(ev.enemyUid, 6, '#e0685a', 6);
+          sound.seal();
+          showCallout(h('div', { class: 'banner phase-banner rage-banner' }, h('small', {}, 'PHASE 2'), h('b', {}, `${def.name} — ${ev.name}`), h('span', {}, '패턴이 바뀌고 공격이 오릅니다')), 'enemy');
+          await wait(1100);
+          clearCallout();
+          refreshFoot(ev.enemyUid);
+          break;
+        }
         case 'stardust':
           if (ev.amount > 0) sound.stardust();
           break;
@@ -1101,7 +1169,7 @@ export function battleScreen(app: App): HTMLElement {
             break;
           }
           stage.focus(chest(ev.enemyUid), 0.35);
-          showEnemyPlate(ev.enemyUid, { attack: `공격${ev.intent.kind === 'attack' && ev.intent.targetId ? ` → ${unitLabel(battle, ev.intent.targetId)}` : ''}`, attackAll: '전체 공격', defend: '방어 태세', buff: '힘을 모은다', seal: '성식 — 성속 봉인', charge: '큰 공격 준비' }[ev.intent.kind]);
+          showEnemyPlate(ev.enemyUid, `「${ev.intent.name}」 ${moveText(ev.intent)}${ev.intent.targetId ? ` → ${unitLabel(battle, ev.intent.targetId)}` : ''}`);
           stage.fx?.gather(chest(ev.enemyUid), '#ff5a4a', 16, 0.36);
           await wait(320);
           stage.anim(ev.enemyUid, 'act');

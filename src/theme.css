@@ -1858,3 +1858,241 @@ button.spell-line.equip:disabled {
 .modal header {
   border-color: var(--frame) !important;
 }
+
+/* ── 적 예고: 이름 + 수치 + 저주 꼬리표 ── */
+.intent {
+  display: grid !important;
+  justify-items: start;
+  gap: 1px;
+  padding: 4px 10px 5px !important;
+  border-radius: 12px !important;
+  white-space: nowrap;
+}
+
+.intent-name {
+  font-family: var(--font-serif);
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--ink);
+}
+
+.intent-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.intent b {
+  font-size: 16px;
+}
+
+.intent-attack b {
+  color: var(--danger);
+}
+
+.intent-defend b {
+  color: var(--shield);
+}
+
+.intent-buff b {
+  color: var(--gold);
+}
+
+.intent-seal b {
+  color: var(--violet);
+}
+
+.intent-charge b {
+  color: #b5561b;
+}
+
+.intent-curse b {
+  color: #6a3fb8;
+}
+
+.intent-steal b {
+  color: var(--gold);
+}
+
+.intent-charge {
+  border-color: #e0a26a !important;
+}
+
+.intent-target {
+  color: var(--muted);
+}
+
+.intent-riders {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.intent-riders i {
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  font-style: normal;
+  color: #8a2a22;
+  background: #f6dad3;
+  border-radius: 999px;
+}
+
+/* 상세: 행동 패턴 */
+.bx-pattern ol {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+  counter-reset: mv;
+}
+
+.bx-pattern li {
+  counter-increment: mv;
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  column-gap: 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+
+.bx-pattern li::before {
+  content: counter(mv);
+  grid-row: span 2;
+  align-self: center;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  background: var(--raised);
+  border-radius: 50%;
+}
+
+.bx-pattern li b {
+  font-family: var(--font-serif);
+  font-size: 14px;
+}
+
+.bx-pattern li span {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.bx-pattern li.now {
+  background: #fff1c4;
+  box-shadow: inset 4px 0 0 var(--danger);
+}
+
+.bx-pattern li.now::before {
+  content: '▶';
+  color: var(--hi-ink);
+  background: var(--danger);
+}
+
+.bx-phase-note {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: #8a2a22;
+  background: #f6dad3;
+  border-radius: 10px;
+}
+
+.rage-banner {
+  border-color: var(--danger) !important;
+}
+
+.rage-banner b {
+  color: var(--danger) !important;
+}
+
+/* 지도: 이번 층에 나올 수 있는 적 */
+.floor-foes {
+  display: grid;
+  gap: 6px;
+  margin: 4px 0 12px;
+}
+
+.floor-foes small {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.floor-foes div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.foe-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 10px 2px 4px;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--panel-2);
+  border-radius: 999px;
+}
+
+.foe-chip i {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  font-style: normal;
+  color: #fff4ef;
+  background: var(--danger);
+  border-radius: 50%;
+}
+
+/* 보스는 키가 커서 머리 위 예고가 화면 밖으로 나간다: 발밑 정보판 바로 위에 띄운다 */
+.bx .enemy.boss .actor-top {
+  bottom: auto;
+  top: 100%;
+  translate: -50% calc(-100% - 6px);
+  z-index: 3;
+}
+
+/* 화면 가장자리의 적: 예고와 정보판을 화면 안으로 밀어 넣는다(--nudge는 전투 화면이 매 프레임 계산) */
+.bx .actor-top,
+.bx .bx-foot {
+  margin-left: var(--nudge, 0px);
+}
+
+@media (max-width: 760px) {
+  .hud .btn-hud,
+  .btn-hud {
+    height: 30px;
+    min-height: 30px;
+    min-width: 30px;
+    padding: 0 7px;
+    font-size: 12px;
+    border-width: 1.5px;
+  }
+
+  .hud-right {
+    gap: 3px !important;
+  }
+
+  .plaque-sub {
+    font-size: 10px;
+  }
+
+  .plaque b {
+    font-size: 16px;
+  }
+}
+
+.intent-riders i.self {
+  color: var(--shield);
+  background: #dce9f5;
+}

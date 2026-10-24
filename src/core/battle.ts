@@ -15,6 +15,7 @@ import type {
   Effect,
   Element,
   Enemy,
+  EnemyMove,
   Intent,
   Keyword,
   PlannedCast,
@@ -77,20 +78,22 @@ function defFactor(def: number): number {
   return 100 / (100 + def * 5);
 }
 
-export function createBattle(allies: Ally[], enemyIds: string[], mods: BattleMods, seed: number): BattleState {
+export function createBattle(allies: Ally[], enemyIds: string[], mods: BattleMods, seed: number, scale: { hp: number; atk: number } = { hp: 1, atk: 1 }): BattleState {
   const rng = new Rng(seed);
   const enemies: Enemy[] = enemyIds.map((id, i) => {
     const def = enemyById(id);
+    const hp = Math.round(def.maxHp * scale.hp);
     return {
       uid: `e${i}`,
       defId: id,
-      hp: def.maxHp,
-      maxHp: def.maxHp,
-      atk: def.atk,
+      hp,
+      maxHp: hp,
+      atk: Math.round(def.atk * scale.atk),
       def: def.def,
       shield: 0,
       statuses: [],
-      patternIndex: rng.int(def.pattern.length),
+      // 단계가 있는 강적은 패턴 처음부터, 잡몹은 아무 칸에서나 시작한다
+      patternIndex: def.phase2 ? 0 : rng.int(def.pattern.length),
       intent: null,
     };
   });
@@ -138,21 +141,50 @@ export function drawHands(state: BattleState): void {
   });
 }
 
+/** 지금 단계의 행동 패턴 */
+export function currentPattern(e: Enemy): EnemyMove[] {
+  const def = enemyById(e.defId);
+  return e.enraged && def.phase2 ? def.phase2.pattern : def.pattern;
+}
+
+const SINGLE_TARGET: EnemyMove['kind'][] = ['attack', 'drain'];
+
+/** 행동 하나를 예고로 만든다: 노릴 술사와 봉인할 성속을 미리 정한다 */
+function makeIntent(state: BattleState, move: EnemyMove, rng: Rng | null): Intent {
+  const intent: Intent = { ...move };
+  const living = state.allies.filter(isAlive);
+  if (SINGLE_TARGET.includes(move.kind) && living.length) {
+    if (move.aim === 'lowest' || !rng) intent.targetId = [...living].sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0].uid;
+    else if (move.aim === 'shielded') intent.targetId = [...living].sort((a, b) => b.shield - a.shield || b.def - a.def)[0].uid;
+    else intent.targetId = rng.pick(living).uid;
+  }
+  if (move.kind === 'seal') intent.element = rng ? rng.pick(ELEMENT_ORDER) : ELEMENT_ORDER[state.round % ELEMENT_ORDER.length];
+  return intent;
+}
+
 export function rollIntents(state: BattleState): void {
   withRng(state, (rng) => {
-    const livingAllies = state.allies.filter(isAlive);
     for (const e of state.enemies) {
       if (!isAlive(e)) {
         e.intent = null;
         continue;
       }
-      const pattern = enemyById(e.defId).pattern;
-      const intent: Intent = { ...pattern[e.patternIndex % pattern.length] };
-      if (intent.kind === 'attack' && livingAllies.length > 0) intent.targetId = rng.pick(livingAllies).uid;
-      if (intent.kind === 'seal') intent.element = rng.pick(ELEMENT_ORDER);
-      e.intent = intent;
+      const pattern = currentPattern(e);
+      e.intent = makeIntent(state, pattern[e.patternIndex % pattern.length], rng);
     }
   });
+}
+
+/** 체력이 문턱 아래로 떨어진 강적은 2단계로: 공격이 오르고 새 패턴의 첫 행동을 곧바로 예고한다 */
+function checkPhase(state: BattleState, e: Enemy, events: BattleEvent[]): void {
+  const p2 = enemyById(e.defId).phase2;
+  if (!p2 || e.enraged || !isAlive(e) || e.hp > e.maxHp * p2.at) return;
+  e.enraged = true;
+  e.atk += p2.atk;
+  e.patternIndex = 0;
+  e.statuses = e.statuses.filter((s) => s.id !== 'stun');
+  e.intent = makeIntent(state, p2.pattern[0], null);
+  events.push({ type: 'phase', enemyUid: e.uid, name: p2.name });
 }
 
 export function getFocus(state: BattleState): Enemy | null {
@@ -265,7 +297,7 @@ function dealDamage(state: BattleState, target: Unit, amount: number, source: Da
     if ('intent' in target) target.intent = null;
     events.push({ type: 'death', uid: target.uid });
     if (state.focusUid === target.uid) state.focusUid = state.enemies.find(isAlive)?.uid ?? null;
-  }
+  } else if ('intent' in target) checkPhase(state, target, events);
   return hpLoss + absorbed;
 }
 
@@ -384,10 +416,18 @@ function burstKeyword(state: BattleState, t: Enemy, kw: Keyword, mult: number, e
   const dmg = Math.round((kw === 'tremor' ? v : v * st.turns) * mult);
   dealDamage(state, t, Math.max(1, dmg), 'burst', events);
   if (kw === 'burn' || kw === 'erosion') feedHunger(state, events);
-  if (kw === 'tremor' && v >= TREMOR_STUN && isAlive(t)) {
-    addStatus(t, 'stun', 1);
-    events.push({ type: 'status', targetUid: t.uid, status: 'stun', turns: 1 });
+  if (kw === 'tremor' && v >= TREMOR_STUN && isAlive(t)) stunEnemy(t, events);
+}
+
+/** 기절: 막 기절에서 깨어난 적(버팀)은 기절하지 않는다 */
+function stunEnemy(t: Enemy, events: BattleEvent[]): void {
+  if (!isAlive(t)) return;
+  if (hasStatus(t, 'steady')) {
+    events.push({ type: 'resist', targetUid: t.uid });
+    return;
   }
+  addStatus(t, 'stun', 1);
+  events.push({ type: 'status', targetUid: t.uid, status: 'stun', turns: 1 });
 }
 
 /** 적중 효과 하나를 맞은 대상 t를 기준으로 적용한다 */
@@ -526,6 +566,10 @@ function applyEffects(state: BattleState, effects: Effect[], ctx: CastContext, r
       case 'enemyStatus': {
         const targets = eff.target === 'focus' ? [getFocus(state)].filter((x): x is Enemy => !!x) : state.enemies.filter(isAlive);
         for (const t of targets) {
+          if (eff.status === 'stun') {
+            stunEnemy(t, events);
+            continue;
+          }
           addStatus(t, eff.status, eff.turns, eff.value);
           events.push({ type: 'status', targetUid: t.uid, status: eff.status, turns: eff.turns });
         }
@@ -689,17 +733,49 @@ function runPlayerPhase(state: BattleState, plan: PlannedCast[], rng: Rng, event
 }
 
 export function enemyHitAmount(enemy: Enemy, power: number, target: Ally): number {
-  const raw = ((power * effectiveAtk(enemy)) / 10) * defFactor(target.def);
+  let raw = ((power * effectiveAtk(enemy)) / 10) * defFactor(target.def);
+  if (hasStatus(target, 'expose')) raw *= EXPOSE_FACTOR;
   return Math.max(1, Math.round(raw));
 }
 
-function hitAlly(state: BattleState, enemy: Enemy, ally: Ally, power: number, events: BattleEvent[]): void {
-  dealDamage(state, ally, enemyHitAmount(enemy, power, ally), 'enemy', events);
+function hitAlly(state: BattleState, enemy: Enemy, ally: Ally, power: number, events: BattleEvent[]): number {
+  const dealt = dealDamage(state, ally, enemyHitAmount(enemy, power, ally), 'enemy', events);
   // 아스트라의 패시브: 맞을 때마다 불굴 +1, 반격은 불굴 1당 +2
   if (ally.defId === 'astra') gainStack(ally, 'fortitude', 1, events);
   const counter = ally.statuses.find((s) => s.id === 'counter');
   const bonus = ally.defId === 'astra' ? statusStacks(ally, 'fortitude') * 2 : 0;
   if (counter?.value && isAlive(ally) && isAlive(enemy)) dealDamage(state, enemy, counter.value + bonus, 'counter', events);
+  return dealt;
+}
+
+/** 적의 저주: 맞은 술사에게 화상·약화·노출을 남긴다 */
+function curseAlly(ally: Ally, move: EnemyMove, events: BattleEvent[]): void {
+  if (!isAlive(ally)) return;
+  if (move.burn) {
+    addStatus(ally, 'burn', move.burn[1], move.burn[0]);
+    events.push({ type: 'status', targetUid: ally.uid, status: 'burn', turns: move.burn[1] });
+  }
+  for (const id of ['weaken', 'expose'] as const) {
+    const turns = move[id];
+    if (!turns) continue;
+    addStatus(ally, id, turns);
+    events.push({ type: 'status', targetUid: ally.uid, status: id, turns });
+  }
+}
+
+/** 한 명을 hits번 때린다(보호막 파괴·흡혈·저주 포함). 준 피해를 돌려준다. */
+function strike(state: BattleState, e: Enemy, target: Ally, move: EnemyMove, events: BattleEvent[]): number {
+  if (move.shatter && target.shield > 0) {
+    target.shield = 0;
+    events.push({ type: 'shatter', targetUid: target.uid });
+  }
+  let dealt = 0;
+  for (let i = 0; i < (move.hits ?? 1); i++) {
+    if (!isAlive(e) || !isAlive(target)) break;
+    dealt += hitAlly(state, e, target, move.power ?? 0, events);
+  }
+  curseAlly(target, move, events);
+  return dealt;
 }
 
 function runEnemyPhase(state: BattleState, rng: Rng, events: BattleEvent[]): void {
@@ -710,6 +786,9 @@ function runEnemyPhase(state: BattleState, rng: Rng, events: BattleEvent[]): voi
     const intent = e.intent;
     e.patternIndex++;
     if (hasStatus(e, 'stun')) {
+      // 깨어난 뒤 다음 라운드까지(강적은 두 라운드) 다시 기절하지 않는다
+      e.statuses = e.statuses.filter((s) => s.id !== 'stun');
+      addStatus(e, 'steady', enemyById(e.defId).phase2 ? 3 : 2);
       events.push({ type: 'enemyStunned', enemyUid: e.uid });
       continue;
     }
@@ -726,23 +805,59 @@ function runEnemyPhase(state: BattleState, rng: Rng, events: BattleEvent[]): voi
       }
     }
     const living = state.allies.filter(isAlive);
+    const taunter = living.find((a) => hasStatus(a, 'taunt'));
+    const single = () => taunter ?? living.find((a) => a.uid === intent.targetId) ?? (living.length ? rng.pick(living) : undefined);
     switch (intent.kind) {
       case 'attack': {
-        const taunter = living.find((a) => hasStatus(a, 'taunt'));
-        let target = taunter ?? living.find((a) => a.uid === intent.targetId);
-        if (!target && living.length) target = rng.pick(living);
-        if (target) hitAlly(state, e, target, intent.power, events);
+        const target = single();
+        if (target) strike(state, e, target, intent, events);
+        break;
+      }
+      case 'drain': {
+        const target = single();
+        if (!target) break;
+        const dealt = strike(state, e, target, intent, events);
+        const amount = Math.min(e.maxHp - e.hp, Math.round(dealt * (intent.lifesteal ?? 0.5)));
+        if (amount > 0 && isAlive(e)) {
+          e.hp += amount;
+          events.push({ type: 'heal', targetUid: e.uid, amount, hpAfter: e.hp });
+        }
         break;
       }
       case 'attackAll':
         for (const a of living) {
           if (!isAlive(e)) break;
-          hitAlly(state, e, a, intent.power, events);
+          strike(state, e, a, intent, events);
         }
         break;
+      case 'curse':
+        for (const a of living) curseAlly(a, intent, events);
+        break;
+      case 'steal': {
+        const amount = Math.min(state.stardust, intent.steal ?? 1);
+        state.stardust -= amount;
+        events.push({ type: 'steal', enemyUid: e.uid, amount });
+        if (amount) events.push({ type: 'stardust', amount: -amount });
+        if (intent.power) for (const a of living) strike(state, e, a, intent, events);
+        break;
+      }
       case 'defend':
-        e.shield += intent.shield;
-        events.push({ type: 'shield', targetUid: e.uid, amount: intent.shield, shieldAfter: e.shield });
+        e.shield += intent.shield ?? 0;
+        events.push({ type: 'shield', targetUid: e.uid, amount: intent.shield ?? 0, shieldAfter: e.shield });
+        break;
+      case 'guard':
+        for (const o of state.enemies.filter(isAlive)) {
+          o.shield += intent.shield ?? 0;
+          events.push({ type: 'shield', targetUid: o.uid, amount: intent.shield ?? 0, shieldAfter: o.shield });
+        }
+        break;
+      case 'mend':
+        for (const o of state.enemies.filter(isAlive)) {
+          const amount = Math.min(o.maxHp - o.hp, intent.heal ?? 0);
+          if (amount <= 0) continue;
+          o.hp += amount;
+          events.push({ type: 'heal', targetUid: o.uid, amount, hpAfter: o.hp });
+        }
         break;
       case 'buff':
         addStatus(e, 'atkUp', 99, intent.atk);
@@ -757,11 +872,27 @@ function runEnemyPhase(state: BattleState, rng: Rng, events: BattleEvent[]): voi
       case 'charge':
         break;
     }
+    // 공격 행동에 붙은 뒷효과: 때린 뒤 자신에게 보호막·공격 강화
+    if (isAlive(e) && intent.kind !== 'defend' && intent.kind !== 'guard' && intent.kind !== 'buff') {
+      if (intent.shield) {
+        e.shield += intent.shield;
+        events.push({ type: 'shield', targetUid: e.uid, amount: intent.shield, shieldAfter: e.shield });
+      }
+      if (intent.atk) {
+        addStatus(e, 'atkUp', 99, intent.atk);
+        events.push({ type: 'status', targetUid: e.uid, status: 'atkUp', turns: 99 });
+      }
+    }
     checkOutcome(state);
   }
 }
 
 function endRound(state: BattleState, events: BattleEvent[]): void {
+  // 적이 남긴 저주 화상은 술사도 태운다
+  for (const a of state.allies) {
+    const burn = keyword(a, 'burn');
+    if (burn && isAlive(a)) dealDamage(state, a, burn.value ?? 0, 'burn', events);
+  }
   for (const e of state.enemies) {
     const doom = e.statuses.find((s) => s.id === 'doom');
     if (doom && isAlive(e)) dealDamage(state, e, doom.value ?? 0, 'doom', events);

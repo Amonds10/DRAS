@@ -89,7 +89,7 @@ export const REACTIONS: ReactionDef[] = [
     from: 'luna',
     to: 'nebula',
     desc: '아군 전원을 회복시킨다.',
-    effects: [{ kind: 'heal', power: 8, target: 'allAllies' }],
+    effects: [{ kind: 'heal', power: 6, target: 'allAllies' }],
   },
 ];
 
@@ -105,6 +105,7 @@ export function reactionById(id: string): ReactionDef {
 
 export const STATUS_META: Record<string, { name: string; glyph: string; debuff: boolean; desc: string; keyword?: boolean }> = {
   stun: { name: '기절', glyph: '✕', debuff: true, desc: '이번 턴에 행동하지 못한다' },
+  steady: { name: '버팀', glyph: '⛉', debuff: false, desc: '기절에서 막 깨어나 잠시 기절하지 않는다' },
   weaken: { name: '약화', glyph: '↓', debuff: true, desc: '주는 피해가 줄어든다' },
   expose: { name: '노출', glyph: '◎', debuff: true, desc: '받는 피해가 늘어난다' },
   atkUp: { name: '공격 상승', glyph: '↑', debuff: false, desc: '주는 피해가 늘어난다' },

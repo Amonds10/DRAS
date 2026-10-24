@@ -643,7 +643,7 @@ export class Stage {
     const plane = new THREE.PlaneGeometry(1, 1);
     const add = (spec: ActorSpec, x: number, z: number) => {
       const isAlly = spec.side === 'ally';
-      const keeper = spec.defId === 'fallen_keeper';
+      const keeper = spec.defId === 'fallen_keeper' || spec.defId === 'shard_golem';
       const height = isAlly ? 2.75 : spec.boss ? 4.6 : keeper ? 3.4 : 2.3;
       const width = isAlly ? height * (120 / 300) : height;
       const order = 10 + Math.round((z + 5) * 10) * 10;

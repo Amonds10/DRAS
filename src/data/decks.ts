@@ -35,8 +35,8 @@ export const DECKS: DeckPreset[] = [
     loadout: {
       vela: ['gatling_comet', 'tail_volley', 'steady_aim', 'final_star', 'meteor_snipe'],
       nox: ['void_touch', 'rot_seed', 'abyss_feast', 'siphon', 'event_horizon'],
-      nebia: ['nebula_mist', 'dust_brand', 'dust_storm', 'interstellar_echo', 'amplify'],
-      lune: ['crescent_edge', 'moon_halo_mark', 'moon_veil', 'moon_brand', 'tidal_song'],
+      nebia: ['nebula_mist', 'dust_brand', 'primal_light', 'interstellar_echo', 'amplify'],
+      lune: ['crescent_edge', 'moon_halo_mark', 'moon_veil', 'fullmoon_ward', 'tidal_song'],
     },
   },
   {

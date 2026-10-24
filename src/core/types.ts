@@ -19,7 +19,7 @@ export type Role = 'striker' | 'guardian' | 'support' | 'hexer';
  * 술사마다 고유 중첩(태양핵·조준·만조·허기·불굴)이 있고, 공명파동은 다음 시전을 강화한다.
  */
 export type StatusId =
-  | 'stun' | 'weaken' | 'expose' | 'atkUp' | 'seal' | 'doom' | 'taunt' | 'counter'
+  | 'stun' | 'steady' | 'weaken' | 'expose' | 'atkUp' | 'seal' | 'doom' | 'taunt' | 'counter'
   // 적 각인
   | 'burn' | 'rupture' | 'erosion' | 'tremor' | 'moonshade'
   // 술사 고유 중첩
@@ -251,13 +251,40 @@ export interface ReactionDef {
   effects: Effect[];
 }
 
-export type Intent =
-  | { kind: 'attack'; power: number; targetId?: string }
-  | { kind: 'attackAll'; power: number }
-  | { kind: 'defend'; shield: number }
-  | { kind: 'buff'; atk: number }
-  | { kind: 'seal'; element?: Element }
-  | { kind: 'charge' };
+export type MoveKind = 'attack' | 'attackAll' | 'drain' | 'curse' | 'steal' | 'defend' | 'guard' | 'mend' | 'buff' | 'seal' | 'charge';
+
+/**
+ * 적의 행동 한 칸. 패턴은 이 행동들을 순서대로 되풀이하고, 화면은 다음 행동을 미리 보여 준다.
+ * attack·drain은 한 명, attackAll은 전원을 hits번 때린다. 적중 뒤에는 저주(화상·약화·노출)가 붙을 수 있다.
+ */
+export interface EnemyMove {
+  name: string;
+  kind: MoveKind;
+  /** 타격 위력(1타당) */
+  power?: number;
+  hits?: number;
+  /** attack·drain의 노림: 무작위(기본), 체력 비율이 가장 낮은 술사, 보호막이 가장 두꺼운 술사 */
+  aim?: 'random' | 'lowest' | 'shielded';
+  /** 때리기 전에 대상의 보호막을 부순다 */
+  shatter?: boolean;
+  /** drain: 준 피해의 이 비율만큼 회복 */
+  lifesteal?: number;
+  /** 맞은 술사(curse는 전원)에게 남는 화상 [위력, 횟수] */
+  burn?: [number, number];
+  /** 맞은 술사(curse는 전원)를 이 턴 수만큼 약화·노출 */
+  weaken?: number;
+  expose?: number;
+  /** steal: 남은 성진을 이만큼 빼앗는다 */
+  steal?: number;
+  /** defend는 자신, guard는 적 전원에게 보호막. 공격 행동에 붙으면 때린 뒤 자신에게 보호막 */
+  shield?: number;
+  /** mend: 적 전원 회복 */
+  heal?: number;
+  /** buff: 공격 증가(전투 내내). 공격 행동에 붙으면 때린 뒤 자신이 강해진다 */
+  atk?: number;
+}
+
+export type Intent = EnemyMove & { targetId?: string; element?: Element };
 
 export type EnemyTrait = 'starShield';
 
@@ -268,7 +295,9 @@ export interface EnemyDef {
   maxHp: number;
   atk: number;
   def: number;
-  pattern: Intent[];
+  pattern: EnemyMove[];
+  /** 체력이 at(비율) 이하로 떨어지면 패턴이 바뀌고 공격이 atk만큼 오른다 */
+  phase2?: { at: number; name: string; atk: number; pattern: EnemyMove[] };
   traits?: EnemyTrait[];
 }
 
@@ -295,6 +324,8 @@ export interface Enemy {
   shield: number;
   statuses: Status[];
   patternIndex: number;
+  /** 2단계(분노)에 들어갔는지 */
+  enraged?: boolean;
   intent: Intent | null;
 }
 
@@ -352,6 +383,12 @@ export type BattleEvent =
   | { type: 'release'; element: Element; stacks: number }
   | { type: 'skip'; allyUid: string; reason: 'cost' | 'dead' | 'stun' }
   | { type: 'enemyAct'; enemyUid: string; intent: Intent }
+  /** 적이 2단계에 들어가 패턴이 바뀌었다 */
+  | { type: 'phase'; enemyUid: string; name: string }
+  | { type: 'shatter'; targetUid: string }
+  /** 버팀 중이라 기절하지 않았다 */
+  | { type: 'resist'; targetUid: string }
+  | { type: 'steal'; enemyUid: string; amount: number }
   | { type: 'seal'; element: Element }
   | { type: 'enemyStunned'; enemyUid: string }
   | { type: 'death'; uid: string }

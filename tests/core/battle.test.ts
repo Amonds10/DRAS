@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { bestPlan } from '../../src/core/autoplan';
-import { DEFAULT_MODS, HAND_SIZE, createBattle, executeRound, getFocus, statusStacks, validatePlan } from '../../src/core/battle';
+import { DEFAULT_MODS, HAND_SIZE, createBattle, currentPattern, executeRound, getFocus, rollIntents, statusStacks, validatePlan } from '../../src/core/battle';
 import { newRun } from '../../src/core/run';
-import type { BattleEvent, BattleMods, BattleState } from '../../src/core/types';
+import type { BattleEvent, BattleMods, BattleState, EnemyMove } from '../../src/core/types';
+import { ENEMY_LIST, enemyById } from '../../src/data/enemies';
 import { SPELLS } from '../../src/data/spells';
 import { UNIT_LIST, unitById } from '../../src/data/units';
 
@@ -185,5 +186,78 @@ describe('skill text', () => {
     const used = UNIT_LIST.flatMap((u) => u.pool);
     expect(new Set(used).size).toBe(used.length);
     expect(used.sort()).toEqual(Object.keys(SPELLS).sort());
+  });
+});
+
+describe('enemy patterns', () => {
+  const force = (b: BattleState, i: number, move: EnemyMove, targetId?: string) => {
+    b.enemies[i].intent = { ...move, targetId };
+  };
+
+  it('every enemy move has a name and the pattern cycles in order', () => {
+    for (const def of ENEMY_LIST) for (const m of [...def.pattern, ...(def.phase2?.pattern ?? [])]) expect(m.name, def.id).toBeTruthy();
+    const b = battle(['fallen_keeper'], 3);
+    const names: string[] = [];
+    for (let r = 0; r < 4; r++) {
+      names.push(b.enemies[0].intent!.name);
+      executeRound(b, []);
+    }
+    expect(names).toEqual(enemyById('fallen_keeper').pattern.map((m) => m.name));
+  });
+
+  it('multi-hit attacks hit once per hit and shatter breaks shields first', () => {
+    const b = battle(['shard_golem'], 1);
+    b.allies[0].shield = 30;
+    force(b, 0, { name: 't', kind: 'attack', power: 5, hits: 3, shatter: true }, 'a0');
+    const events = executeRound(b, []);
+    expect(events.some((e) => e.type === 'shatter' && e.targetUid === 'a0')).toBe(true);
+    expect(events.filter((e) => e.type === 'damage' && e.source === 'enemy' && e.targetUid === 'a0')).toHaveLength(3);
+  });
+
+  it('drain heals the enemy and lowest-aim picks the most hurt caster', () => {
+    const b = battle(['star_leech'], 2);
+    b.allies[2].hp = 10;
+    b.enemies[0].hp = 40;
+    b.enemies[0].patternIndex = 0;
+    rollIntents(b);
+    expect(b.enemies[0].intent?.targetId).toBe('a2');
+    b.allies[2].hp = 60;
+    const events = executeRound(b, []);
+    expect(events.some((e) => e.type === 'heal' && e.targetUid === 'e0' && e.amount > 0)).toBe(true);
+  });
+
+  it('steal takes leftover stardust before the next round refills', () => {
+    const b = battle(['star_leech'], 3, { startStardust: 5 });
+    force(b, 0, { name: 't', kind: 'steal', steal: 2 });
+    const events = executeRound(b, []);
+    expect(events.some((e) => e.type === 'steal' && e.amount === 2)).toBe(true);
+    expect(b.stardust).toBe(5 - 2 + DEFAULT_MODS.stardustPerTurn);
+  });
+
+  it('curse burn hurts casters at round end', () => {
+    const b = battle(['dusk_moth'], 4);
+    force(b, 0, { name: 't', kind: 'curse', burn: [4, 2] });
+    const events = executeRound(b, []);
+    expect(events.filter((e) => e.type === 'damage' && e.source === 'burn' && e.targetUid.startsWith('a'))).toHaveLength(4);
+  });
+
+  it('bosses enter phase two below half health with a new pattern', () => {
+    const b = battle(['fallen_keeper'], 5);
+    b.enemies[0].hp = Math.floor(b.enemies[0].maxHp * 0.5) + 2;
+    fullHands(b);
+    const events = executeRound(b, [{ allyUid: 'a3', spellId: 'meteor_snipe' }]);
+    expect(events.some((e) => e.type === 'phase')).toBe(true);
+    expect(b.enemies[0].enraged).toBe(true);
+    expect(currentPattern(b.enemies[0])).toBe(enemyById('fallen_keeper').phase2!.pattern);
+  });
+
+  it('a stunned enemy cannot be stunned again right after waking', () => {
+    const b = fullHands(battle(['stray_shard'], 2));
+    executeRound(b, [{ allyUid: 'a0', spellId: 'dawn_thrust' }, { allyUid: 'a1', spellId: 'crescent_edge' }]);
+    fullHands(b);
+    b.stardust = 10;
+    const events = executeRound(b, [{ allyUid: 'a0', spellId: 'dawn_thrust' }, { allyUid: 'a1', spellId: 'crescent_edge' }]);
+    expect(events.some((e) => e.type === 'resist')).toBe(true);
+    expect(events.some((e) => e.type === 'enemyStunned')).toBe(false);
   });
 });

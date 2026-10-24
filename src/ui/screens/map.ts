@@ -1,6 +1,7 @@
 import { DEFAULT_MODS } from '../../core/battle';
 import { startBattle } from '../../core/run';
 import { FLOORS, type FloorKind } from '../../data/encounters';
+import { enemyById } from '../../data/enemies';
 import { unitById } from '../../data/units';
 import { characterSvg } from '../../render/characters';
 import type { App } from '../app';
@@ -68,7 +69,13 @@ export function mapScreen(app: App): HTMLElement {
           { class: `next-floor panel kind-${floor.kind}` },
           h('p', { class: 'eyebrow' }, `${run.floor + 1}층 / ${FLOORS.length}층`),
           h('h2', {}, floor.name),
-          h('p', { class: 'muted' }, floor.kind === 'boss' ? '별을 삼키는 자가 기다립니다. 체인 3 미만의 공격은 절반만 통하니, 링크를 길게 이으세요.' : floor.kind === 'elite' ? '강한 적이 기다립니다. 충분히 대비하세요.' : '이곳을 떠도는 적들을 물리치세요.'),
+          h('p', { class: 'muted' }, floor.kind === 'boss' ? '별을 삼키는 자가 기다립니다. 체인 3 미만의 공격은 절반만 통하고, 체력이 절반 아래로 떨어지면 더 굶주린 패턴으로 바뀝니다.' : floor.kind === 'elite' ? '타락한 별지기가 기다립니다. 체력이 절반 아래로 떨어지면 공격이 오르고 패턴이 바뀝니다.' : '이곳을 떠도는 적들을 물리치세요. 적을 누르면 행동 패턴을 볼 수 있습니다.'),
+          h(
+            'div',
+            { class: 'floor-foes' },
+            h('small', {}, `나올 수 있는 적 · 공격 ×${floor.scale.atk}`),
+            h('div', {}, [...new Set(floor.pools.flat())].map((id) => h('span', { class: 'foe-chip' }, h('i', {}, enemyById(id).glyph), enemyById(id).name))),
+          ),
           button('전투 시작', () => {
             startBattle(run);
             app.save();

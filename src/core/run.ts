@@ -6,7 +6,7 @@ import { Rng } from './rng';
 import { TEAM_SIZE } from './team';
 import type { Ally, BattleMods, BattleState } from './types';
 
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 export const REVIVE_RATIO = 0.25;
 export const POST_BATTLE_HEAL = 0.1;
 
@@ -68,7 +68,7 @@ export function startBattle(run: RunState): BattleState {
   if (run.phase !== 'map') throw new Error('지도에서만 전투를 시작할 수 있습니다.');
   const floor = FLOORS[run.floor];
   const { enemies, seed } = withRng(run, (rng) => ({ enemies: rng.pick(floor.pools), seed: rng.int(2 ** 31) }));
-  run.battle = createBattle(run.team, enemies, run.mods, seed);
+  run.battle = createBattle(run.team, enemies, run.mods, seed, floor.scale);
   run.phase = 'battle';
   return run.battle;
 }

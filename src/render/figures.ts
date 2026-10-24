@@ -29,6 +29,31 @@ export function enemyFigure(id: string): string {
       case 'eclipse_eye':
         return `${rays(16, 42, () => 58)}<path ${INK} d="M24 80 Q80 28 136 80 Q80 132 24 80Z"/><path ${RIM} d="M24 80 Q80 28 136 80 Q80 132 24 80Z"/>
           <circle cx="76" cy="80" r="18" fill="none" stroke="#e0685a" stroke-width="2"/>${eye(76, 80, 7)}`;
+      case 'dusk_moth': {
+        const wing = 'M80 78 C 60 40, 18 30, 20 62 C 22 88, 52 96, 80 84Z';
+        const low = 'M80 86 C 62 96, 34 118, 46 132 C 58 142, 76 112, 80 92Z';
+        const mirror = (d: string) => `<g transform="translate(160 0) scale(-1 1)">${d}</g>`;
+        const wings = `<path ${INK} d="${wing}"/><path ${INK} d="${low}"/><path ${RIM} d="${wing}"/><path ${RIM} d="${low}" opacity=".6"/>`;
+        return `${wings}${mirror(wings)}<ellipse ${INK} cx="80" cy="86" rx="8" ry="26"/>
+          <circle cx="42" cy="62" r="7" fill="none" stroke="#e0685a" stroke-width="1.4"/><circle cx="118" cy="62" r="7" fill="none" stroke="#e0685a" stroke-width="1.4"/>
+          <path d="M76 62 C 70 46, 64 40, 58 38 M84 62 C 90 46, 96 40, 102 38" fill="none" stroke="#e0685a" stroke-width="1.4"/>${eye(76, 70, 2.2)}${eye(84, 70, 2.2)}`;
+      }
+      case 'star_leech': {
+        const d = 'M138 96 C 140 70, 116 58, 96 66 C 78 72, 66 62, 48 62 C 26 62, 14 80, 20 98 C 26 116, 52 120, 70 112 C 90 104, 102 120, 120 116 C 132 112, 138 106, 138 96Z';
+        const mouth = Array.from({ length: 7 }, (_, i) => {
+          const a = Math.PI * 0.5 + (i / 7) * Math.PI * 2;
+          return `<path fill="#d8d0c0" d="M${30 + Math.cos(a) * 12} ${88 + Math.sin(a) * 12} L${30 + Math.cos(a + 0.25) * 5} ${88 + Math.sin(a + 0.25) * 5} L${30 + Math.cos(a + 0.5) * 12} ${88 + Math.sin(a + 0.5) * 12}Z"/>`;
+        }).join('');
+        return `<path ${INK} d="${d}"/><path ${RIM} d="${d}"/><circle cx="30" cy="88" r="13" fill="#000" stroke="#e0685a" stroke-width="1.6"/>${mouth}
+          <path d="M60 70 C 80 78, 100 70, 124 82" fill="none" stroke="#e0685a" stroke-width="1" opacity=".5" stroke-dasharray="3 5"/>${eye(54, 74, 2.6)}`;
+      }
+      case 'shard_golem': {
+        const torso = 'M48 52 L112 52 L122 98 L100 122 L60 122 L38 98Z';
+        return `<path ${INK} d="M28 58 L46 54 L40 104 L22 98Z"/><path ${INK} d="M132 58 L114 54 L120 104 L138 98Z"/>
+          <path ${INK} d="${torso}"/><path ${RIM} d="${torso}"/><path ${INK} d="M64 22 L96 22 L102 48 L58 48Z"/><path ${RIM} d="M64 22 L96 22 L102 48 L58 48Z"/>
+          <path ${INK} d="M58 122 L74 122 L70 152 L52 152Z"/><path ${INK} d="M86 122 L102 122 L108 152 L90 152Z"/>
+          <path d="M80 60 L92 80 L80 100 L68 80Z" fill="none" stroke="#e0685a" stroke-width="2"/>${eye(80, 80, 4)}${eye(72, 34, 2)}${eye(88, 34, 2)}`;
+      }
       case 'fallen_keeper': {
         const d = 'M80 26 C 96 26, 100 46, 92 58 L116 150 L44 150 L68 58 C 60 46, 64 26, 80 26Z';
         return `<path ${INK} d="${d}"/><path ${RIM} d="${d}"/><path d="M60 20 A 22 10 0 0 1 104 22" fill="none" stroke="#c9a55e" stroke-width="2" stroke-dasharray="10 6"/>
