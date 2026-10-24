@@ -679,11 +679,6 @@ export function battleScreen(app: App): HTMLElement {
     el.append(n);
     setTimeout(() => n.remove(), 900);
   };
-  const speedLines = (color: string) => {
-    const el = h('div', { class: 'speedlines', style: { '--el': color } });
-    scene.append(el);
-    setTimeout(() => el.remove(), 650);
-  };
   let hitTotal = { n: 0, dmg: 0 };
   const bumpHits = (amount: number, color: string) => {
     hitTotal = { n: hitTotal.n + 1, dmg: hitTotal.dmg + amount };
@@ -785,7 +780,6 @@ export function battleScreen(app: App): HTMLElement {
     if (target) stage.punch(chest(target), 1.1);
     stage.slowMo(0.35, 0.5);
     await wait(un ? 1050 : 700);
-    speedLines(color);
     el.classList.add('out');
     setTimeout(() => el.remove(), 400);
   }
@@ -991,7 +985,6 @@ export function battleScreen(app: App): HTMLElement {
           stage.flashScreen(0.3);
           stage.shake(0.35);
           stage.punch(c, 1);
-          speedLines('#ffd27a');
           showCallout(h('div', { class: 'banner complete-banner' }, h('small', {}, 'CONSTELLATION COMPLETE'), h('b', {}, '성좌 완성')), 'complete');
           await wait(1400);
           clearCallout();
@@ -1022,7 +1015,6 @@ export function battleScreen(app: App): HTMLElement {
             if (finale) {
               stage.toon.finale(p, c.color, crit ? 1.5 : 1.1);
               stage.slowMo(0.35, 0.3);
-              if (c.hits >= 3 || crit) speedLines(c.color);
             }
           }
           if (fx) {
@@ -1045,7 +1037,6 @@ export function battleScreen(app: App): HTMLElement {
           }
           if (crit && stage.fx) {
             stage.impactFrame(lastColor);
-            speedLines(lastColor);
             stage.fx.impact(p, lastColor, 2);
             stage.shake(0.55);
             stage.flashScreen(0.18);

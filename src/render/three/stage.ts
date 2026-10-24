@@ -261,10 +261,8 @@ const GRADE_SHADER = {
       c *= mix(0.45, 1.0, v);
       c += (hash(vUv * uRes + uTime) - 0.5) * 0.014;
       c += uFlash * vec3(1.0, 0.95, 0.85) * 0.25;
-      if (uImpact > 0.5) {
-        float li = dot(c, vec3(0.299, 0.587, 0.114));
-        c = li > 0.32 ? uImpactCol : vec3(0.02, 0.015, 0.03);
-      }
+      // 큰 타격: 만화식 흑백 반전 대신, 노출이 잠깐 튀며 빛 색이 번지는 순간
+      c += (c * 0.45 + uImpactCol * 0.05) * uImpact;
       gl_FragColor = vec4(c, 1.0);
     }`,
 };
@@ -1131,7 +1129,7 @@ export class Stage {
       au.emit -= 1;
       const p = new THREE.Vector3(x + (Math.random() - 0.5) * a.width * 1.4, Math.random() * a.height * 0.5, a.base.z + 0.1);
       this.fx.sprite({
-        tex: Math.random() < 0.5 ? 'flame_02' : 'star_05',
+        tex: Math.random() < 0.5 ? 'flame_02' : 'soft',
         color: col,
         pos: p,
         size: 0.18 + k * 0.2,
@@ -1188,7 +1186,7 @@ export class Stage {
     if (this.composer && this.container && this.canvas.isConnected) {
       this.grade!.uniforms.uTime.value = this.t;
       this.grade!.uniforms.uFlash.value = this.screenFlash;
-      this.grade!.uniforms.uImpact.value = this.impact > 0.5 ? 1 : 0;
+      this.grade!.uniforms.uImpact.value = this.impact;
       if (this.safe) {
         this.renderer!.setRenderTarget(null);
         this.renderer!.render(this.scene, this.camera);

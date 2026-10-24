@@ -147,14 +147,14 @@ export class FxSystem {
   flare(pos: THREE.Vector3, color: THREE.ColorRepresentation, size = 1.6, life = 0.35): void {
     this.sprite({ tex: 'soft', color, pos, size: size * 0.4, to: size, life: life * 1.2, curve: 'flash', alpha: 0.7 });
     this.sprite({ tex: 'light_01', color, pos, size: size * 0.6, to: size * 1.8, life: life * 1.3, curve: 'flash', alpha: 0.6, rot: Math.random() * 3 });
-    this.sprite({ tex: 'star_04', color: 0xffffff, pos, size: size * 0.4, to: size * 1.1, life: life * 0.9, curve: 'flash', rot: Math.random() * 3, spin: 1.5, alpha: 0.7 });
+    this.sprite({ tex: 'soft', color: 0xffffff, pos, size: size * 0.25, to: size * 0.7, life: life * 0.8, curve: 'flash', alpha: 0.45 });
   }
 
   /** 타격 뒤에 천천히 떠도는 별가루(여운) */
   linger(pos: THREE.Vector3, color: THREE.ColorRepresentation, n = 10, spread = 1.2): void {
     for (let i = 0; i < n; i++) {
       const p = pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * spread, (Math.random() - 0.5) * spread, 0.2));
-      this.sprite({ tex: i % 2 ? 'star_05' : 'star_01', color: i % 3 ? color : 0xffffff, pos: p, size: 0.12 + Math.random() * 0.14, to: 0.02, life: 1 + Math.random() * 0.8, delay: 0.05 + Math.random() * 0.25, vel: new THREE.Vector3((Math.random() - 0.5) * 0.6, 0.4 + Math.random() * 0.6, 0), drag: 0.8, curve: 'pulse' });
+      this.sprite({ tex: 'soft', color: i % 3 ? color : 0xffffff, pos: p, size: 0.12 + Math.random() * 0.14, to: 0.02, life: 1 + Math.random() * 0.8, delay: 0.05 + Math.random() * 0.25, vel: new THREE.Vector3((Math.random() - 0.5) * 0.6, 0.4 + Math.random() * 0.6, 0), drag: 0.8, curve: 'pulse' });
     }
   }
 
@@ -162,7 +162,7 @@ export class FxSystem {
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2;
       const v = new THREE.Vector3(Math.cos(a), Math.sin(a) * 0.8 + 0.3, (Math.random() - 0.5) * 0.6).multiplyScalar(speed * (0.4 + Math.random() * 0.8));
-      this.sprite({ tex: 'star_05', color, pos, size, to: size * 0.3, life: 0.35 + Math.random() * 0.3, vel: v, gravity: -9, drag: 2.5 });
+      this.sprite({ tex: 'soft', color, pos, size, to: size * 0.3, life: 0.35 + Math.random() * 0.3, vel: v, gravity: -9, drag: 2.5 });
     }
   }
 
@@ -180,8 +180,8 @@ export class FxSystem {
     this.sprite({ tex: scorch, color, pos, size: 0.8 * scale, to: 2.8 * scale, life: 0.42, rot: Math.random() * 6, curve: 'flash' });
     // 충격파 고리 두 겹과 방사광
     this.sprite({ tex: 'circle_03', color, pos, size: 0.5 * scale, to: 3.8 * scale, life: 0.45, alpha: 0.9 });
-    this.sprite({ tex: 'circle_01', color: 0xffffff, pos, size: 0.3 * scale, to: 1.6 * scale, life: 0.25, alpha: 0.35 });
-    this.sprite({ tex: 'light_03', color, pos, size: 1 * scale, to: 3.4 * scale, life: 0.5, spin: 2, curve: 'flash', alpha: 0.8 });
+    this.sprite({ tex: 'circle_01', color: 0xffffff, pos, size: 0.3 * scale, to: 1.6 * scale, life: 0.25, alpha: 0.2 });
+    this.sprite({ tex: 'light_03', color, pos, size: 1 * scale, to: 3 * scale, life: 0.45, spin: 2, curve: 'flash', alpha: 0.5 });
     this.flare(pos, color, 1.8 * scale, 0.3);
     this.sparks(pos, color, 14, 6.5 * scale, 0.22);
     // 빛줄기처럼 길게 튀는 불티
@@ -203,11 +203,11 @@ export class FxSystem {
     this.sprite({ tex: 'trace_02', color, pos: from, size: [0.5, 2.4], life: travel, delay, rot, curve: 'pulse', path });
     this.sprite({ tex: 'soft', color, pos: from, size: 1.2, life: travel, delay, curve: 'pulse', path, alpha: 0.75 });
     this.sprite({ tex: 'soft', color: 0xffffff, pos: from, size: 0.4, life: travel, delay, curve: 'pulse', path, alpha: 0.6 });
-    this.sprite({ tex: 'star_04', color, pos: from, size: 1.1, life: travel, delay, spin: 9, curve: 'pulse', path });
+    this.sprite({ tex: 'soft', color, pos: from, size: 1.1, life: travel, delay, spin: 9, curve: 'pulse', path });
     // 꼬리: 지나간 자리에 오래 남는 별가루
     for (let i = 0; i < 14; i++) {
       const k0 = i / 14;
-      this.sprite({ tex: i % 3 ? 'star_05' : 'spark_05', color: i % 4 ? color : 0xffffff, pos: curve.getPoint(ease(k0)), size: 0.32, to: 0.04, life: 0.5 + Math.random() * 0.3, delay: delay + travel * k0, vel: new THREE.Vector3((Math.random() - 0.5) * 0.8, (Math.random() - 0.3) * 0.8, 0), drag: 1.2 });
+      this.sprite({ tex: i % 3 ? 'soft' : 'spark_05', color: i % 4 ? color : 0xffffff, pos: curve.getPoint(ease(k0)), size: 0.32, to: 0.04, life: 0.5 + Math.random() * 0.3, delay: delay + travel * k0, vel: new THREE.Vector3((Math.random() - 0.5) * 0.8, (Math.random() - 0.3) * 0.8, 0), drag: 1.2 });
     }
     this.flare(from, color, 1.2, 0.25);
   }
@@ -225,7 +225,7 @@ export class FxSystem {
     // 광선을 따라 흩어지는 빛 알갱이
     for (let i = 0; i < 12; i++) {
       const p = from.clone().lerp(far, Math.random());
-      this.sprite({ tex: 'star_05', color: i % 2 ? color : 0xffffff, pos: p, size: 0.3, to: 0.03, life: 0.6, delay: Math.random() * 0.15, vel: new THREE.Vector3((Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5, 0), drag: 1.5 });
+      this.sprite({ tex: 'soft', color: i % 2 ? color : 0xffffff, pos: p, size: 0.3, to: 0.03, life: 0.6, delay: Math.random() * 0.15, vel: new THREE.Vector3((Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5, 0), drag: 1.5 });
     }
     this.flare(from, color, 1.8, 0.35);
     this.light(to, color, 3.5, 0.5);
@@ -274,15 +274,17 @@ export class FxSystem {
     this.ring(feet, color, 0.5, 2.4, 0.7, 'circle_02');
     for (let i = 0; i < 10; i++) {
       const p = feet.clone().add(new THREE.Vector3((Math.random() - 0.5) * 1.2, Math.random() * 0.6, (Math.random() - 0.5) * 0.4));
-      this.sprite({ tex: i % 2 ? 'star_01' : 'star_02', color, pos: p, size: 0.3, to: 0.12, life: 0.9, delay: i * 0.04, vel: new THREE.Vector3(0, 2.2, 0), curve: 'pulse' });
+      this.sprite({ tex: 'soft', color, pos: p, size: 0.3, to: 0.12, life: 0.9, delay: i * 0.04, vel: new THREE.Vector3(0, 2.2, 0), curve: 'pulse' });
     }
     this.sprite({ tex: 'soft', color, pos, size: 1.2, to: 2, life: 0.5, alpha: 0.6 });
     this.light(feet, color, 1.6, 0.6);
   }
 
   shield(pos: THREE.Vector3, color: THREE.ColorRepresentation, size = 2.6): void {
-    this.sprite({ tex: 'circle_03', color, pos, size: size * 0.8, to: size, life: 0.7, curve: 'pulse', alpha: 0.9 });
-    this.sprite({ tex: 'light_02', color, pos, size: size * 0.7, to: size * 1.05, life: 0.6, curve: 'flash', alpha: 0.6 });
+    // 굵은 고리 대신 옅은 빛의 막: 은은한 구체 + 가는 테가 잠깐 스친다
+    this.sprite({ tex: 'soft', color, pos, size: size * 0.7, to: size * 1.1, life: 0.6, curve: 'flash', alpha: 0.32 });
+    this.sprite({ tex: 'circle_05', color, pos, size: size * 0.85, to: size * 1.05, life: 0.45, curve: 'flash', alpha: 0.3 });
+    this.sprite({ tex: 'light_02', color, pos, size: size * 0.6, to: size * 0.95, life: 0.5, curve: 'flash', alpha: 0.35 });
   }
 
   buff(pos: THREE.Vector3, feet: THREE.Vector3, color: THREE.ColorRepresentation): void {
@@ -290,15 +292,16 @@ export class FxSystem {
     this.magicCircle(feet, color, 2.2, 0.8, 'magic_01');
     for (let i = 0; i < 8; i++) {
       const p = feet.clone().add(new THREE.Vector3((Math.random() - 0.5) * 1, Math.random() * 0.4, 0));
-      this.sprite({ tex: 'star_05', color, pos: p, size: 0.22, to: 0.08, life: 0.7, delay: i * 0.05, vel: new THREE.Vector3(0, 3, 0) });
+      this.sprite({ tex: 'soft', color, pos: p, size: 0.22, to: 0.08, life: 0.7, delay: i * 0.05, vel: new THREE.Vector3(0, 3, 0) });
     }
     this.flare(pos, color, 1.2, 0.3);
   }
 
   debuff(pos: THREE.Vector3, color: THREE.ColorRepresentation): void {
-    this.sprite({ tex: 'twirl_02', color, pos, size: 1.2, to: 2.4, life: 0.7, spin: 6, curve: 'pulse' });
-    this.sprite({ tex: 'twirl_03', color, pos, size: 2.2, to: 1.0, life: 0.7, spin: -5, curve: 'pulse', rot: 1 });
-    this.sprite({ tex: 'smoke_04', color: 0x1a1420, pos, size: 1.2, to: 2.6, life: 0.9, additive: false, alpha: 0.6 });
+    // 소용돌이 무늬 대신, 대상에 스며드는 색 연기와 어두운 그늘
+    this.sprite({ tex: 'smoke_07', color, pos, size: 1.4, to: 2.4, life: 0.8, spin: 1.2, curve: 'pulse', alpha: 0.45 });
+    this.sprite({ tex: 'smoke_04', color, pos, size: 2.2, to: 1.2, life: 0.7, spin: -0.8, curve: 'pulse', alpha: 0.3, rot: 1 });
+    this.sprite({ tex: 'smoke_04', color: 0x1a1420, pos, size: 1.2, to: 2.6, life: 0.9, additive: false, alpha: 0.5 });
   }
 
   // ───────── 시전 준비와 성속 고유 연출 ─────────
@@ -309,7 +312,7 @@ export class FxSystem {
       const a = Math.random() * Math.PI * 2;
       const r = 1.2 + Math.random() * 1.2;
       const from = at.clone().add(new THREE.Vector3(Math.cos(a) * r, Math.sin(a) * r * 0.8, 0.2));
-      this.sprite({ tex: i % 3 ? 'star_05' : 'spark_05', color, pos: from, size: 0.22, to: 0.08, life: time, delay: Math.random() * 0.08, curve: 'pulse', path: (k) => from.clone().lerp(at, ease(k)) });
+      this.sprite({ tex: i % 3 ? 'soft' : 'spark_05', color, pos: from, size: 0.22, to: 0.08, life: time, delay: Math.random() * 0.08, curve: 'pulse', path: (k) => from.clone().lerp(at, ease(k)) });
     }
     this.sprite({ tex: 'soft', color, pos: at, size: 0.2, to: 1.0, life: time + 0.1, curve: 'grow', alpha: 0.55 });
   }
@@ -326,7 +329,7 @@ export class FxSystem {
     this.ring(feet, color, size * 0.4, size * 0.9, 1.0, 'magic_02');
     for (let i = 0; i < 10; i++) {
       const p = feet.clone().add(new THREE.Vector3((Math.random() - 0.5) * 1.6, Math.random() * 0.4, 0.1));
-      this.sprite({ tex: 'star_05', color, pos: p, size: 0.22, to: 0.04, life: 0.9, delay: i * 0.04, vel: new THREE.Vector3(0, 2.4 + Math.random() * 1.5, 0), drag: 0.6 });
+      this.sprite({ tex: 'soft', color, pos: p, size: 0.22, to: 0.04, life: 0.9, delay: i * 0.04, vel: new THREE.Vector3(0, 2.4 + Math.random() * 1.5, 0), drag: 0.6 });
     }
     this.light(feet, color, 2, 0.9);
   }
@@ -359,7 +362,7 @@ export class FxSystem {
       case 'luna':
         this.sprite({ tex: 'slash_02', color, pos, size: 1.2 * scale, to: 3.2 * scale, life: 0.4, rot: 0.6, curve: 'flash', spin: -4 });
         this.sprite({ tex: 'slash_03', color: 0xeaf2ff, pos, size: 0.8 * scale, to: 2.4 * scale, life: 0.3, rot: 2.4, curve: 'flash' });
-        for (let i = 0; i < 6; i++) this.sprite({ tex: 'star_01', color, pos, size: 0.3, to: 0.05, life: 0.8, vel: new THREE.Vector3((Math.random() - 0.5) * 3, Math.random() * 2, 0), drag: 1.5 });
+        for (let i = 0; i < 6; i++) this.sprite({ tex: 'soft', color, pos, size: 0.3, to: 0.05, life: 0.8, vel: new THREE.Vector3((Math.random() - 0.5) * 3, Math.random() * 2, 0), drag: 1.5 });
         break;
       case 'nebula':
         this.sprite({ tex: 'twirl_01', color, pos, size: 0.8 * scale, to: 3 * scale, life: 0.7, spin: 7, curve: 'pulse' });
@@ -381,7 +384,7 @@ export class FxSystem {
         // 별: 대상 둘레에 별 다섯 개를 찍고 선으로 잇는다
         const pts = Array.from({ length: 5 }, (_, i) => pos.clone().add(new THREE.Vector3(Math.cos(i * 1.256) * 1.1 * scale, Math.sin(i * 1.256) * 0.9 * scale, 0.1)));
         pts.forEach((p0, i) => {
-          this.sprite({ tex: 'star_04', color, pos: p0, size: 0.2, to: 0.7, life: 0.6, delay: i * 0.04, curve: 'flash' });
+          this.sprite({ tex: 'soft', color, pos: p0, size: 0.2, to: 0.7, life: 0.6, delay: i * 0.04, curve: 'flash' });
           const p1 = pts[(i + 2) % 5];
           this.sprite({ tex: 'trace_06', color, pos: p0.clone().lerp(p1, 0.5), size: [0.05, p0.distanceTo(p1)], to: [0.12, p0.distanceTo(p1)], life: 0.5, delay: 0.1 + i * 0.04, rot: this.screenAngle(p0, p1) - Math.PI / 2, curve: 'flash' });
         });
@@ -420,7 +423,7 @@ export class FxSystem {
   motes(from: THREE.Vector3, color: THREE.ColorRepresentation): void {
     for (let i = 0; i < 12; i++) {
       const v = new THREE.Vector3((Math.random() - 0.2) * 2, 2 + Math.random() * 3, 0);
-      this.sprite({ tex: 'star_05', color, pos: from, size: 0.28, to: 0.05, life: 0.9, delay: i * 0.03, vel: v, drag: 0.6 });
+      this.sprite({ tex: 'soft', color, pos: from, size: 0.28, to: 0.05, life: 0.9, delay: i * 0.03, vel: v, drag: 0.6 });
     }
     this.flare(from, color, 1.4, 0.4);
   }
@@ -436,7 +439,7 @@ export class FxSystem {
   nova(pos: THREE.Vector3, colorA: THREE.ColorRepresentation, colorB: THREE.ColorRepresentation, scale = 1): void {
     this.sprite({ tex: 'circle_01', color: colorA, pos, size: 0.5, to: 7 * scale, life: 0.6 });
     this.sprite({ tex: 'light_03', color: colorB, pos, size: 1, to: 5 * scale, life: 0.7, spin: 1 });
-    this.sprite({ tex: 'star_04', color: 0xffffff, pos, size: 1, to: 3.5 * scale, life: 0.4, curve: 'flash', alpha: 0.7 });
+    this.sprite({ tex: 'soft', color: 0xffffff, pos, size: 0.8, to: 2.4 * scale, life: 0.4, curve: 'flash', alpha: 0.4 });
     this.ring(pos, colorA, 1, 9 * scale, 0.8, 'circle_03');
     this.sparks(pos, colorB, 22, 8, 0.24);
     this.light(pos, colorA, 2.6, 0.8);
@@ -483,7 +486,7 @@ export class FxSystem {
     if (!preview) {
       this.arcs.push({ mesh, mat, age: 0, life: 0.35, fading: false });
       this.lightning(from, to, color);
-      this.sprite({ tex: 'star_04', color, pos: to, size: 0.4, to: 1.4, life: 0.45, curve: 'flash', delay: 0.3 });
+      this.sprite({ tex: 'soft', color, pos: to, size: 0.4, to: 1.4, life: 0.45, curve: 'flash', delay: 0.3 });
     }
     return mesh;
   }

@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 
 /**
- * 셀 셰이딩 효과: 부드러운 빛무리 대신 경계가 또렷한 색면(흰 핵 → 색 → 검은 테두리)으로 그린다.
- * 림버스 컴퍼니·애니메이션 전투처럼 베기 호, 충격파, 별 모양 섬광, 만화식 폭발, 방사 집중선을 만든다.
+ * 빛 효과: 검은 테두리·딱 끊기는 색면(만화풍) 대신, 부드럽게 번지는 빛(가산 혼합)으로 그린다.
+ * 중심은 성속 색을 밝힌 고열 핵, 바깥은 가우스로 흐려지는 빛무리라 블룸과 함께 실제 빛처럼 보인다.
+ * 베기 궤적, 충격파, 렌즈 섬광, 난류 폭발, 불티 줄기, 에너지 광선을 만든다.
  * 모두 카메라를 보는 판(빌보드)이고, 진행도 uT(0→1)에 따라 셰이더가 모양을 바꾼다.
  */
 
@@ -15,121 +16,134 @@ const COMMON = /* glsl */ `
   uniform vec3 uA, uB;
   varying vec2 vUv;
   const vec3 INK = vec3(0.03, 0.02, 0.05);
-  // 핵은 흰색이 아니라 성속 색을 밝힌 색: 화면이 하얗게 날아가지 않고 무엇이 터졌는지 보이게
-  #define HOT mix(uA, vec3(0.95), 0.22)
+  // 고열 핵: 성속 색을 살짝 밝힌 색(하얗게 날아가지 않게)
+  #define HOT mix(uB, vec3(1.0), 0.15)
   float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
   float noise(vec2 p) {
     vec2 i = floor(p), f = fract(p);
     vec2 u = f * f * (3.0 - 2.0 * f);
     return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y);
-  }`;
+  }
+  float fbm(vec2 p) {
+    float v = 0.0, a = 0.5;
+    for (int i = 0; i < 4; i++) { v += a * noise(p); p = p * 2.03 + 7.1; a *= 0.5; }
+    return v;
+  }
+  float gauss(float d, float w) { return exp(-(d * d) / max(1e-5, w * w)); }`;
 
-/** 효과 종류별 조각 셰이더 본문. col과 a를 정한다. */
+/** 효과 종류별 조각 셰이더 본문. col(빛의 색)과 a(세기)를 정한다. 가산 혼합이라 a가 곧 밝기다. */
 const BODIES = {
-  // 베기 호: 앞머리가 휙 지나가고 꼬리가 따라 사라진다. 양끝이 가늘다.
+  // 베기 궤적: 칼끝이 지나간 자리에 남는 빛의 띠. 앞머리가 가장 밝고 뒤로 갈수록 흩어진다.
   slash: /* glsl */ `
     vec2 p = vUv * 2.0 - 1.0;
     float r = length(p);
     float ang = atan(p.y, p.x);
     float sweep = 2.4;
     float s = (ang + sweep * 0.5) / sweep;
-    if (s < 0.0 || s > 1.0) discard;
-    float head = min(1.0, uT * 3.2);
-    float tail = max(0.0, (uT - 0.22) * 1.35);
-    if (s > head || s < tail) discard;
-    float w = 0.16 * sin(3.14159 * s) * (1.0 - uT * 0.5) + 0.004;
+    float head = min(1.0, uT * 3.0);
+    float inArc = step(0.0, s) * step(s, 1.0) * step(s, head);
+    float trail = smoothstep(head - 0.75, head, s);
+    float w = 0.075 * sin(3.14159 * clamp(s, 0.0, 1.0)) + 0.008;
     float d = abs(r - 0.72 - (s - 0.5) * 0.06);
-    float edge = noise(vec2(s * 20.0, uSeed)) * 0.03;
-    if (d > w + 0.018 + edge) discard;
-    vec3 col = d < w * 0.38 ? HOT : d < w * 0.8 ? uB : d < w + edge ? uA : INK;
-    // 지나간 자리부터 잘게 부서지며 사라진다
-    if (noise(vec2(s * 30.0, r * 30.0) + uSeed) < (uT - 0.55) * 2.2) discard;
-    float a = 1.0;`,
-  // 충격파 고리: 빠르게 퍼지며 얇아진다
+    float streak = 0.65 + 0.35 * noise(vec2(s * 46.0 - uT * 18.0, r * 14.0 + uSeed));
+    float core = gauss(d, w * 0.28);
+    float glow = gauss(d, w * 1.9) * streak;
+    float fade = 1.0 - smoothstep(0.45, 1.0, uT);
+    vec3 col = uA * glow * 0.9 + HOT * core * 1.25;
+    float a = inArc * trail * fade;`,
+  // 충격파: 얇고 밝은 테가 퍼지고, 안쪽에 옅은 열기가 남는다
   ring: /* glsl */ `
     vec2 p = vUv * 2.0 - 1.0;
     float r = length(p);
     float e = 1.0 - pow(1.0 - uT, 3.0);
-    float R = e * 0.92;
-    float th = (1.0 - uT) * 0.07 + 0.005;
+    float R = e * 0.88;
+    float th = (1.0 - uT) * 0.05 + 0.012;
     float d = r - R;
-    if (abs(d) > th + 0.015) discard;
-    vec3 col = d < -th * 0.2 ? HOT : abs(d) < th ? uA : INK;
-    float a = 1.0;`,
-  // 별 모양 섬광: 튀어나왔다(과하게) 줄어든다
+    float edge = gauss(d, th);
+    float haze = smoothstep(R, 0.0, r) * 0.18 * (1.0 - uT);
+    float wob = 0.75 + 0.25 * noise(vec2(atan(p.y, p.x) * 5.0, uSeed));
+    vec3 col = mix(uA, HOT, gauss(d, th * 0.35)) * (edge * wob) + uA * haze;
+    float a = pow(1.0 - uT, 1.4) * (1.0 - smoothstep(0.92, 1.0, r));`,
+  // 렌즈 섬광: 부드러운 빛 핵 + 가로로 긴 줄기 + 가는 빛살. 확 켜졌다가 잦아든다.
   star: /* glsl */ `
     vec2 p = vUv * 2.0 - 1.0;
     float r = length(p);
+    float pop = uT < 0.12 ? uT / 0.12 : 1.0 - smoothstep(0.12, 1.0, uT);
+    float core = exp(-r * r * 26.0);
+    float halo = exp(-r * r * 5.5) * 0.45;
+    float streakH = exp(-abs(p.y) * 52.0) * exp(-abs(p.x) * 3.6);
+    float streakV = exp(-abs(p.x) * 70.0) * exp(-abs(p.y) * 4.0) * 0.5;
     float ang = atan(p.y, p.x) + uSeed;
-    float n = 4.0 + floor(mod(uSeed * 7.0, 3.0)) * 2.0;
-    float e = 0.28 + 0.72 * pow(abs(cos(ang * n * 0.5)), 9.0);
-    float sc = uT < 0.18 ? uT / 0.18 * 1.15 : 1.15 * (1.0 - (uT - 0.18) / 0.82);
-    float d = r / max(0.001, e * sc);
-    if (d > 1.0) discard;
-    vec3 col = d < 0.5 ? HOT : d < 0.84 ? uA : INK;
-    float a = 1.0;`,
-  // 만화식 폭발: 울퉁불퉁한 원, 흰 핵 → 밝은 색 → 진한 색 → 먹 테두리, 안쪽부터 구멍이 나며 사라진다
+    float rays = pow(abs(cos(ang * 3.0)), 24.0) * exp(-r * 3.2) * 0.5;
+    vec3 col = HOT * core + uA * (halo + streakH * 0.8 + streakV + rays);
+    float a = pop * (1.0 - smoothstep(0.85, 1.0, r));`,
+  // 난류 폭발: 연기처럼 일렁이는 빛 덩어리. 고열 핵 → 성속 색 → 어두운 가장자리로 식으며 흩어진다.
   blast: /* glsl */ `
     vec2 p = vUv * 2.0 - 1.0;
     float r = length(p);
-    float ang = atan(p.y, p.x);
-    float grow = 1.0 - pow(1.0 - min(1.0, uT * 2.2), 3.0);
-    float bound = grow * 0.9 * (0.82 + 0.18 * noise(vec2(ang * 3.0, uSeed)));
-    if (r > bound) discard;
-    float k = r / max(0.001, bound);
-    float hole = noise(p * 5.0 + uSeed * 3.0);
-    if (hole < (uT - 0.35) * 1.6) discard;
-    float core = 0.5 * (1.0 - uT);
-    vec3 col = k < core ? HOT : k < 0.72 ? uB : k < 0.93 ? uA : INK;
-    float a = 1.0;`,
-  // 방사 집중선: 가운데서 바깥으로 뻗는 가는 선
+    float grow = 1.0 - pow(1.0 - min(1.0, uT * 1.8), 3.0);
+    vec2 q = p * 2.6 + vec2(uSeed, -uSeed);
+    float turb = fbm(q + vec2(0.0, -uT * 2.2));
+    float bound = grow * (0.55 + 0.35 * turb);
+    float dens = smoothstep(bound, bound * 0.25, r);
+    float cool = smoothstep(0.0, 1.0, uT);
+    float heat = dens * (1.0 - cool * 0.85) * (0.6 + 0.6 * turb);
+    vec3 col = mix(uA * 0.6, uB, smoothstep(0.4, 1.0, heat)) * heat;
+    col += uA * exp(-r * r * 9.0) * (1.0 - uT) * 0.6;
+    float a = (1.0 - smoothstep(0.5, 1.0, uT)) * (1.0 - smoothstep(0.85, 1.0, r));`,
+  // 불티 줄기: 가운데서 바깥으로 튀는 가늘고 흐릿한 빛줄기
   burst: /* glsl */ `
     vec2 p = vUv * 2.0 - 1.0;
     float r = length(p);
     float ang = atan(p.y, p.x) / 6.28318 + 0.5;
-    float sector = floor(ang * 28.0);
+    float n = 36.0;
+    float sector = floor(ang * n);
     float rnd = hash(vec2(sector, uSeed));
-    if (rnd < 0.6) discard;
-    float f = fract(ang * 28.0);
-    float wdt = 0.05 + rnd * 0.06;
-    if (abs(f - 0.5) > wdt) discard;
-    float inner = uT * 0.7 + rnd * 0.15;
-    float outer = inner + 0.25 + rnd * 0.25;
-    if (r < inner || r > outer || r > 1.0) discard;
-    vec3 col = abs(f - 0.5) < wdt * 0.45 ? HOT : uA;
-    float a = 1.0 - uT;`,
-  // 광선: 가로로 늘인 판. 흰 핵과 색 띠, 가장자리가 일렁인다
+    float f = fract(ang * n) - 0.5;
+    float lit = step(0.55, rnd);
+    float head = uT * 0.85 + rnd * 0.12;
+    float len = 0.16 + rnd * 0.22;
+    float along = smoothstep(head - len, head, r) * (1.0 - smoothstep(head, head + 0.04, r));
+    float across = gauss(f, 0.06 + rnd * 0.05);
+    vec3 col = mix(uA, HOT, 0.4) * along * across;
+    float a = lit * (1.0 - uT) * (1.0 - smoothstep(0.9, 1.0, r));`,
+  // 에너지 광선: 흐르는 무늬가 있는 빛 기둥. 끝이 가늘어진다.
   beam: /* glsl */ `
     float v = abs(vUv.y - 0.5) * 2.0;
-    float w = (1.0 - uT) * 0.6 + 0.05;
-    w *= 0.85 + 0.15 * noise(vec2(vUv.x * 18.0 - uT * 30.0, uSeed));
-    float tip = smoothstep(0.0, 0.04, vUv.x) * smoothstep(1.0, 0.92, vUv.x);
-    w *= tip;
-    if (v > w + 0.08) discard;
-    vec3 col = v < w * 0.25 ? HOT : v < w ? uA : INK;
-    float a = 1.0;`,
-  // 전투 연출 배경: 장면을 어둡게 덮고 성속 색의 방사 무늬를 깐다
+    float tip = smoothstep(0.0, 0.08, vUv.x) * smoothstep(1.0, 0.85, vUv.x);
+    float w = ((1.0 - uT) * 0.35 + 0.05) * tip;
+    float flow = 0.7 + 0.3 * noise(vec2(vUv.x * 22.0 - uT * 40.0, uSeed));
+    float core = gauss(v, w * 0.25);
+    float glow = gauss(v, w * 1.4) * flow;
+    vec3 col = HOT * core * 1.3 + uA * glow * 0.85;
+    float a = 1.0 - smoothstep(0.55, 1.0, uT);`,
+  // 전투 연출 배경: 장면을 어둡게 덮고 성속 색의 옅은 안개를 깐다(보통 혼합)
   backdrop: /* glsl */ `
     vec2 p = vUv * 2.0 - 1.0;
     p.x *= 1.6;
     float r = length(p);
-    float ang = atan(p.y, p.x);
-    float rays = smoothstep(0.55, 0.95, noise(vec2(ang * 6.0 + uSeed * 0.2, r * 0.6 - uSeed * 0.4)));
-    vec3 col = mix(INK, uA * 0.2, smoothstep(1.5, 0.0, r));
-    col += uA * rays * 0.09 * smoothstep(0.1, 0.9, r);
+    float mist = fbm(p * 1.6 + vec2(uSeed * 0.05, -uSeed * 0.03));
+    vec3 col = mix(INK, uA * 0.16, smoothstep(1.6, 0.0, r));
+    col += uA * mist * 0.07 * smoothstep(0.2, 1.0, r);
     float a = uT;`,
 } as const;
 
 export type ToonKind = keyof typeof BODIES;
+
+/** 효과별 밝기. 폭발은 넓게 퍼지므로 가장 낮게 둔다. */
+const GAIN: Record<ToonKind, number> = { slash: 0.8, ring: 0.5, star: 0.45, blast: 0.24, burst: 0.65, beam: 0.4, backdrop: 1 };
 
 function material(kind: ToonKind): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
     depthTest: false,
+    // 빛 효과는 가산 혼합(겹칠수록 밝아진다). 배경 덮개만 보통 혼합으로 어둡게 깐다.
+    blending: kind === 'backdrop' ? THREE.NormalBlending : THREE.AdditiveBlending,
     uniforms: { uT: { value: 0 }, uSeed: { value: Math.random() * 10 }, uA: { value: new THREE.Color() }, uB: { value: new THREE.Color() } },
     vertexShader: VERT,
-    fragmentShader: `${COMMON}\nvoid main() {\n${BODIES[kind]}\n  gl_FragColor = vec4(col, a);\n}`,
+    // 가산 혼합은 스프라이트 빛무리(fx.ts)와 겹쳐 쌓이므로, 이 층은 모양을 잡는 정도로만 밝게 둔다
+    fragmentShader: `${COMMON}\nvoid main() {\n${BODIES[kind]}\n  gl_FragColor = vec4(col, a * ${kind === 'backdrop' ? '1.0' : GAIN[kind].toFixed(2)});\n}`,
   });
 }
 
@@ -190,28 +204,29 @@ export class ToonFx {
 
   /** 베기: 각도(roll)를 바꿔 가며 쓰면 연속 베기가 된다 */
   slash(pos: THREE.Vector3, color: THREE.ColorRepresentation, size = 3.2, roll = 0, delay = 0): void {
-    this.spawn('slash', { pos, size, color, life: 0.32, roll, delay });
+    this.spawn('slash', { pos, size, color, life: 0.4, roll, delay });
   }
 
-  /** 타격점: 별 섬광 + 충격파 고리 */
+  /** 타격점: 렌즈 섬광 + 충격파 + 튀는 불티 */
   hit(pos: THREE.Vector3, color: THREE.ColorRepresentation, scale = 1, delay = 0): void {
-    this.spawn('star', { pos, size: 2.2 * scale, color, life: 0.22, roll: Math.random() * 3, delay });
-    this.spawn('ring', { pos, size: 3.4 * scale, color, life: 0.34, delay });
+    this.spawn('star', { pos, size: 1.9 * scale, color, life: 0.26, roll: (Math.random() - 0.5) * 0.5, delay });
+    this.spawn('ring', { pos, size: 3 * scale, color, life: 0.42, delay });
+    this.spawn('burst', { pos, size: 2.6 * scale, color, life: 0.34, roll: Math.random() * 3, delay });
   }
 
-  /** 마무리 일격: 만화식 폭발 + 집중선 + 큰 고리 */
+  /** 마무리 일격: 난류 폭발 + 불티 + 큰 충격파 + 섬광 */
   finale(pos: THREE.Vector3, color: THREE.ColorRepresentation, scale = 1): void {
-    this.spawn('blast', { pos, size: 2.7 * scale, color, life: 0.6 });
-    this.spawn('burst', { pos, size: 5 * scale, color, life: 0.36, roll: Math.random() * 3 });
-    this.spawn('ring', { pos, size: 5 * scale, color, life: 0.45 });
-    this.spawn('star', { pos, size: 3 * scale, color, life: 0.28, roll: Math.random() * 3 });
+    this.spawn('blast', { pos, size: 2.2 * scale, color, life: 0.6 });
+    this.spawn('burst', { pos, size: 5.2 * scale, color, life: 0.5, roll: Math.random() * 3 });
+    this.spawn('ring', { pos, size: 5.4 * scale, color, life: 0.6 });
+    this.spawn('star', { pos, size: 4.2 * scale, color, life: 0.38 });
   }
 
-  /** 날아가는 탄: 별 모양이 대상까지 날아간 뒤 터진다 */
+  /** 날아가는 탄: 빛 덩어리가 꼬리를 끌며 대상까지 날아간다 */
   shot(from: THREE.Vector3, to: THREE.Vector3, color: THREE.ColorRepresentation, travel = 0.14, delay = 0): void {
     const path = (k: number) => from.clone().lerp(to, 1 - Math.pow(1 - k, 2));
     this.spawn('star', { pos: from, size: 1.1, color, life: travel, path, delay });
-    this.beam(from, to, color, 0.2, travel * 1.4, delay);
+    this.beam(from, to, color, 0.18, travel * 1.4, delay);
   }
 
   /** 광선: from에서 to까지 늘인 판 */

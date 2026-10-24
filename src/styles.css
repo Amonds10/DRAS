@@ -4098,38 +4098,6 @@ button.spell-line.equip:disabled {
   }
 }
 
-/* 집중선: 강한 타격 순간 화면 가장자리에서 가운데로 모이는 선 */
-.speedlines {
-  position: absolute;
-  inset: -10%;
-  z-index: 25;
-  pointer-events: none;
-  background: repeating-conic-gradient(from 0deg at 55% 45%, transparent 0deg 3.2deg, color-mix(in srgb, var(--el, #fff) 55%, #fff) 3.2deg 3.6deg, transparent 3.6deg 7deg);
-  mask-image: radial-gradient(ellipse at 55% 45%, transparent 28%, #000 70%);
-  -webkit-mask-image: radial-gradient(ellipse at 55% 45%, transparent 28%, #000 70%);
-  mix-blend-mode: screen;
-  animation: speedlines 0.6s ease-out forwards;
-}
-
-@keyframes speedlines {
-  0% {
-    opacity: 0;
-    transform: scale(1.15) rotate(0deg);
-  }
-  15% {
-    opacity: 0.9;
-  }
-  100% {
-    opacity: 0;
-    transform: scale(1) rotate(4deg);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .speedlines {
-    display: none;
-  }
-}
 
 
 /* ───────── 전투 가독성: 시전 이름표, 행동 순서, 타격 합계 ───────── */
