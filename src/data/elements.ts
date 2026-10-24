@@ -119,6 +119,7 @@ export const STATUS_META: Record<string, { name: string; glyph: string; debuff: 
   erosion: { name: '잠식', glyph: '◐', debuff: true, keyword: true, desc: '적이 움직일 때마다 위력만큼 피해, 횟수 -1' },
   tremor: { name: '진동', glyph: '≋', debuff: true, keyword: true, desc: '쌓아 두었다가 터뜨린다. 위력 8 이상에서 터지면 기절' },
   moonshade: { name: '월영', glyph: '☾', debuff: true, keyword: true, desc: '이 적을 때린 아군이 위력만큼 회복, 횟수 -1' },
+  bleed: { name: '출혈', glyph: '♦', debuff: true, keyword: true, desc: '라운드가 끝날 때 위력만큼 피해. 아군이 체력을 잃을 때마다(자해 포함) 위력 +1' },
   // 술사 고유 중첩
   solarCore: { name: '태양핵', glyph: '☉', debuff: false, desc: '솔레아: 초신성 창이 모두 태워 1당 피해 +60%' },
   aim: { name: '조준', glyph: '⌖', debuff: false, desc: '벨라: 1당 피해 +6%, 종언의 별이 모두 써서 1당 +70%' },
@@ -137,6 +138,7 @@ export const STATUS_COLOR: Partial<Record<StatusId, string>> = {
   erosion: '#b48cff',
   tremor: '#ffd34d',
   moonshade: '#9fb8ff',
+  bleed: '#ff5a6e',
   stun: '#ffffff',
   weaken: '#c9a7d6',
   expose: '#ff6b5a',

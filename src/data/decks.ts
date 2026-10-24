@@ -95,7 +95,7 @@ export const DECKS: DeckPreset[] = [
     id: 'oath',
     name: '네 개의 맹세',
     en: 'OATH OF FOUR',
-    plan: '여명 찌르기 → 초승 칼날(일식) → 쌍월(월몰) → 태양 탄막. 루네와 쌍둥이 오빠 카이렌, 솔레아와 라이벌 리코가 한 줄로 이어 성좌를 완성한다.',
+    plan: '여명 찌르기 → 초승 칼날(일식) → 쌍월(월몰) → 태양 탄막. 반응 둘을 끼워 넣고 리코의 탄막으로 성좌를 완성한다.',
     team: ['solea', 'lune', 'kairen', 'riko'],
     loadout: {
       solea: ['dawn_thrust', 'stellar_core', 'supernova_lance', 'sun_oath', 'solar_cleave'],
@@ -108,13 +108,26 @@ export const DECKS: DeckPreset[] = [
     id: 'duel',
     name: '정오의 결투',
     en: 'HIGH NOON',
-    plan: '유성 저격 → 엄호 사격(유성우) → 월하일섬 → 월광 공명. 두 총잡이가 틈을 열고 카이렌이 단칼에 끝내면, 루네가 오빠의 달빛을 받아 잇는다.',
+    plan: '유성 저격 → 엄호 사격(유성우) → 월하일섬 → 월광 공명. 두 총잡이가 틈을 열고 카이렌이 단칼에 끝내면 루네가 달빛을 받아 잇는다.',
     team: ['vela', 'riko', 'kairen', 'lune'],
     loadout: {
       vela: ['meteor_snipe', 'steady_aim', 'tail_volley', 'final_star', 'piercing_shot'],
       riko: ['covering_fire', 'quick_draw', 'smoke_roll', 'sun_barrage', 'hammer_fan'],
       kairen: ['moonlit_iai', 'moon_blade_dance', 'kairen_draw', 'silver_rend', 'fallen_moon_stance'],
       lune: ['lunar_attune', 'moon_veil', 'tidal_song', 'fullmoon_ward', 'crescent_edge'],
+    },
+  },
+  {
+    id: 'blood',
+    name: '자해 파티',
+    en: 'BLOOD PACT',
+    plan: '발도 → 공허의 손길(월몰) → 태양 탄막 → 초승 칼날(일식). 자해 카드로 제 체력을 깎을 때마다 모든 적의 출혈이 불어나고, 루네가 회복으로 받쳐 만조를 채운다. 녹스가 출혈을 먹어 허기를, 리코가 자해로 과열을 쌓는다.',
+    team: ['kairen', 'nox', 'riko', 'lune'],
+    loadout: {
+      kairen: ['kairen_draw', 'moon_shadow_cut', 'fallen_moon_stance', 'silver_rend', 'moonlit_iai'],
+      nox: ['void_touch', 'siphon', 'retrograde', 'abyss_feast', 'collapse'],
+      riko: ['sun_barrage', 'high_noon', 'ricochet', 'quick_draw', 'smoke_roll'],
+      lune: ['crescent_edge', 'moon_veil', 'tidal_song', 'fullmoon_ward', 'moon_halo_mark'],
     },
   },
 ];

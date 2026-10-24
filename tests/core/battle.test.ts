@@ -261,3 +261,29 @@ describe('enemy patterns', () => {
     expect(events.some((e) => e.type === 'enemyStunned')).toBe(false);
   });
 });
+
+describe('bleed and self-harm', () => {
+  it('self-harm costs HP (never lethal), grows bleed on every enemy and heats Riko up', () => {
+    const b = fullHands(battle(['stray_shard', 'dusk_moth'], 3, {}, ['kairen', 'riko', 'lune', 'astra']));
+    const [kairen, riko] = b.allies;
+    for (const e of b.enemies) e.statuses.push({ id: 'bleed', turns: 3, value: 2 });
+    const hp = riko.hp;
+    const events = executeRound(b, [{ allyUid: riko.uid, spellId: 'high_noon' }, { allyUid: kairen.uid, spellId: 'fallen_moon_stance' }]);
+    const self = events.filter((e) => e.type === 'damage' && e.source === 'self');
+    expect(self).toHaveLength(2);
+    expect(events.some((e) => e.type === 'damage' && e.targetUid === riko.uid && e.source === 'self' && e.hpAfter === hp - 5)).toBe(true);
+    // 자해 둘(+ 적의 공격) 만큼 출혈 위력이 올랐다가, 라운드 끝 출혈 피해가 났다
+    expect(events.some((e) => e.type === 'damage' && e.source === 'bleed' && e.amount >= 4)).toBe(true);
+    expect(statusStacks(riko, 'heat')).toBeGreaterThanOrEqual(2);
+    expect(statusStacks(b.allies[3], 'fortitude')).toBeGreaterThanOrEqual(2);
+  });
+
+  it('self-harm leaves at least 1 HP', () => {
+    const b = fullHands(battle(['stray_shard'], 4, {}, ['kairen', 'riko', 'lune', 'astra']));
+    const kairen = b.allies[0];
+    kairen.hp = 3;
+    const events = executeRound(b, [{ allyUid: kairen.uid, spellId: 'moon_shadow_cut' }]);
+    const self = events.find((e) => e.type === 'damage' && e.source === 'self');
+    expect(self && self.type === 'damage' && self.hpAfter).toBe(1);
+  });
+});

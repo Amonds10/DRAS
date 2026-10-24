@@ -21,12 +21,12 @@ export type Role = 'striker' | 'guardian' | 'support' | 'hexer';
 export type StatusId =
   | 'stun' | 'steady' | 'weaken' | 'expose' | 'atkUp' | 'seal' | 'doom' | 'taunt' | 'counter'
   // 적 각인
-  | 'burn' | 'rupture' | 'erosion' | 'tremor' | 'moonshade'
+  | 'burn' | 'rupture' | 'erosion' | 'tremor' | 'moonshade' | 'bleed'
   // 술사 고유 중첩
   | 'solarCore' | 'aim' | 'tide' | 'hunger' | 'fortitude' | 'wave' | 'edge' | 'heat';
 
 /** 적에게 거는 각인(위력·횟수를 가진다) */
-export type Keyword = 'burn' | 'rupture' | 'erosion' | 'tremor' | 'moonshade';
+export type Keyword = 'burn' | 'rupture' | 'erosion' | 'tremor' | 'moonshade' | 'bleed';
 /** 술사에게 쌓이는 중첩 */
 export type Stack = 'solarCore' | 'aim' | 'tide' | 'hunger' | 'fortitude' | 'wave' | 'edge' | 'heat';
 
@@ -208,7 +208,8 @@ export interface SpellDef {
   start?: Effect[];
   /** [처치 시] 이 주문의 타격으로 적을 쓰러뜨리면(시전당 한 번) */
   kill?: Effect[];
-  /** 한 줄 소개 */
+  /** [자해] 시전하기 전에 시전자가 체력을 이만큼 잃는다(보호막 무시, 1은 남는다) */
+  selfHarm?: number;
   /** 문장형 설명 */
   desc: string;
   tag: SkillTag;
@@ -362,7 +363,7 @@ export interface BattleState {
   stats: { maxChain: number; reactions: number; fullChains: number };
 }
 
-export type DamageSource = 'ally' | 'enemy' | 'burn' | 'chain' | 'doom' | 'counter' | 'erosion' | 'burst';
+export type DamageSource = 'ally' | 'enemy' | 'burn' | 'chain' | 'doom' | 'counter' | 'erosion' | 'burst' | 'bleed' | 'self';
 
 export type BattleEvent =
   | { type: 'cast'; allyUid: string; spellId: string; linked: boolean; chain: number; mult: number; outElement: Element | null; sealed: boolean }

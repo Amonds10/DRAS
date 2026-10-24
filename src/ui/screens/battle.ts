@@ -47,7 +47,7 @@ function eventText(state: BattleState, ev: BattleEvent): string | null {
     case 'fullChain':
       return '성좌 완성!';
     case 'damage': {
-      const tag = { burn: ' [화상]', erosion: ' [잠식]', burst: ' [각인 폭발]', doom: ' [폭격]', counter: ' [반격]', chain: ' [성좌]', ally: '', enemy: '' }[ev.source];
+      const tag = { burn: ' [화상]', erosion: ' [잠식]', bleed: ' [출혈]', self: ' [자해]', burst: ' [각인 폭발]', doom: ' [폭격]', counter: ' [반격]', chain: ' [성좌]', ally: '', enemy: '' }[ev.source];
       return `${unitLabel(state, ev.targetUid)} 피해 ${ev.amount}${ev.absorbed ? ` (보호막 ${ev.absorbed})` : ''}${tag}`;
     }
     case 'heal':
@@ -1887,6 +1887,11 @@ export function battleScreen(app: App): HTMLElement {
               stage.kick(-0.03, 0.4);
               stage.shake(0.18);
             } else if (ev.source === 'burn' || ev.source === 'erosion') fx.burn(p, ev.source === 'burn' ? '#ff8a3a' : '#a891e6');
+            else if (ev.source === 'bleed' || ev.source === 'self') {
+              // 출혈·자해: 붉은 핏방울이 튄다
+              fx.sparks(p, '#e0364a', ev.source === 'self' ? 12 : 8, 5, 0.2);
+              fx.sprite({ tex: 'scorch_02', color: '#c8283c', pos: p, size: 0.5, to: 1.6, life: 0.4, rot: Math.random() * 6, curve: 'flash', alpha: 0.8 });
+            }
             else if (ev.source === 'doom') {
               fx.meteor(feet(ev.targetUid).add(new THREE.Vector3(0, 0.8, 0)), elColor('comet'));
               stage.shake(0.5);
@@ -1914,12 +1919,12 @@ export function battleScreen(app: App): HTMLElement {
             stage.shake(0.55);
             stage.flashScreen(0.18);
           }
-          if (ev.source !== 'enemy' && !enemyPhase) {
+          if (ev.source !== 'enemy' && ev.source !== 'self' && !enemyPhase) {
             bumpHits(ev.amount, lastColor);
             stats.dmg += ev.amount;
           }
-          sound.hit(crit ? 'crit' : ev.amount === 0 && ev.absorbed ? 'blocked' : ev.source === 'ally' ? (['slash', 'blade'].includes(characterMotion(allyOf(lastCaster)?.defId ?? '')) ? 'slash' : 'ally') : ev.source === 'erosion' ? 'burn' : ev.source === 'burst' ? 'doom' : ev.source);
-          floatText(ev.targetUid, ev.amount > 0 ? `${ev.amount}` : `⛨${ev.absorbed}`, ev.source === 'enemy' ? 'dmg-ally' : ev.source === 'burn' ? 'dmg-burn' : ev.source === 'erosion' ? 'dmg-erosion' : ev.source === 'counter' ? 'dmg-counter' : ev.source === 'burst' ? 'dmg-burst' : ev.source === 'doom' ? 'dmg-doom' : crit ? 'dmg-crit' : ev.source === 'chain' ? 'dmg-big' : 'dmg');
+          sound.hit(crit ? 'crit' : ev.amount === 0 && ev.absorbed ? 'blocked' : ev.source === 'ally' ? (['slash', 'blade'].includes(characterMotion(allyOf(lastCaster)?.defId ?? '')) ? 'slash' : 'ally') : ev.source === 'erosion' || ev.source === 'bleed' ? 'burn' : ev.source === 'burst' ? 'doom' : ev.source === 'self' ? 'enemy' : ev.source);
+          floatText(ev.targetUid, ev.amount > 0 ? `${ev.amount}` : `⛨${ev.absorbed}`, ev.source === 'enemy' ? 'dmg-ally' : ev.source === 'burn' ? 'dmg-burn' : ev.source === 'erosion' ? 'dmg-erosion' : ev.source === 'bleed' ? 'dmg-bleed' : ev.source === 'self' ? 'dmg-self' : ev.source === 'counter' ? 'dmg-counter' : ev.source === 'burst' ? 'dmg-burst' : ev.source === 'doom' ? 'dmg-doom' : crit ? 'dmg-crit' : ev.source === 'chain' ? 'dmg-big' : 'dmg');
           await wait(finale ? 480 : crit ? 560 : lastTag === 'multi' ? 190 : 250);
           break;
         }

@@ -34,7 +34,9 @@ const EXPOSE_FACTOR = 1.3;
 const STAR_SHIELD_FACTOR = 0.5;
 const STAR_SHIELD_CHAIN = 3;
 const EXECUTE_THRESHOLD = 0.35;
-export const KEYWORDS: Keyword[] = ['burn', 'rupture', 'erosion', 'tremor', 'moonshade'];
+export const KEYWORDS: Keyword[] = ['burn', 'rupture', 'erosion', 'tremor', 'moonshade', 'bleed'];
+/** 출혈 위력 상한 */
+const BLEED_MAX = 20;
 const DEBUFFS: StatusId[] = ['stun', 'weaken', 'expose', 'doom', ...KEYWORDS];
 /** 각인 위력·횟수 상한 */
 export const KEYWORD_MAX_VALUE = 20;
@@ -285,7 +287,31 @@ function inflict(target: Enemy, kw: Keyword, value: number, turns: number, caste
   events.push({ type: 'status', targetUid: target.uid, status: kw, turns: s?.turns ?? turns, stacks: s?.value ?? v });
 }
 
-/** 녹스의 패시브: 적이 화상·잠식 피해를 받을 때마다 허기 +1 */
+/**
+ * 공통 키워드 출혈: 아군이 체력을 잃을 때마다(적의 공격이든 자해든) 출혈 걸린 모든 적의 출혈 위력이 1 오른다.
+ * 그래서 체력을 깎는 주문(자해)과 회복(루네)을 함께 굴리면 출혈이 계속 불어난다.
+ */
+function bloodSurge(state: BattleState): void {
+  for (const e of state.enemies) {
+    const b = isAlive(e) ? keyword(e, 'bleed') : undefined;
+    if (b) b.value = Math.min(BLEED_MAX, (b.value ?? 0) + 1);
+  }
+}
+
+/** 자해: 시전자가 체력을 잃는다(보호막 무시, 1은 남긴다). 리코는 자해할 때 과열 +2, 아스트라는 아군이 자해할 때마다 불굴 +1. */
+function selfHarm(state: BattleState, ally: Ally, amount: number, events: BattleEvent[]): void {
+  const loss = Math.min(amount, ally.hp - 1);
+  if (loss <= 0) return;
+  ally.hp -= loss;
+  events.push({ type: 'damage', targetUid: ally.uid, amount: loss, absorbed: 0, source: 'self', hpAfter: ally.hp, shieldAfter: ally.shield });
+  bloodSurge(state);
+  if (ally.defId === 'riko') gainStack(ally, 'heat', 2, events);
+  // 아스트라는 동료가 피를 흘릴 때마다 버틸 힘을 얻는다
+  const astra = state.allies.find((a) => a.defId === 'astra' && isAlive(a));
+  if (astra) gainStack(astra, 'fortitude', 1, events);
+}
+
+/** 녹스의 패시브: 적이 화상·잠식·출혈 피해를 받을 때마다 허기 +1 */
 function feedHunger(state: BattleState, events: BattleEvent[]): void {
   const nox = state.allies.find((a) => a.defId === 'nox' && isAlive(a));
   if (nox) gainStack(nox, 'hunger', 1, events);
@@ -298,6 +324,7 @@ function dealDamage(state: BattleState, target: Unit, amount: number, source: Da
   const hpLoss = Math.min(target.hp, amount - absorbed);
   target.hp -= hpLoss;
   events.push({ type: 'damage', targetUid: target.uid, amount: hpLoss, absorbed, source, hpAfter: target.hp, shieldAfter: target.shield });
+  if (hpLoss > 0 && state.allies.includes(target as Ally)) bloodSurge(state);
   if (!isAlive(target)) {
     target.statuses = [];
     target.shield = 0;
@@ -426,7 +453,7 @@ function burstKeyword(state: BattleState, t: Enemy, kw: Keyword, mult: number, e
   t.statuses = t.statuses.filter((x) => x !== st);
   const dmg = Math.round((kw === 'tremor' ? v : v * st.turns) * mult);
   dealDamage(state, t, Math.max(1, dmg), 'burst', events);
-  if (kw === 'burn' || kw === 'erosion') feedHunger(state, events);
+  if (kw === 'burn' || kw === 'erosion' || kw === 'bleed') feedHunger(state, events);
   if (kw === 'tremor' && v >= TREMOR_STUN && isAlive(t)) stunEnemy(t, events);
 }
 
@@ -543,7 +570,7 @@ function applyEffects(state: BattleState, effects: Effect[], ctx: CastContext, r
             targets = living.length ? [rng.pick(living)] : [];
           }
           for (const t of targets) {
-            const had = { burn: !!keyword(t, 'burn'), rupture: !!keyword(t, 'rupture'), moon: keyword(t, 'moonshade'), down: (['stun', 'weaken', 'expose'] as const).some((d) => hasStatus(t, d)) };
+            const had = { burn: !!keyword(t, 'burn'), rupture: !!keyword(t, 'rupture'), moon: keyword(t, 'moonshade'), down: (['stun', 'weaken', 'expose'] as const).some((d) => hasStatus(t, d)) || !!keyword(t, 'bleed') };
             dealt += dealDamage(state, t, allyHitAmount(state, hctx, eff, t, st), 'ally', events);
             if (had.rupture) spendKeyword(t, 'rupture');
             // 집어삼킨 각인은 첫 타에 사라진다
@@ -713,6 +740,7 @@ function runPlayerPhase(state: BattleState, plan: PlannedCast[], rng: Rng, event
     const reaction = step.reactionId ? reactionById(step.reactionId) : null;
     // 카이렌의 패시브: 링크를 이어받아 시전하면 검기 +1
     if (ally.defId === 'kairen' && step.linked) gainStack(ally, 'edge', 1, events);
+    if (spell.selfHarm) selfHarm(state, ally, spell.selfHarm, events);
     // 공명파동: 쌓인 만큼 이번 시전을 강화하고 사라진다
     const wave = statusStacks(ally, 'wave');
     if (wave) ally.statuses = ally.statuses.filter((s) => s.id !== 'wave');
@@ -922,6 +950,11 @@ function endRound(state: BattleState, events: BattleEvent[]): void {
     const burn = keyword(e, 'burn');
     if (burn && isAlive(e)) {
       dealDamage(state, e, burn.value ?? 0, 'burn', events);
+      feedHunger(state, events);
+    }
+    const bleed = keyword(e, 'bleed');
+    if (bleed && isAlive(e)) {
+      dealDamage(state, e, bleed.value ?? 0, 'bleed', events);
       feedHunger(state, events);
     }
   }

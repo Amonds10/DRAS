@@ -2106,6 +2106,7 @@ button.spell-line.equip:disabled {
 .st-erosion { --st: #5b2f9e; --st-bg: #e6dcf6; --st-hi: #b48cff; }
 .st-tremor { --st: #7a5a00; --st-bg: #f8eab8; --st-hi: #ffd34d; }
 .st-moonshade { --st: #2f4f9e; --st-bg: #dbe3f6; --st-hi: #9fb8ff; }
+.st-bleed { --st: #9e1f32; --st-bg: #f6d8dc; --st-hi: #ff5a6e; }
 .st-stun { --st: #fff4dc; --st-bg: #4a2f1a; --st-hi: #ffffff; }
 .st-weaken { --st: #5e4a6b; --st-bg: #e9e0ee; --st-hi: #c9a7d6; }
 .st-expose { --st: #a3271c; --st-bg: #f9d9d3; --st-hi: #ff6b5a; }
@@ -2178,6 +2179,8 @@ button.spell-line.equip:disabled {
 .float.dmg-big { color: #ffd36b; }
 .float.dmg-burn { color: #ff8a4a; font-size: 24px; }
 .float.dmg-erosion { color: #b48cff; font-size: 24px; }
+.float.dmg-bleed { color: #ff5a6e; font-size: 24px; }
+.float.dmg-self { color: #ff3b52; font-size: 20px; }
 .float.dmg-burst { color: #ff7ad1; font-size: 32px; }
 .float.dmg-doom { color: #ff5c8a; font-size: 36px; }
 .float.dmg-counter { color: #8cc8ff; font-size: 26px; }

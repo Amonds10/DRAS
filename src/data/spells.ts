@@ -396,10 +396,10 @@ const list: SpellDef[] = [
   // ── 녹스 · 공허 ──
   {
     id: 'siphon', name: '흡수', cost: 1, input: 'none', output: 'void', tag: 'drain',
-    desc: '두 번 베어 위력 9의 피해를 주고 잠식 1·1을 스며들게 한다. 준 피해의 60%만큼 회복하며, 녹스의 체력이 절반 이하면 세 번째로 베어 4를 더 회복한다. 적을 쓰러뜨리면 허기 2를 얻는다. 체인을 연다.',
+    desc: '두 번 베어 위력 9의 피해를 주고 잠식 1·1과 출혈 1·2를 스며들게 한다. 준 피해의 60%만큼 회복하며, 녹스의 체력이 절반 이하면 세 번째로 베어 4를 더 회복한다. 적을 쓰러뜨리면 허기 2를 얻는다. 체인을 연다.',
     effects: [{ kind: 'damage', power: 0, target: 'focus', lifesteal: 0.6, stages: [
       S(5, [ink('erosion', 1, 1)]),
-      S(4, [got('hunger', 1, has('erosion'))]),
+      S(4, [ink('bleed', 1, 2), got('hunger', 1, has('erosion'))]),
       S(3, [mend(4)], only(hpMe(0.5))),
     ] }],
     kill: [gain('hunger', 2)],
@@ -418,7 +418,7 @@ const list: SpellDef[] = [
   },
   {
     id: 'rot_seed', name: '부식의 씨앗', cost: 1, input: 'nebula', output: 'void', tag: 'dot',
-    desc: '대상의 화상을 1.5배 위력의 잠식으로 바꾸고 잠식 2·2를 더한다. 두 번 베어 위력 4의 피해를 주며, 허기가 4 이상이면 대상의 잠식을 다른 모든 적에게 절반만큼 퍼뜨린다. 솔레아의 화상을 녹스가 이어받는 기술이다.',
+    desc: '대상의 화상을 1.5배 위력의 잠식으로 바꾸고 잠식 2·2를 더한다. 두 번 베어 위력 4의 피해를 주며, 허기가 4 이상이면 대상의 잠식을 다른 모든 적에게 절반만큼 퍼뜨린다. 화상을 깔아 두는 동료가 있을 때 빛난다.',
     effects: [
       { kind: 'convert', from: 'burn', to: 'erosion', mult: 1.5, target: 'focus' },
       inflict('erosion', 2, 2),
@@ -427,10 +427,10 @@ const list: SpellDef[] = [
   },
   {
     id: 'abyss_feast', name: '심연의 만찬', cost: 2, input: 'comet', output: 'void', tag: 'finisher',
-    desc: '허기가 5 이상이면 먼저 아군 전원을 6 회복한다. 대상의 잠식과 균열을 통째로 삼켜 그 (위력×횟수)의 절반을 위력에 더하고, 허기 1당 피해를 10% 높여 세 번 공격한다. 마지막 일격은 방어를 무시한다. 적을 쓰러뜨리면 허기 4를 얻는다.',
+    desc: '허기가 5 이상이면 먼저 아군 전원을 6 회복한다. 대상의 잠식·균열·출혈을 통째로 삼켜 그 (위력×횟수)의 절반을 위력에 더하고, 허기 1당 피해를 10% 높여 세 번 공격한다. 마지막 일격은 방어를 무시한다. 적을 쓰러뜨리면 허기 4를 얻는다.',
     effects: [
       heal(6, 'allAllies', me('hunger', 5)),
-      { kind: 'damage', power: 0, target: 'focus', devour: { keywords: ['erosion', 'rupture'], per: 0.5 }, consume: { stack: 'hunger', per: 0.1 }, stages: [S(3), S(2), S(3, [], { pierce: true })] },
+      { kind: 'damage', power: 0, target: 'focus', devour: { keywords: ['erosion', 'rupture', 'bleed'], per: 0.5 }, consume: { stack: 'hunger', per: 0.1 }, stages: [S(3), S(2), S(3, [], { pierce: true })] },
     ],
     kill: [gain('hunger', 4)],
   },
@@ -449,12 +449,12 @@ const list: SpellDef[] = [
     ],
   },
   {
-    id: 'retrograde', name: '역행', cost: 2, input: 'nebula', output: 'void', tag: 'strike',
-    desc: '시간을 거슬러 대상의 공격 강화와 보호막을 벗겨 낸 뒤 세 번 베어 위력 13의 피해를 준다. 각인이 걸린 적에게는 30% 더 아프고, 첫 일격은 모든 각인의 횟수를 1 늘린다. 각인이 두 종류 이상이면 허기 2를 얻고, 세 종류 이상이면 마지막 일격이 60% 강해진다. 적을 쓰러뜨리면 허기 2를 얻는다.',
+    id: 'retrograde', name: '역행', cost: 2, input: 'nebula', output: 'void', tag: 'strike', selfHarm: 5,
+    desc: '[자해 5] 제 시간을 깎아 대상의 시간을 거스른다. 대상의 공격 강화와 보호막을 벗겨 낸 뒤 세 번 베어 위력 13의 피해를 주고, 첫 일격은 모든 각인의 횟수를 1 늘리며 출혈 2·2를 새긴다. 각인이 걸린 적에게는 30% 더 아프다. 각인이 두 종류 이상이면 허기 2를 얻고, 세 종류 이상이면 마지막 일격이 60% 강해진다. 적을 쓰러뜨리면 허기 2를 얻는다.',
     effects: [
       { kind: 'purge', target: 'focus' },
       { kind: 'damage', power: 0, target: 'focus', bonusVs: [{ keyword: 'any', mult: 1.3 }], stages: [
-        S(5, [amp(0, 1, has('any'))]),
+        S(5, [amp(0, 1, has('any')), ink('bleed', 2, 2)]),
         S(4, [got('hunger', 2, kinds(2))]),
         S(4, [], up(kinds(3), 1.6)),
       ] },
@@ -573,52 +573,55 @@ const list: SpellDef[] = [
   },
   {
     id: 'silver_rend', name: '은빛 난무', cost: 2, input: 'sol', output: 'luna', tag: 'multi',
-    desc: '은빛 칼날을 네 번 몰아쳐 위력 13의 피해를 준다. 앞의 두 칼은 월영 1·2를 새기고, 마지막 칼은 검기가 3 이상이면 50% 강해진다. 링크로 이어 받았다면 세 번째 칼이 대상을 1턴 약화시킨다.',
+    desc: '은빛 칼날을 네 번 몰아쳐 위력 13의 피해를 준다. 앞의 두 칼은 출혈 1·2를 새기고, 마지막 칼은 검기가 3 이상이면 50% 강해진다. 링크로 이어 받았다면 세 번째 칼이 대상을 1턴 약화시킨다.',
     effects: [{ kind: 'damage', power: 0, target: 'focus', stages: [
-      S(3, [ink('moonshade', 1, 2)]),
-      S(3, [ink('moonshade', 1, 2)]),
+      S(3, [ink('bleed', 1, 2)]),
+      S(3, [ink('bleed', 1, 2)]),
       S(3, [debuff('weaken', 1, LINKED)]),
       S(4, [], up(me('edge', 3), 1.5)),
     ] }],
   },
   {
     id: 'crescent_sweep', name: '초승 회전참', cost: 2, input: 'comet', output: 'luna', tag: 'aoe',
-    desc: '몸을 돌려 초승달 모양으로 모든 적을 두 번 베어 위력 7의 피해를 주고, 첫 칼에 1턴 약화를 남긴다. 검기가 2 이상이면 세 번째 칼이 위력 3의 피해와 월영 1·1을 더한다. 약화된 적은 25% 더 깊게 베인다.',
+    desc: '몸을 돌려 초승달 모양으로 모든 적을 두 번 베어 위력 7의 피해를 주고, 첫 칼에 1턴 약화와 출혈 1·2를 남긴다. 검기가 2 이상이면 세 번째 칼이 위력 3의 피해를 더한다. 약화된 적은 25% 더 깊게 베인다.',
     effects: [{ kind: 'damage', power: 0, target: 'allEnemies', vsDebuffed: 1.25, stages: [
-      S(4, [debuff('weaken', 1)]),
+      S(4, [debuff('weaken', 1), ink('bleed', 1, 2)]),
       S(3),
-      S(3, [ink('moonshade', 1, 1)], only(me('edge', 2))),
+      S(3, [], only(me('edge', 2))),
     ] }],
   },
   {
-    id: 'moon_shadow_cut', name: '월영 일섬', cost: 2, input: 'void', output: 'luna', tag: 'pierce',
-    desc: '그림자를 밟고 지나가며 방어를 무시하는 두 칼로 위력 13의 피해를 준다. 대상 체력이 절반 이하면 두 번째 칼이 50% 강해진다. 적을 쓰러뜨리면 검기 1과 성진 1을 얻는다.',
+    id: 'moon_shadow_cut', name: '혈월 일섬', cost: 2, input: 'void', output: 'luna', tag: 'pierce', selfHarm: 6,
+    desc: '[자해 6] 제 피를 칼에 먹여 방어를 무시하는 두 칼로 위력 13의 피해를 주고, 첫 칼에 출혈 2·3을 새긴다. 카이렌의 체력이 60% 이하면 두 번째 칼이 60% 강해진다. 적을 쓰러뜨리면 검기 1과 성진 1을 얻는다.',
     effects: [{ kind: 'damage', power: 0, target: 'focus', pierce: true, stages: [
-      S(7),
-      S(6, [], up(hpT(0.5), 1.5)),
+      S(7, [ink('bleed', 2, 3)]),
+      S(6, [], up(hpMe(0.6), 1.6)),
     ] }],
     kill: [gain('edge', 1), dust(1)],
   },
   {
     id: 'moonlit_iai', name: '월하일섬', cost: 3, input: 'nebula', output: 'luna', tag: 'finisher',
-    desc: '모은 검기를 모두 실어 단 한 번 칼을 뽑는다. 검기 1당 피해가 60% 증가해, 방어를 무시하는 일섬과 한 박자 뒤 터지는 칼자국 셋으로 위력 18의 피해를 준다. 마지막 칼자국은 대상에게 월영이 있으면 50% 강해진다. 적을 쓰러뜨리면 성진 2를 돌려받는다.',
-    effects: [{ kind: 'damage', power: 0, target: 'focus', consume: { stack: 'edge', per: 0.6 }, stages: [
-      S(8, [], { pierce: true }),
-      S(3),
-      S(3),
-      S(4, [], up(has('moonshade'), 1.5)),
-    ] }],
+    desc: '모은 검기를 모두 실어 단 한 번 칼을 뽑는다. 검기 1당 피해가 60% 증가해, 방어를 무시하는 일섬과 한 박자 뒤 터지는 칼자국 셋으로 위력 18의 피해를 준다. 마지막 칼자국은 대상에게 출혈이 있으면 50% 강해지고, 이어서 대상의 출혈을 한꺼번에 터뜨린다(위력×횟수). 적을 쓰러뜨리면 성진 2를 돌려받는다.',
+    effects: [
+      { kind: 'damage', power: 0, target: 'focus', consume: { stack: 'edge', per: 0.6 }, stages: [
+        S(8, [], { pierce: true }),
+        S(3),
+        S(3),
+        S(4, [], up(has('bleed'), 1.5)),
+      ] },
+      burst('bleed', 1),
+    ],
     kill: [dust(2)],
   },
   {
-    id: 'fallen_moon_stance', name: '낙월 자세', cost: 1, input: 'none', output: 'luna', tag: 'buff',
-    desc: '라운드가 시작될 때 먼저 칼끝을 낮추고 반격 5 태세를 갖춘다. 시전하면 자신에게 보호막 6을 두르고 검기를 2 얻는다. 검기가 4 이상이면 다음 시전의 배율이 0.2 오른다. 체인을 연다.',
+    id: 'fallen_moon_stance', name: '낙월 자세', cost: 1, input: 'none', output: 'luna', tag: 'buff', selfHarm: 4,
+    desc: '[자해 4] 라운드가 시작될 때 먼저 칼끝을 낮추고 반격 5 태세를 갖춘다. 시전하면 손바닥을 베어 검기를 3 얻고 자신에게 보호막 6을 두른다. 검기가 4 이상이면 다음 시전의 배율이 0.2 오른다. 체인을 연다.',
     start: [counter(5)],
-    effects: [shield(6, 'self'), gain('edge', 2), boost(0.2, me('edge', 4))],
+    effects: [shield(6, 'self'), gain('edge', 3), boost(0.2, me('edge', 4))],
   },
   {
     id: 'twin_moon', name: '쌍월', cost: 1, input: 'luna', output: 'void', tag: 'strike',
-    desc: '달빛을 받아 두 자루 칼처럼 엇갈려 베어 위력 10의 피해를 주고 월영 2·2를 새긴다. 링크로 이어 받았다면 두 번째 칼에 검기를 1 얻는다. 루네의 달빛을 이어받아 공허로 넘기면 월몰이 터진다.',
+    desc: '달빛을 받아 두 자루 칼처럼 엇갈려 베어 위력 10의 피해를 주고 월영 2·2를 새긴다. 링크로 이어 받았다면 두 번째 칼에 검기를 1 얻는다. 달을 이어받아 공허로 넘기면 월몰이 터진다.',
     effects: [{ kind: 'damage', power: 0, target: 'focus', stages: [
       S(5, [ink('moonshade', 2, 2)]),
       S(5, [got('edge', 1, LINKED)]),
@@ -670,10 +673,10 @@ const list: SpellDef[] = [
   },
   {
     id: 'ricochet', name: '도탄', cost: 1, input: 'luna', output: 'sol', tag: 'aoe',
-    desc: '벽과 바닥에 튕긴 탄이 모든 적을 두 번 맞혀 위력 6의 피해를 주고 화상 1·1을 남긴다. 과열이 2 이상이면 튕긴 탄 하나가 무작위 적에게 위력 3의 피해를 더한다.',
+    desc: '벽과 바닥에 튕긴 탄이 모든 적을 두 번 맞혀 위력 6의 피해를 주고, 첫 탄은 화상 1·1, 두 번째 탄은 출혈 1·2를 남긴다. 과열이 2 이상이면 튕긴 탄 하나가 무작위 적에게 위력 3의 피해를 더한다.',
     effects: [{ kind: 'damage', power: 0, target: 'allEnemies', stages: [
       S(3, [ink('burn', 1, 1)]),
-      S(3),
+      S(3, [ink('bleed', 1, 2)]),
       S(3, [], { ...only(me('heat', 2)), target: 'random' }),
     ] }],
   },
@@ -721,11 +724,11 @@ const list: SpellDef[] = [
     ] }],
   },
   {
-    id: 'high_noon', name: '하이 눈', cost: 2, input: 'luna', output: 'sol', tag: 'execute',
-    desc: '정오의 결투. 두 발로 위력 12의 피해를 주고, 대상 체력이 35% 이하라면 피해가 두 배가 된다. 첫 발은 방어를 무시한다. 적을 쓰러뜨리면 과열 2와 성진 1을 얻는다.',
+    id: 'high_noon', name: '하이 눈', cost: 2, input: 'luna', output: 'sol', tag: 'execute', selfHarm: 5,
+    desc: '[자해 5] 목숨을 건 정오의 결투. 두 발로 위력 12의 피해를 주고, 대상 체력이 35% 이하라면 피해가 두 배가 된다. 첫 발은 방어를 무시하고, 리코의 체력이 절반 이하면 두 번째 발이 50% 강해진다. 적을 쓰러뜨리면 과열 2와 성진 1을 얻는다.',
     effects: [{ kind: 'damage', power: 0, target: 'focus', execute: 2, stages: [
       S(7, [], { pierce: true }),
-      S(5),
+      S(5, [], up(hpMe(0.5), 1.5)),
     ] }],
     kill: [gain('heat', 2), dust(1)],
   },
