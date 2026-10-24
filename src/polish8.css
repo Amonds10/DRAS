@@ -510,3 +510,20 @@ body {
     animation: none !important;
   }
 }
+
+/* 알림: 성좌 트랙 아래, 맨 위 층에 한 줄로 */
+.bx .toast {
+  top: 98px;
+  z-index: 60;
+  max-width: calc(100vw - 24px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 760px) {
+  .bx .toast {
+    top: 116px;
+    font-size: 12px;
+  }
+}

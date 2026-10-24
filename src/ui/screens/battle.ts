@@ -627,7 +627,7 @@ export function battleScreen(app: App): HTMLElement {
       void (x as HTMLElement).offsetWidth;
       x.classList.add('nope');
     }
-    showToast(`성진이 ${short} 모자랍니다 · 앞 주문을 빼거나 대기로 모으세요`);
+    showToast(`성진 ${short} 부족 · 앞 주문을 빼거나 대기하세요`);
   };
 
   /** 카드 설명(가리킨 카드 위에 뜨는 쪽지): 문장 설명 + 이 카드가 일으키는 반응 + 다음에 이어질 반응 */
