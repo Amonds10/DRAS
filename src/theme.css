@@ -2400,3 +2400,84 @@ button.spell-line.equip.on .kit-slot {
     display: none;
   }
 }
+
+/* ─────────────────────────────────────────────
+ * 궁극기 컷신: 위아래 검은 띠가 닫히고 전투 UI가 물러난다
+ * ───────────────────────────────────────────── */
+.letterbox {
+  position: absolute;
+  inset: 0;
+  z-index: 28;
+  pointer-events: none;
+}
+
+.letterbox i {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 12.5vh;
+  background: #050407;
+  transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.letterbox .lb-top {
+  top: 0;
+  animation: lb-top 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.letterbox .lb-bot {
+  bottom: 0;
+  animation: lb-bot 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes lb-top {
+  from { transform: translateY(-100%); }
+  to { transform: none; }
+}
+
+@keyframes lb-bot {
+  from { transform: translateY(100%); }
+  to { transform: none; }
+}
+
+.letterbox.out .lb-top {
+  transform: translateY(-100%);
+}
+
+.letterbox.out .lb-bot {
+  transform: translateY(100%);
+}
+
+/* 컷신 중에는 손패·HUD·발밑 정보판·예고·이름표를 감춘다 */
+.bx .dock5-slot,
+.bx .hud-slot,
+.bx .actor-top,
+.bx .bx-foot,
+.bx .plate-slot,
+.bx .hit-slot {
+  transition: opacity 0.35s;
+}
+
+.bx.cine .dock5-slot,
+.bx.cine .hud-slot,
+.bx.cine .actor-top,
+.bx.cine .bx-foot,
+.bx.cine .skill-plate {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* 컷인은 레터박스 안쪽에 맞춘다 */
+.bx.cine .cutin {
+  inset: 12.5vh 0;
+}
+
+@media (max-width: 760px) {
+  .letterbox i {
+    height: 9vh;
+  }
+
+  .bx.cine .cutin {
+    inset: 9vh 0;
+  }
+}

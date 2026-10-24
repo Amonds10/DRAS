@@ -333,6 +333,9 @@ export class Stage {
   private focusPt = new THREE.Vector3();
   private focusCur = new THREE.Vector3();
   private focusVel = new THREE.Vector3();
+  private cine: { pos: THREE.Vector3; look: THREE.Vector3; fov: number; roll: number; smooth: number } | null = null;
+  private cineRoll = 0;
+  private cineRollV = 0;
   private focusK = 0;
   private focusKV = 0;
   private focusGoal = 0;
@@ -793,7 +796,7 @@ export class Stage {
     if (!a.aura) {
       const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: fxTexture('soft'), color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 }));
       glow.renderOrder = a.order - 2;
-      const ring = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: fxTexture('magic_02'), color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 }));
+      const ring = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: fxTexture('rune'), color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 }));
       ring.rotation.x = -Math.PI / 2;
       ring.renderOrder = 3;
       this.actorGroup.add(glow, ring);
@@ -816,6 +819,14 @@ export class Stage {
   /** 승리 자세 */
   victory(): void {
     for (const a of this.actors.values()) if (a.puppet && !a.dead) a.puppet.play('victory');
+  }
+
+  /**
+   * 영화식 카메라(궁극기 컷신): 카메라 위치·바라보는 점·화각을 직접 정한다. 천천히(smooth초) 미끄러져 간다.
+   * null이면 평소 전투 카메라로 돌아온다.
+   */
+  cinematic(shot: { pos: THREE.Vector3; look: THREE.Vector3; fov?: number; roll?: number; smooth?: number } | null): void {
+    this.cine = shot ? { pos: shot.pos.clone(), look: shot.look.clone(), fov: shot.fov ?? 30, roll: shot.roll ?? 0, smooth: shot.smooth ?? 0.35 } : null;
   }
 
   /** 연출 카메라를 이 지점으로(null이면 원래 자리로) */
@@ -962,6 +973,16 @@ export class Stage {
       pos.lerp(this.punchTarget.clone().add(new THREE.Vector3(0, 1, 6)), 0.12 * this.punchK);
       look.lerp(this.punchTarget, 0.22 * this.punchK);
     }
+    // 컷신: 계산한 전투 카메라 대신 정해 둔 화면으로(타격 당김은 그 위에 얹는다)
+    let follow = 0.07;
+    if (this.cine && this.framing === 'battle') {
+      pos = this.cine.pos.clone();
+      look = this.cine.look.clone();
+      cam.fov = cam.aspect < 1 ? Math.min(62, this.cine.fov * 1.8) : this.cine.fov;
+      follow = this.cine.smooth;
+    }
+    [this.cineRoll, this.cineRollV] = smoothDamp(this.cineRoll, this.cine?.roll ?? 0, this.cineRollV, 0.3, dt);
+    cam.updateProjectionMatrix();
     // 마지막으로 카메라 자체도 한 번 더 부드럽게 따라가게 한다(첫 화면이나 화면 전환 때는 바로 맞춘다)
     if (!this.camInit || this.camFraming !== this.framing) {
       this.camPos.copy(pos);
@@ -971,8 +992,8 @@ export class Stage {
       this.camInit = true;
       this.camFraming = this.framing;
     } else {
-      smoothDampV(this.camPos, pos, this.camVel, 0.07, dt);
-      smoothDampV(this.camLook, look, this.lookVel, 0.07, dt);
+      smoothDampV(this.camPos, pos, this.camVel, follow, dt);
+      smoothDampV(this.camLook, look, this.lookVel, follow, dt);
     }
     // 흔들림: 프레임마다 무작위로 튀지 않게 겹친 사인파로 부드럽게 떤다
     const sh = this.shakeAmt;
@@ -985,7 +1006,7 @@ export class Stage {
     const fwd = this.camLook.clone().sub(this.camPos).normalize();
     cam.position.copy(this.camPos).add(shake).addScaledVector(fwd, this.kickZoom);
     cam.lookAt(this.camLook.clone().add(shake.multiplyScalar(0.4)));
-    if (this.kickRoll) cam.rotateZ(this.kickRoll);
+    if (this.kickRoll || this.cineRoll) cam.rotateZ(this.kickRoll + this.cineRoll);
     if (this.bloom) {
       this.bloomBoost = Math.max(0, this.bloomBoost - dt * 2.2);
       this.bloom.strength = this.bloomBase + this.bloomBoost;

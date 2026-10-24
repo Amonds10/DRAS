@@ -17,6 +17,24 @@ export type SampleName =
 const SAMPLES: SampleName[] = ['ui_click', 'ui_hover', 'ui_toggle', 'card_place', 'card_slide', 'card_fan', 'card_remove', 'page_flip', 'book_open', 'cloth', 'cloth2', 'draw_blade', 'slice', 'metal', 'step', 'coins'];
 const PREF_KEY = 'starweaver.audio';
 
+/** 0 A.D.(CC BY-SA 3.0, Wildfire Games) 전투 효과음. 이름 → 변형 파일들. public/sfx/0ad/CREDITS.md 참고. */
+const BATTLE: Record<string, string[]> = {
+  swing: ['swing1', 'swing2', 'swing3'],
+  clang: ['clang1', 'clang2', 'clang3', 'clang4'],
+  thrust: ['thrust1', 'thrust2'],
+  thud: ['thud1', 'thud2'],
+  stab: ['stab'],
+  shield: ['shield1', 'shield2'],
+  boom: ['boom1', 'boom2'],
+  debris: ['debris'],
+  thunder: ['thunder1', 'thunder2'],
+  gust: ['gust'],
+  shot: ['shot1', 'shot2'],
+  fly: ['fly1', 'fly2'],
+  throw: ['throw1', 'throw2'],
+};
+export type BattleSfx = keyof typeof BATTLE;
+
 /** 성속별 음(반음, C 기준) */
 const EL_NOTE: Record<string, number> = { sol: 0, luna: 4, nebula: 7, comet: 9, void: 2, star: 12 };
 
@@ -68,6 +86,7 @@ class SoundSystem {
   private echoSend!: GainNode;
   private noise!: AudioBuffer;
   private buffers = new Map<SampleName, AudioBuffer>();
+  private battleBufs = new Map<string, AudioBuffer>();
   private pref: AudioPref;
   private mood: Mood = 'title';
   private song: Song = SONGS.title;
@@ -158,6 +177,16 @@ class SoundSystem {
 
   private async loadSamples(): Promise<void> {
     const ctx = this.ctx!;
+    void Promise.all(
+      Object.values(BATTLE).flat().map(async (name) => {
+        try {
+          const res = await fetch(`${import.meta.env.BASE_URL}sfx/0ad/${name}.mp3`);
+          this.battleBufs.set(name, await ctx.decodeAudioData(await res.arrayBuffer()));
+        } catch {
+          // 못 읽으면 합성음만 난다
+        }
+      }),
+    );
     await Promise.all(
       SAMPLES.map(async (name) => {
         try {
@@ -295,6 +324,93 @@ class SoundSystem {
     src.start(ctx.currentTime + delay);
   }
 
+  /** 전투 효과음 한 번: 변형 중 하나를 골라 높이를 살짝 흔든다. wet은 잔향으로 보내는 양. */
+  sfx(name: BattleSfx, vol = 0.6, rate = 1, delay = 0, wet = 0.15): void {
+    if (!this.ok) return;
+    const list = BATTLE[name];
+    const buf = this.battleBufs.get(list[Math.floor(Math.random() * list.length)]);
+    if (!buf) return;
+    const ctx = this.ctx!;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = rate * (0.94 + Math.random() * 0.12);
+    const g = ctx.createGain();
+    g.gain.value = vol;
+    src.connect(g).connect(this.sfxBus);
+    if (wet) {
+      const send = ctx.createGain();
+      send.gain.value = wet;
+      g.connect(send).connect(this.verbSend);
+    }
+    src.start(ctx.currentTime + 0.005 + delay);
+  }
+
+  /** 휘두르기·쏘기·던지기: 무기마다 다른 소리 */
+  swing(motion: string, big = false): void {
+    if (!this.ok) return;
+    if (motion === 'slash') this.sfx('swing', big ? 0.75 : 0.6, big ? 0.85 : 1.1);
+    else if (motion === 'thrust') this.sfx('thrust', big ? 0.75 : 0.6, big ? 0.9 : 1);
+    else if (motion === 'bash') {
+      this.sfx('swing', 0.5, 0.7);
+      this.thump(this.now(), 0.35, 90, 40, 0.3);
+    } else if (motion === 'shoot') {
+      this.sfx('shot', big ? 0.55 : 0.4, big ? 0.85 : 1.15);
+      this.sfx('fly', 0.25, 1.4, 0.03);
+    } else {
+      // 마법 투사체: 바람 소리 위에 성속 종소리가 따라간다
+      this.sfx('throw', 0.35, 1.25);
+      this.hiss(this.now(), 0.4, 0.14, 'bandpass', 700, 4200, 2.2, 0.35, 0.12);
+    }
+  }
+
+  /** 맞은 순간: 무기·마법마다 다른 충돌음, 큰 일격은 폭발음을 겹친다 */
+  impact(motion: string, big = false): void {
+    if (!this.ok) return;
+    const t = this.now();
+    if (motion === 'slash') {
+      this.sfx('clang', 0.45, big ? 0.8 : 1.15);
+      this.sfx('stab', 0.35, 1.1);
+    } else if (motion === 'thrust') {
+      this.sfx('stab', 0.55, big ? 0.85 : 1);
+      this.sfx('clang', 0.25, 0.9, 0.02);
+    } else if (motion === 'bash') {
+      this.sfx('shield', 0.6, big ? 0.75 : 0.95);
+      this.sfx('thud', 0.5, 0.8);
+    } else if (motion === 'shoot') {
+      this.sfx('thud', 0.5, 1.2);
+      this.sfx('boom', big ? 0.35 : 0.18, 1.6, 0, 0.3);
+    } else {
+      // 마법 폭발: 낮은 폭음 + 높은 반짝임
+      this.sfx('boom', big ? 0.55 : 0.32, big ? 1 : 1.35, 0, 0.45);
+      this.bell(88 + Math.floor(Math.random() * 5), t, 0.05, 0.9, 5);
+    }
+    if (big) {
+      this.sfx('debris', 0.3, 1.1, 0.05, 0.4);
+      this.thump(t, 0.6, 120, 30, 0.6);
+    }
+  }
+
+  /** 궁극기 준비: 바람이 몰려들고 낮은 음이 차오르며 화음이 열린다 */
+  ultCharge(element: string): void {
+    if (!this.ok) return;
+    const t = this.now();
+    this.sfx('gust', 0.55, 1.1, 0, 0.5);
+    this.sweep(t, 1.4, 0.16, 55, 220, 'sawtooth', 1600, 0.6);
+    this.hiss(t, 1.5, 0.22, 'bandpass', 300, 5000, 1.5, 0.6, 1.2);
+    const n = 60 + (EL_NOTE[element] ?? 0);
+    [0, 7, 12, 16, 19].forEach((d, i) => this.bell(n + d, t + 0.9 + i * 0.06, 0.07, 2.4, 2));
+  }
+
+  /** 궁극기 적중: 천둥 같은 폭음과 낮은 울림 */
+  ultImpact(): void {
+    if (!this.ok) return;
+    const t = this.now();
+    this.sfx('thunder', 0.7, 1, 0, 0.6);
+    this.sfx('boom', 0.7, 0.8, 0, 0.5);
+    this.sfx('debris', 0.4, 0.9, 0.1, 0.5);
+    this.thump(t, 1, 110, 22, 1.4);
+  }
+
   private now(): number {
     return this.ctx!.currentTime + 0.01;
   }
@@ -351,8 +467,8 @@ class SoundSystem {
     switch (kind) {
       case 'enemy':
         this.thump(t, 0.5, 110, 40, 0.3);
-        this.hiss(t, 0.25, 0.3, 'lowpass', 2400, 300, 0.7, 0.2);
-        this.play('slice', 0.35, 0.8);
+        this.sfx('thud', 0.55, 0.85);
+        this.sfx('swing', 0.3, 0.8);
         break;
       case 'burn':
         this.hiss(t, 0.5, 0.22, 'bandpass', 900, 2500, 0.6, 0.2, 0.05);
@@ -366,18 +482,22 @@ class SoundSystem {
         this.thump(t, 0.4, 180, 60, 0.25);
         break;
       case 'counter':
+        this.sfx('shield', 0.55, 1);
+        this.sfx('clang', 0.4, 1.1);
+        break;
       case 'slash':
-        this.play('slice', 0.55);
-        this.hiss(t, 0.18, 0.22, 'highpass', 3000, 8000, 0.7, 0.2);
+        this.sfx('clang', 0.4, 1.15);
+        this.hiss(t, 0.18, 0.16, 'highpass', 3000, 8000, 0.7, 0.2);
         break;
       case 'crit':
+        this.sfx('boom', 0.5, 0.9, 0, 0.5);
         this.thump(t, 1, 180, 28, 0.9);
         this.hiss(t, 1.2, 0.5, 'lowpass', 6000, 100, 0.4, 0.8);
         this.bell(60, t, 0.25, 2.5, 1.41);
         this.bell(67, t + 0.02, 0.18, 2.5, 1.41);
         break;
       case 'blocked':
-        this.play('metal', 0.5);
+        this.sfx('shield', 0.5, 1.15);
         this.bell(88, t, 0.08, 0.6, 1.41);
         break;
       default:
@@ -386,10 +506,13 @@ class SoundSystem {
     }
   }
 
+  /** 치유: 맑은 종소리가 위로 흩어지고 반짝이는 바람이 감싼다 */
   heal(): void {
     if (!this.ok) return;
     const t = this.now();
-    [76, 79, 83, 88].forEach((n, i) => this.bell(n, t + i * 0.07, 0.08, 1.3, 1));
+    [76, 79, 83, 88, 91].forEach((n, i) => this.bell(n, t + i * 0.06, 0.07, 1.6, 1, undefined, 0.8));
+    this.bell(64, t, 0.06, 2.2, 1, undefined, 0.9);
+    this.hiss(t, 0.9, 0.08, 'highpass', 4000, 9000, 0.6, 0.7, 0.25);
   }
 
   shield(): void {

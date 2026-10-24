@@ -121,6 +121,8 @@ WebGL이 필요합니다. 배경, 바닥 반사, 블룸, VFX는 three.js로 그�
 
 - VFX 텍스처: [Kenney Particle Pack](https://github.com/Calinou/kenney-particle-pack) by Kenney (CC0). 원본 중 42장을 흰색과 알파로 변환해 `public/fx/`에 넣었습니다. 라이선스는 `public/fx/LICENSE-kenney.txt`에 있습니다.
 - 효과음: Kenney의 UI·Casino·RPG 사운드(CC0, [iwenzhou/kenney](https://github.com/iwenzhou/kenney) 미러에서). 16개를 골라 `public/sfx/`에 넣었습니다. 라이선스는 `public/sfx/LICENSE-kenney.md`에 있습니다. 마법 효과음과 배경 음악은 Web Audio로 직접 합성합니다.
+- 전투 효과음: [0 A.D.](https://play0ad.com/)의 무기·충격·폭발·천둥 소리(Wildfire Games, [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/)). 26개를 모노 MP3로 변환해 `public/sfx/0ad/`에 넣었습니다. 원본 파일 목록은 `public/sfx/0ad/CREDITS.md`에 있습니다.
+- 직접 그린 효과 텍스처: 마법진(룬 원), 결정 조각, 회절 섬광, 칼날 궤적, 축복의 꽃은 `src/render/three/textures.ts`에서 캔버스로 그립니다.
 - 배경 음악: [0 A.D.](https://play0ad.com/)의 음악(Wildfire Games, Omri Lahav 외, [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/)). 6곡을 MP3로 변환해 `public/bgm/`에 넣었습니다. 곡 목록과 바꾸는 법은 `public/bgm/CREDITS.md`에 있습니다. 파일을 못 읽으면 직접 생성하는 음악으로 돌아갑니다.
 - [three.js](https://threejs.org/) (MIT)
 - 글꼴: Noto Serif KR, Bodoni Moda ([Fontsource](https://fontsource.org/)로 번들, OFL)

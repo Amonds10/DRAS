@@ -798,6 +798,56 @@ export function battleScreen(app: App): HTMLElement {
     setTimeout(() => el.remove(), 400);
   }
 
+  /** 궁극기 컷신 장치: 위아래 검은 띠(레터박스)와 화면 UI 감추기 */
+  let cinemaEl: HTMLElement | null = null;
+  const startCinema = () => {
+    if (cinemaEl) return;
+    cinemaEl = h('div', { class: 'letterbox' }, h('i', { class: 'lb-top' }), h('i', { class: 'lb-bot' }));
+    scene.append(cinemaEl);
+    root.classList.add('cine');
+  };
+  const endCinema = () => {
+    stage.cinematic(null);
+    root.classList.remove('cine');
+    const el = cinemaEl;
+    cinemaEl = null;
+    if (!el) return;
+    el.classList.add('out');
+    setTimeout(() => el.remove(), 600);
+  };
+
+  /**
+   * 궁극기 컷신: 레터박스가 닫히고 → 발치에서 올려다보는 영웅 숏으로 힘을 모으고 → 컷인 → 어깨 너머로 대상을 겨눈 뒤 공격이 이어진다.
+   * 마지막 일격에서 화면이 넓게 빠지며 터지고, 시전이 끝나면 레터박스가 열린다.
+   */
+  async function ultimateIntro(uid: string, spellName: string, un: { stack: Stack; stacks: number; mult: number } | null, color: string, target: string | null, element: string) {
+    startCinema();
+    sound.duck(5);
+    const ch = chest(uid);
+    const ft = feet(uid);
+    stage.setBackdrop(color, 0.96);
+    stage.cinematic({ pos: ft.clone().add(new THREE.Vector3(2.6, 0.45, 5.4)), look: ch.clone().add(new THREE.Vector3(0.2, 0.55, 0)), fov: 24, roll: -0.06, smooth: 0.18 });
+    stage.anim(uid, 'charge');
+    sound.ultCharge(element);
+    stage.fx?.magicCircle(ft, color, 5.5, 2, 'rune');
+    stage.fx?.magicCircle(ft, '#ffffff', 3.6, 1.8, 'rune_hex');
+    stage.toon.pillar(ft, color, 9, 2.6, 1.7);
+    stage.fx?.gather(ch, color, 44, 0.95);
+    stage.setAura(uid, 6, color, 6);
+    await wait(500);
+    stage.toon.spawn('ring', { pos: ch, size: 6, color, life: 0.6 });
+    stage.shake(0.2);
+    await wait(500);
+    await finisherCutIn(uid, spellName, un, color, target);
+    if (target) {
+      const tc = chest(target);
+      stage.cinematic({ pos: ch.clone().add(new THREE.Vector3(-2.8, 1.1, 4.4)), look: tc.clone().lerp(ch, 0.2), fov: 28, roll: 0.04, smooth: 0.16 });
+      await wait(420);
+    }
+    stage.cinematic(null);
+    syncAuras();
+  }
+
   /** 극딜 컷인 */
   async function finisherCutIn(uid: string, spellName: string, un: { stack: Stack; stacks: number; mult: number } | null, color: string, target: string | null) {
     const ally = allyOf(uid)!;
@@ -845,7 +895,7 @@ export function battleScreen(app: App): HTMLElement {
     let startShown = false;
     const castTotal = events.filter((x) => x.type === 'cast' || x.type === 'skip').length;
     const stats = { dmg: 0, casts: 0, reactions: 0, chain: 0 };
-    let choreo: { caster: string; color: string; motion: string; melee: boolean; dashed: boolean; hits: number; idx: number; tag: SkillTag; pending: boolean; firstHit: boolean; last: boolean; big: boolean } | null = null;
+    let choreo: { caster: string; color: string; motion: string; melee: boolean; dashed: boolean; hits: number; idx: number; tag: SkillTag; pending: boolean; firstHit: boolean; last: boolean; big: boolean; ult: boolean } | null = null;
     const trackSlots = () => hudSlot.querySelectorAll('.q-slot');
     const stageTargets = (from: number): string[] => {
       const out: string[] = [];
@@ -881,6 +931,7 @@ export function battleScreen(app: App): HTMLElement {
       }
       stage.anim(c.caster, 'recover');
       stage.setBackdrop(null);
+      if (c.ult) endCinema();
     };
 
     for (let k = 0; k < events.length; k++) {
@@ -898,7 +949,7 @@ export function battleScreen(app: App): HTMLElement {
             }
             const col = elColor(unitById(allyOf(ev.allyUid)!.defId).element);
             stage.anim(ev.allyUid, 'channel');
-            stage.fx?.magicCircle(feet(ev.allyUid), col, 2.2, 0.9, 'magic_01');
+            stage.fx?.magicCircle(feet(ev.allyUid), col, 2.2, 0.9, 'rune_hex');
             floatText(ev.allyUid, spellById(ev.spellId).name, 'trigger t-start');
             await wait(460);
           } else if (ev.phase === 'kill') {
@@ -927,7 +978,8 @@ export function battleScreen(app: App): HTMLElement {
           const slice = events.slice(k + 1, nextCast < 0 ? events.length : nextCast);
           const unleash = slice.find((x): x is Extract<BattleEvent, { type: 'unleash' }> => x.type === 'unleash') ?? null;
           const targets = slice.filter((x): x is Extract<BattleEvent, { type: 'damage' }> => x.type === 'damage' && x.source === 'ally').map((x) => x.targetUid);
-          if (sp.tag === 'finisher' || unleash) await finisherCutIn(ev.allyUid, sp.name, unleash, color, targets[0] ?? null);
+          const ult = sp.tag === 'finisher' || !!unleash;
+          if (ult) await ultimateIntro(ev.allyUid, sp.name, unleash, color, targets[0] ?? null, unit.element);
           else if (sp.cost >= 2) await skillCutIn(ev.allyUid, sp.name, sp.tag, color);
           stage.focus(chest(ev.allyUid), sp.cost >= 2 ? 0.9 : 0.75);
           stage.fx?.castCircle(chest(ev.allyUid), color, sp.cost >= 2 ? 4.6 : 3.4);
@@ -938,7 +990,7 @@ export function battleScreen(app: App): HTMLElement {
           stage.setBackdrop(color, SUPPORT_TAGS.has(sp.tag) ? 0.55 : sp.cost >= 2 ? 0.9 : 0.75);
           showSkillPlate(ev.allyUid, ev.spellId, ev.linked ? `LINK ${ev.chain} · ×${ev.mult}` : ev.sealed ? '성식 — 링크 끊김' : prevCaster ? '링크 끊김 · 새 체인' : `CHAIN 1${ev.mult !== 1 ? ` · ×${ev.mult}` : ''}`, ev.linked, castSummary(events, k), `${castIdx + 1} / ${castTotal}`);
           await wait(420);
-          choreo = { caster: ev.allyUid, color, motion, melee, dashed: false, hits: targets.length, idx: 0, tag: sp.tag, pending: false, firstHit: false, last: false, big: sp.cost >= 2 };
+          choreo = { caster: ev.allyUid, color, motion, melee, dashed: false, hits: targets.length, idx: 0, tag: sp.tag, pending: false, firstHit: false, last: false, big: sp.cost >= 2, ult };
           if (melee && targets[0]) {
             stage.anim(ev.allyUid, 'dash');
             stage.dash(ev.allyUid, targets[0], 0.16, MELEE_GAP);
@@ -948,7 +1000,7 @@ export function battleScreen(app: App): HTMLElement {
           } else stage.anim(ev.allyUid, sp.tag === 'charge' ? 'charge' : SUPPORT_TAGS.has(sp.tag) ? 'channel' : staged ? (motion === 'shoot' ? 'fire' : 'cast1') : 'cast');
           sound.cast(unit.element, ev.chain, motion);
           if (ev.linked) sound.link(ev.chain, prevOut ?? unit.element);
-          stage.fx?.magicCircle(feet(ev.allyUid), color, 2.6, 1.1, 'magic_01');
+          stage.fx?.magicCircle(feet(ev.allyUid), color, 2.6, 1.1, 'rune_hex');
           if (ev.linked && prevCaster) stage.fx?.arc(chest(prevCaster), chest(ev.allyUid), prevOut ? elColor(prevOut) : color);
           resetHits();
           stats.casts++;
@@ -986,7 +1038,7 @@ export function battleScreen(app: App): HTMLElement {
             const pose = last && ev.total > 1 ? 'finish' : (['combo1', 'combo2', 'combo3'] as const)[ev.index % 3];
             if (tgt && c.tag !== 'aoe') stage.dash(c.caster, tgt, 0.1, MELEE_GAP);
             stage.anim(c.caster, pose);
-            sound.whoosh('sweep');
+            sound.swing(c.motion, pose === 'finish');
             await wait(pose === 'finish' ? 300 : 150);
             // 휘두른 무기에서 검기·창기·충격파가 날아가 꽂힌다
             const from = chest(c.caster).add(new THREE.Vector3(0.9, pose === 'finish' ? 0.5 : 0.15, 0.1));
@@ -1021,9 +1073,9 @@ export function battleScreen(app: App): HTMLElement {
                 stage.toon.shot(from, to, col, 0.13, j * 0.05);
               }
             });
-            if (magic) stage.fx?.magicCircle(chest(c.caster).add(new THREE.Vector3(0.6, 0.2, 0.2)), col, 1.6, 0.5, 'magic_02');
+            if (magic) stage.fx?.magicCircle(chest(c.caster).add(new THREE.Vector3(0.6, 0.2, 0.2)), col, 1.6, 0.5, 'rune');
             if (c.tag === 'aoe' && last) stage.fx?.sweep(enemyCenter(), col, 6.5);
-            sound.whoosh(c.motion === 'shoot' ? 'projectile' : 'mark');
+            sound.swing(c.motion, last && c.big);
             await wait(magic ? (last && ev.total > 1 ? 280 : 260) : last && ev.total > 1 ? 240 : 170);
           }
           break;
@@ -1051,7 +1103,7 @@ export function battleScreen(app: App): HTMLElement {
           sound.fullChain();
           sound.duck(1.5);
           const c = enemyCenter();
-          stage.fx?.magicCircle(new THREE.Vector3(-3.6, 0, 0.1), '#ffd27a', 8, 1.6, 'magic_02');
+          stage.fx?.magicCircle(new THREE.Vector3(-3.6, 0, 0.1), '#ffd27a', 8, 1.6, 'rune');
           stage.fx?.nova(c, '#ffd27a', '#ffffff', 1.05);
           stage.flashScreen(0.3);
           stage.shake(0.35);
@@ -1085,6 +1137,7 @@ export function battleScreen(app: App): HTMLElement {
               stage.shake(c.last ? 0.3 : 0.15);
             }
             if (first) {
+              sound.impact(c.motion, finale || crit);
               stage.kick((c.idx % 2 ? 1 : -1) * (0.025 + 0.01 * Math.min(c.idx, 3)), c.last ? 1.1 : 0.55);
               stage.hitStop(c.last ? 0.1 : 0.05);
               onomatopoeia(ev.targetUid, c.motion, finale);
@@ -1092,6 +1145,19 @@ export function battleScreen(app: App): HTMLElement {
             if (finale) {
               stage.toon.finale(p, c.color, crit ? 1.5 : 1.1);
               stage.slowMo(0.35, 0.3);
+            }
+            if (finale && c.ult) {
+              // 궁극기 마지막 일격: 넓은 화면으로 빠지며 대폭발
+              stage.cinematic({ pos: p.clone().add(new THREE.Vector3(-4.2, 1.4, 8.5)), look: p.clone().add(new THREE.Vector3(-0.6, -0.2, 0)), fov: 32, roll: 0.03, smooth: 0.1 });
+              setTimeout(() => stage.cinematic(null), 650 / app.speed);
+              stage.toon.magicBlast(p, c.color, 1.4);
+              stage.fx?.shards(p, c.color, 14, 8);
+              stage.fx?.magicCircle(feet(ev.targetUid), c.color, 6, 1, 'rune');
+              stage.impactFrame(c.color);
+              stage.flashScreen(0.18);
+              stage.shake(0.9);
+              stage.hitStop(0.2);
+              sound.ultImpact();
             }
           }
           if (fx) {

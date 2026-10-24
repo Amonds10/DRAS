@@ -145,6 +145,7 @@ export class FxSystem {
   // ───────── 조합 효과 ─────────
 
   flare(pos: THREE.Vector3, color: THREE.ColorRepresentation, size = 1.6, life = 0.35): void {
+    this.sprite({ tex: 'flare4', color, pos, size: size * 0.5, to: size * 1.5, life: life * 0.9, curve: 'flash', rot: (Math.random() - 0.5) * 0.4, alpha: 0.75 });
     this.sprite({ tex: 'soft', color, pos, size: size * 0.4, to: size, life: life * 1.2, curve: 'flash', alpha: 0.7 });
     this.sprite({ tex: 'light_01', color, pos, size: size * 0.6, to: size * 1.8, life: life * 1.3, curve: 'flash', alpha: 0.6, rot: Math.random() * 3 });
     this.sprite({ tex: 'soft', color: 0xffffff, pos, size: size * 0.25, to: size * 0.7, life: life * 0.8, curve: 'flash', alpha: 0.45 });
@@ -170,7 +171,7 @@ export class FxSystem {
     this.sprite({ tex, color, pos: new THREE.Vector3(pos.x, 0.03, pos.z), size: from, to, life, ground: true, curve: 'fade' });
   }
 
-  magicCircle(pos: THREE.Vector3, color: THREE.ColorRepresentation, size = 2.4, life = 1.2, tex: FxName = 'magic_02'): void {
+  magicCircle(pos: THREE.Vector3, color: THREE.ColorRepresentation, size = 2.4, life = 1.2, tex: FxName = 'rune'): void {
     this.sprite({ tex, color, pos: new THREE.Vector3(pos.x, 0.04, pos.z), size: size * 0.8, to: size, life, ground: true, curve: 'pulse', spin: 1.2 });
     this.light(pos, color, 1.4, life);
   }
@@ -190,7 +191,18 @@ export class FxSystem {
       this.sprite({ tex: 'spark_06', color: 0xffffff, pos, size: [0.08, 0.6 * scale], to: [0.02, 1.4 * scale], life: 0.28, rot: a - Math.PI / 2, vel: new THREE.Vector3(Math.cos(a), Math.sin(a), 0).multiplyScalar(5 * scale), drag: 4, curve: 'flash' });
     }
     this.linger(pos, color, Math.round(5 * scale), 1.2 * scale);
+    this.shards(pos, color, Math.round(7 * scale), 5 * scale);
     this.light(pos, color, 2.6 * scale, 0.5);
+  }
+
+  /** 결정 조각: 맞은 자리에서 튀어 돌며 떨어진다(직접 그린 조각 텍스처) */
+  shards(pos: THREE.Vector3, color: THREE.ColorRepresentation, n = 7, speed = 5): void {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = speed * (0.5 + Math.random() * 0.7);
+      const sz = 0.18 + Math.random() * 0.22;
+      this.sprite({ tex: 'shard', color: i % 3 ? color : 0xffffff, pos, size: [sz * 0.6, sz * 1.4], to: [sz * 0.2, sz * 0.5], life: 0.55 + Math.random() * 0.35, rot: Math.random() * 6, spin: (Math.random() - 0.5) * 18, vel: new THREE.Vector3(Math.cos(a) * sp, Math.abs(Math.sin(a)) * sp * 0.8 + 1.5, 0), gravity: -14, drag: 0.6, alpha: 0.9 });
+    }
   }
 
   /** 시전자 → 대상 투사체. 도착 시점은 travel초 뒤. */
@@ -238,13 +250,14 @@ export class FxSystem {
     this.sprite({ tex: 'slash_01', color, pos: center.clone().add(new THREE.Vector3(0, 0.9, 0)), size: width * 0.4, to: width * 0.95, life: 0.45, rot: 2.6, delay: 0.08, curve: 'flash', spin: 2 });
     this.sprite({ tex: 'light_03', color, pos: center.clone().add(new THREE.Vector3(0, 0.6, 0)), size: width * 0.3, to: width * 0.9, life: 0.6, spin: 1, curve: 'flash', alpha: 0.6 });
     this.ring(center, color, 1, width * 1.3, 0.7, 'circle_03');
-    this.ring(center, color, 0.5, width * 0.8, 0.9, 'magic_02');
+    this.ring(center, color, 0.5, width * 0.8, 0.9, 'rune');
     this.linger(center.clone().add(new THREE.Vector3(0, 0.8, 0)), color, 16, width * 0.6);
     this.light(center, color, 5, 0.6);
   }
 
   /** 처단·적의 할퀴기 같은 날카로운 베기 */
   slash(pos: THREE.Vector3, color: THREE.ColorRepresentation, size = 2.4): void {
+    this.sprite({ tex: 'trail', color, pos, size: size * 0.7, to: size * 1.15, life: 0.3, rot: Math.random() * 6, curve: 'flash', alpha: 0.8 });
     this.sprite({ tex: 'scratch_01', color, pos, size: size * 0.6, to: size, life: 0.3, rot: Math.random() * 0.6 - 0.3, curve: 'flash' });
     this.sprite({ tex: 'slash_01', color: 0xffffff, pos, size: size * 0.5, to: size * 1.1, life: 0.22, rot: 0.8, curve: 'flash' });
     this.sparks(pos, color, 6, 4);
@@ -272,7 +285,7 @@ export class FxSystem {
 
   /** 치유: 발밑 마법진과 물결, 나선으로 피어오르는 빛 알갱이, 몸을 감싸는 온기, 위로 떠오르는 빛 십자 */
   heal(pos: THREE.Vector3, feet: THREE.Vector3, color: THREE.ColorRepresentation): void {
-    this.magicCircle(feet, color, 2.4, 1.1, 'magic_01');
+    this.magicCircle(feet, color, 2.4, 1.1, 'rune_hex');
     this.ring(feet, color, 0.4, 2.8, 0.8, 'circle_02');
     for (let i = 0; i < 22; i++) {
       const a0 = (i / 22) * Math.PI * 4;
@@ -290,6 +303,8 @@ export class FxSystem {
     this.sprite({ tex: 'trace_06', color: 0xffffff, pos: top, size: [0.14, 0.8], to: [0.1, 0.6], life: 0.9, delay: 0.15, curve: 'pulse', path: drift, alpha: 0.8 });
     this.sprite({ tex: 'trace_06', color: 0xffffff, pos: top, size: [0.14, 0.56], to: [0.1, 0.42], life: 0.9, delay: 0.15, curve: 'pulse', path: drift, rot: Math.PI / 2, alpha: 0.8 });
     this.sprite({ tex: 'soft', color, pos: top, size: 0.9, to: 0.5, life: 0.9, delay: 0.15, curve: 'pulse', path: drift, alpha: 0.6 });
+    // 몸 앞에 피었다 지는 축복의 꽃(직접 그린 문양)
+    this.sprite({ tex: 'bloom', color, pos: pos.clone().add(new THREE.Vector3(0, 0.1, 0.2)), size: 0.6, to: 2.2, life: 0.8, spin: 0.8, curve: 'flash', alpha: 0.5 });
     this.light(feet, color, 1.6, 0.9);
   }
 
@@ -302,7 +317,7 @@ export class FxSystem {
 
   buff(pos: THREE.Vector3, feet: THREE.Vector3, color: THREE.ColorRepresentation): void {
     this.sprite({ tex: 'trace_06', color, pos: feet.clone().add(new THREE.Vector3(0, 1.6, 0)), size: [0.4, 3.6], to: [1.4, 4.2], life: 0.6, curve: 'flash' });
-    this.magicCircle(feet, color, 2.2, 0.8, 'magic_01');
+    this.magicCircle(feet, color, 2.2, 0.8, 'rune_hex');
     for (let i = 0; i < 8; i++) {
       const p = feet.clone().add(new THREE.Vector3((Math.random() - 0.5) * 1, Math.random() * 0.4, 0));
       this.sprite({ tex: 'soft', color, pos: p, size: 0.22, to: 0.08, life: 0.7, delay: i * 0.05, vel: new THREE.Vector3(0, 3, 0) });
@@ -333,13 +348,13 @@ export class FxSystem {
   /** 시전자 뒤에 세워지는 마법진(리버스 1999식): 커지며 돌고, 앞뒤로 두 겹 */
   castCircle(pos: THREE.Vector3, color: THREE.ColorRepresentation, size = 3): void {
     const back = pos.clone().add(new THREE.Vector3(-0.15, 0, -0.35));
-    this.sprite({ tex: 'magic_02', color, pos: back, size: size * 0.4, to: size, life: 0.9, spin: 2.4, curve: 'pulse', behind: true });
-    this.sprite({ tex: 'magic_01', color: 0xffffff, pos: back, size: size * 0.3, to: size * 0.75, life: 0.8, spin: -3.2, curve: 'pulse', alpha: 0.55, behind: true });
+    this.sprite({ tex: 'rune', color, pos: back, size: size * 0.4, to: size, life: 0.9, spin: 2.4, curve: 'pulse', behind: true });
+    this.sprite({ tex: 'rune_hex', color: 0xffffff, pos: back, size: size * 0.3, to: size * 0.75, life: 0.8, spin: -3.2, curve: 'pulse', alpha: 0.55, behind: true });
     this.sprite({ tex: 'light_01', color, pos: back, size: size * 0.6, to: size * 1.3, life: 0.6, curve: 'flash', alpha: 0.5, behind: true });
     // 발밑에서 솟는 빛기둥과 피어오르는 별
     const feet = new THREE.Vector3(pos.x, 0, pos.z);
     this.sprite({ tex: 'trace_06', color, pos: feet.clone().add(new THREE.Vector3(0, 2.2, -0.2)), size: [0.6, 4.6], to: [1.8, 5.2], life: 0.9, curve: 'pulse', alpha: 0.55, behind: true });
-    this.ring(feet, color, size * 0.4, size * 0.9, 1.0, 'magic_02');
+    this.ring(feet, color, size * 0.4, size * 0.9, 1.0, 'rune');
     for (let i = 0; i < 10; i++) {
       const p = feet.clone().add(new THREE.Vector3((Math.random() - 0.5) * 1.6, Math.random() * 0.4, 0.1));
       this.sprite({ tex: 'soft', color, pos: p, size: 0.22, to: 0.04, life: 0.9, delay: i * 0.04, vel: new THREE.Vector3(0, 2.4 + Math.random() * 1.5, 0), drag: 0.6 });
@@ -365,7 +380,7 @@ export class FxSystem {
    * 태양: 햇살 방사 / 달: 초승달 베기 / 성운: 소용돌이 / 혜성: 꼬리 폭발 / 공허: 안으로 빨려 드는 붕괴 / 별: 별자리 선
    */
   signature(element: string, pos: THREE.Vector3, color: THREE.ColorRepresentation, scale = 1): void {
-    scale *= 1.35;
+    scale *= 1.1;
     this.linger(pos, color, Math.round(3 * scale), 1.4 * scale);
     switch (element) {
       case 'sol':
@@ -421,7 +436,7 @@ export class FxSystem {
 
   /** 지연 폭격 예고: 대상 머리 위 표식 */
   mark(pos: THREE.Vector3, color: THREE.ColorRepresentation): void {
-    this.sprite({ tex: 'magic_01', color, pos: pos.clone().add(new THREE.Vector3(0, 0.4, 0)), size: 2.4, to: 1.4, life: 0.9, spin: 3, curve: 'pulse' });
+    this.sprite({ tex: 'rune_hex', color, pos: pos.clone().add(new THREE.Vector3(0, 0.4, 0)), size: 2.4, to: 1.4, life: 0.9, spin: 3, curve: 'pulse' });
   }
 
   drainReturn(from: THREE.Vector3, to: THREE.Vector3, color: THREE.ColorRepresentation): void {

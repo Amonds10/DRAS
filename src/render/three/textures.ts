@@ -9,7 +9,191 @@ export const FX_NAMES = [
   'trace_05', 'trace_06', 'twirl_01', 'twirl_02', 'twirl_03',
 ] as const;
 
-export type FxName = (typeof FX_NAMES)[number] | 'soft' | 'blob';
+/** 직접 그린 효과 텍스처(캔버스). 모두 흰색과 알파라 색으로 물들여 쓴다. */
+export const DRAWN = ['rune', 'rune_hex', 'shard', 'flare4', 'trail', 'bloom'] as const;
+export type Drawn = (typeof DRAWN)[number];
+
+export type FxName = (typeof FX_NAMES)[number] | 'soft' | 'blob' | Drawn;
+
+/** 마법진: 동심원, 눈금, 별 다각형, 둘레의 작은 문자(획을 무작위로 엮은 룬) */
+function drawRune(ctx: CanvasRenderingContext2D, s: number, points: number, skip: number, seed: number): void {
+  let r = seed;
+  const rnd = () => ((r = (r * 16807) % 2147483647) / 2147483647);
+  const c = s / 2;
+  ctx.translate(c, c);
+  ctx.strokeStyle = '#fff';
+  ctx.fillStyle = '#fff';
+  ctx.shadowColor = '#fff';
+  ctx.shadowBlur = s * 0.012;
+  const ring = (rad: number, w: number, a = 1) => {
+    ctx.globalAlpha = a;
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    ctx.arc(0, 0, rad, 0, Math.PI * 2);
+    ctx.stroke();
+  };
+  ring(c * 0.96, s * 0.008);
+  ring(c * 0.9, s * 0.003, 0.8);
+  ring(c * 0.72, s * 0.006);
+  ring(c * 0.66, s * 0.0025, 0.7);
+  ring(c * 0.3, s * 0.005);
+  // 바깥 눈금
+  ctx.globalAlpha = 0.9;
+  for (let i = 0; i < 96; i++) {
+    const a = (i / 96) * Math.PI * 2;
+    const long = i % 8 === 0;
+    ctx.lineWidth = long ? s * 0.005 : s * 0.0025;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * c * 0.9, Math.sin(a) * c * 0.9);
+    ctx.lineTo(Math.cos(a) * c * (long ? 0.8 : 0.86), Math.sin(a) * c * (long ? 0.8 : 0.86));
+    ctx.stroke();
+  }
+  // 둘레의 룬: 칸마다 짧은 획 서너 개
+  const glyphs = 24;
+  for (let i = 0; i < glyphs; i++) {
+    const a = (i / glyphs) * Math.PI * 2 + 0.06;
+    ctx.save();
+    ctx.rotate(a);
+    ctx.translate(0, -c * 0.81);
+    ctx.lineWidth = s * 0.004;
+    ctx.globalAlpha = 0.95;
+    const g = s * 0.022;
+    ctx.beginPath();
+    for (let k = 0; k < 3 + Math.floor(rnd() * 2); k++) {
+      const x0 = (rnd() - 0.5) * g, y0 = (rnd() - 0.5) * g;
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x0 + (rnd() - 0.5) * g * 1.4, y0 + (rnd() - 0.5) * g * 1.4);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+  // 별 다각형
+  ctx.lineWidth = s * 0.005;
+  ctx.globalAlpha = 1;
+  ctx.beginPath();
+  for (let i = 0; i <= points; i++) {
+    const a = ((i * skip) / points) * Math.PI * 2 - Math.PI / 2;
+    const x = Math.cos(a) * c * 0.72, y = Math.sin(a) * c * 0.72;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  // 꼭짓점의 작은 원과 안쪽 원 둘레의 점
+  for (let i = 0; i < points; i++) {
+    const a = (i / points) * Math.PI * 2 - Math.PI / 2;
+    ctx.lineWidth = s * 0.004;
+    ctx.beginPath();
+    ctx.arc(Math.cos(a) * c * 0.72, Math.sin(a) * c * 0.72, s * 0.022, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(Math.cos(a + Math.PI / points) * c * 0.3, Math.sin(a + Math.PI / points) * c * 0.3, s * 0.006, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // 가운데 문양: 작은 원 둘과 십자
+  ring(c * 0.14, s * 0.004);
+  ctx.lineWidth = s * 0.004;
+  ctx.beginPath();
+  ctx.moveTo(-c * 0.24, 0); ctx.lineTo(c * 0.24, 0);
+  ctx.moveTo(0, -c * 0.24); ctx.lineTo(0, c * 0.24);
+  ctx.stroke();
+}
+
+function drawFx(name: Drawn, ctx: CanvasRenderingContext2D, s: number): void {
+  const c = s / 2;
+  switch (name) {
+    case 'rune':
+      drawRune(ctx, s, 8, 3, 7);
+      break;
+    case 'rune_hex':
+      drawRune(ctx, s, 6, 2, 31);
+      break;
+    case 'shard': {
+      // 결정 조각: 길쭉한 마름모, 한쪽 면이 더 밝다
+      ctx.translate(c, c);
+      const g = ctx.createLinearGradient(-c * 0.3, 0, c * 0.3, 0);
+      g.addColorStop(0, 'rgba(255,255,255,0.55)');
+      g.addColorStop(0.5, 'rgba(255,255,255,1)');
+      g.addColorStop(1, 'rgba(255,255,255,0.35)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(0, -c * 0.95);
+      ctx.lineTo(c * 0.32, -c * 0.1);
+      ctx.lineTo(0, c * 0.95);
+      ctx.lineTo(-c * 0.26, c * 0.05);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    }
+    case 'flare4': {
+      // 렌즈 섬광: 부드러운 핵 + 네 줄기 회절광 + 가는 사선 줄기
+      const core = ctx.createRadialGradient(c, c, 0, c, c, c * 0.5);
+      core.addColorStop(0, 'rgba(255,255,255,1)');
+      core.addColorStop(0.25, 'rgba(255,255,255,0.5)');
+      core.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = core;
+      ctx.fillRect(0, 0, s, s);
+      ctx.translate(c, c);
+      const spike = (len: number, w: number, a: number, alpha: number) => {
+        ctx.save();
+        ctx.rotate(a);
+        const g = ctx.createLinearGradient(-len, 0, len, 0);
+        g.addColorStop(0, 'rgba(255,255,255,0)');
+        g.addColorStop(0.5, `rgba(255,255,255,${alpha})`);
+        g.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.moveTo(-len, 0);
+        ctx.quadraticCurveTo(0, -w, len, 0);
+        ctx.quadraticCurveTo(0, w, -len, 0);
+        ctx.fill();
+        ctx.restore();
+      };
+      spike(c, s * 0.03, 0, 1);
+      spike(c * 0.8, s * 0.025, Math.PI / 2, 0.9);
+      spike(c * 0.45, s * 0.012, Math.PI / 4, 0.6);
+      spike(c * 0.45, s * 0.012, -Math.PI / 4, 0.6);
+      break;
+    }
+    case 'trail': {
+      // 칼날 궤적: 바깥 테가 날카롭고 안쪽으로 번지는 초승달 띠
+      ctx.translate(c, c);
+      for (let i = 0; i < 18; i++) {
+        const k = i / 17;
+        ctx.globalAlpha = Math.pow(1 - k, 1.6) * 0.9;
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = s * (0.012 + 0.05 * (1 - k));
+        ctx.beginPath();
+        ctx.arc(0, 0, c * (0.82 - k * 0.22), -Math.PI * 0.85, -Math.PI * 0.15);
+        ctx.stroke();
+      }
+      break;
+    }
+    case 'bloom': {
+      // 축복의 꽃: 여섯 잎이 겹친 부드러운 문양(치유)
+      ctx.translate(c, c);
+      for (let i = 0; i < 6; i++) {
+        ctx.save();
+        ctx.rotate((i / 6) * Math.PI * 2);
+        const g = ctx.createRadialGradient(0, -c * 0.45, 0, 0, -c * 0.45, c * 0.42);
+        g.addColorStop(0, 'rgba(255,255,255,0.8)');
+        g.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.ellipse(0, -c * 0.45, c * 0.2, c * 0.42, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+      const core = ctx.createRadialGradient(0, 0, 0, 0, 0, c * 0.35);
+      core.addColorStop(0, 'rgba(255,255,255,1)');
+      core.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = core;
+      ctx.beginPath();
+      ctx.arc(0, 0, c * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+  }
+}
 
 const cache = new Map<string, THREE.Texture>();
 const loader = new THREE.TextureLoader();
@@ -46,6 +230,8 @@ export function fxTexture(name: FxName): THREE.Texture {
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, s, s);
     });
+  } else if ((DRAWN as readonly string[]).includes(name)) {
+    tex = canvasTexture(name === 'rune' || name === 'rune_hex' ? 512 : 256, (ctx, s) => drawFx(name as Drawn, ctx, s));
   } else {
     tex = loader.load(`${import.meta.env.BASE_URL}fx/${name}.png`);
     tex.colorSpace = THREE.SRGBColorSpace;
