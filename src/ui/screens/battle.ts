@@ -22,7 +22,7 @@ import { NUM, allyName, button, elBadge, elColor, highlight, hpBar, intentView, 
 
 /*
  * 전투 화면 v4: 라운드 계획 + 링크.
- * - 아래: 술사 탭(4명)과 고른 술사의 고정 스킬 4개. 스킬마다 지금 계획 뒤에 붙였을 때의 링크 예고가 붙는다.
+ * - 아래: 술사마다 이번 라운드 손패 2장(장착한 5장 중에서 뽑음). 카드마다 지금 계획 뒤에 붙였을 때의 링크 예고가 붙는다.
  * - 위 가운데: 체인 트랙. 앞 스킬이 넘긴 성속을 다음 스킬이 받으면 링크, 특정 조합이면 성좌 반응.
  * - 체력·상태는 캐릭터 발밑에. 캐릭터를 누르면 강조되고 오른쪽에 상세 정보가 뜬다.
  */
@@ -383,8 +383,8 @@ export function battleScreen(app: App): HTMLElement {
         h(
           'section',
           {},
-          h('h4', {}, '스킬 4개 · 매 라운드 2장을 뽑는다'),
-          unit.spells.map((id) => {
+          h('h4', {}, '장착 주문 5장 · 매 라운드 2장을 뽑는다'),
+          (ally.spells ?? unit.spells).map((id) => {
             const sp = spellById(id);
             const inHand = battle.hands[ally.uid]?.includes(id);
             return h(

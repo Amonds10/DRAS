@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { bestPlan } from '../../src/core/autoplan';
 import { executeRound } from '../../src/core/battle';
-import { chooseReward, clearRun, finishBattle, loadRun, newRun, saveRun, startBattle, type KeyValueStore } from '../../src/core/run';
+import { chooseReward, clearRun, finishBattle, loadRun, newRun, saveRun, startBattle, validLoadout, type KeyValueStore } from '../../src/core/run';
 import { FLOORS } from '../../src/data/encounters';
+import { unitById } from '../../src/data/units';
 
 function memoryStore(): KeyValueStore {
   const m = new Map<string, string>();
@@ -19,6 +20,22 @@ describe('run', () => {
   it('rejects teams that are not exactly 4 distinct units', () => {
     expect(() => newRun(TEAM.slice(0, 3), 1)).toThrow();
     expect(() => newRun([...TEAM.slice(0, 3), TEAM[0]], 1)).toThrow();
+  });
+
+  it('equips a custom loadout and only draws from it', () => {
+    const loadout = ['sun_kindle', 'sun_oath', 'noon_verdict', 'corona_rite', 'solar_cleave'];
+    expect(validLoadout('solea', loadout)).toBe(true);
+    expect(validLoadout('solea', loadout.slice(0, 4))).toBe(false);
+    expect(validLoadout('solea', [...loadout.slice(0, 4), 'moon_veil'])).toBe(false);
+    expect(() => newRun(TEAM, 1, { solea: ['moon_veil'] })).toThrow();
+    const run = newRun(TEAM, 2, { solea: loadout });
+    expect(run.team[0].spells).toEqual(loadout);
+    expect(run.team[1].spells).toEqual(unitById('lune').spells);
+    const b = startBattle(run);
+    for (let i = 0; i < 4 && b.outcome === 'ongoing'; i++) {
+      for (const id of b.hands.a0 ?? []) expect(loadout).toContain(id);
+      executeRound(b, bestPlan(b));
+    }
   });
 
   it('moves map → battle → reward → map and carries HP over', () => {

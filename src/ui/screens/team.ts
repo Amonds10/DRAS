@@ -1,5 +1,5 @@
 import { randomSeed, Rng } from '../../core/rng';
-import { newRun } from '../../core/run';
+import { LOADOUT_SIZE, newRun, validLoadout } from '../../core/run';
 import { TEAM_SIZE, analyzeTeam } from '../../core/team';
 import type { UnitDef } from '../../core/types';
 import { DECKS, type DeckPreset } from '../../data/decks';
@@ -12,13 +12,20 @@ import { h } from '../dom';
 import { showHelp } from '../help';
 import { NUM, button, costPips, elBadge, elColor, highlight, reactionChip, spellFlow, spellText } from '../widgets';
 
-/** 스킬 한 칸: 유형, 이름, 받는→넘기는 성속, 성진, 쿨타임, 설명 */
-function skillLine(spellId: string): HTMLElement {
+/** 주문서 한 장: 유형, 이름, 받는→넘기는 성속, 성진, 설명. 누르면 장착하거나 뺀다. */
+function spellLine(spellId: string, equipped: boolean, locked: boolean, onToggle: () => void): HTMLElement {
   const sp = spellById(spellId);
   return h(
-    'div',
-    { class: 'spell-line kit-line' },
-    h('div', { class: 'spell-line-head' }, h('span', { class: 'kit-slot' }, TAG_NAMES[sp.tag]), h('span', { class: 'spell-name' }, sp.name), spellFlow(sp), costPips(sp.cost)),
+    'button',
+    {
+      type: 'button',
+      class: `spell-line kit-line equip ${equipped ? 'on' : ''}`,
+      style: { '--el': elColor(sp.output === 'echo' ? 'star' : sp.output) },
+      'aria-pressed': equipped ? 'true' : 'false',
+      disabled: !equipped && locked,
+      onclick: onToggle,
+    },
+    h('div', { class: 'spell-line-head' }, h('span', { class: 'equip-box', 'aria-hidden': 'true' }, equipped ? '✓' : ''), h('span', { class: 'kit-slot' }, TAG_NAMES[sp.tag]), h('span', { class: 'spell-name' }, sp.name), spellFlow(sp), costPips(sp.cost)),
     spellText(sp),
   );
 }
@@ -64,8 +71,8 @@ function statBar(label: string, value: number, max: number): HTMLElement {
   return h('div', { class: 'stat-bar' }, h('dt', {}, label), h('dd', {}, h('b', {}, value), h('span', { class: 'stat-track' }, h('i', { style: { width: `${Math.round((value / max) * 100)}%` } }))));
 }
 
-/** 상세: 능력치, 패시브, 고정 스킬 4개 */
-function unitDetail(unit: UnitDef, order: number, full: boolean, onToggle: () => void): HTMLElement {
+/** 상세: 능력치, 패시브, 주문서 9장 중 5장 장착 */
+function unitDetail(unit: UnitDef, order: number, full: boolean, onToggle: () => void, loadout: string[], onEquip: (spellId: string) => void): HTMLElement {
   const selected = order >= 0;
   const detail = h(
     'section',
@@ -86,16 +93,21 @@ function unitDetail(unit: UnitDef, order: number, full: boolean, onToggle: () =>
         button(selected ? `편성에서 빼기 (${order + 1}번)` : full ? '팀이 가득 찼습니다' : '편성에 넣기', onToggle, { variant: selected ? 'ghost' : 'primary', disabled: !selected && full, class: 'detail-toggle' }),
       ),
     ),
-    h('div', { class: 'unit-spells' }, h('p', { class: 'unit-spells-head' }, '스킬 4개 · 매 라운드 이 중 2장을 손패로 뽑습니다'), unit.spells.map(skillLine)),
+    h(
+      'div',
+      { class: 'unit-spells' },
+      h('p', { class: `unit-spells-head ${loadout.length === LOADOUT_SIZE ? '' : 'warn'}` }, h('b', {}, `주문서 · 장착 ${loadout.length} / ${LOADOUT_SIZE}`), h('small', {}, '매 라운드 장착한 주문 중 2장을 손패로 뽑습니다')),
+      unit.pool.map((id) => spellLine(id, loadout.includes(id), loadout.length >= LOADOUT_SIZE, () => onEquip(id))),
+    ),
   );
   detail.querySelector('.detail-fig')!.innerHTML = characterSvg(unit.id);
   return detail;
 }
 
 /** 팀 궁합: 이 팀이 만들 수 있는 최대 체인, 성좌 반응, 예시 순서 */
-function synergyPanel(selected: string[]): HTMLElement {
+function synergyPanel(selected: string[], loadouts: Record<string, string[]>): HTMLElement {
   if (selected.length === 0) return h('div', { class: 'synergy empty' }, h('p', {}, '술사를 고르면 이 팀이 만들 수 있는 링크와 성좌 반응을 보여줍니다.'));
-  const syn = analyzeTeam(selected);
+  const syn = analyzeTeam(selected, loadouts);
   return h(
     'div',
     { class: 'synergy' },
@@ -123,6 +135,8 @@ function synergyPanel(selected: string[]): HTMLElement {
 export function teamScreen(app: App): HTMLElement {
   let selected: string[] = [];
   let inspect = UNIT_LIST[0].id;
+  /** 술사별 장착 주문(기본 장착에서 시작) */
+  const loadouts: Record<string, string[]> = Object.fromEntries(UNIT_LIST.map((u) => [u.id, [...u.spells]]));
   let deckId: string | null = null;
   const root = h('main', { class: 'team-wrap' });
 
@@ -134,14 +148,24 @@ export function teamScreen(app: App): HTMLElement {
       render();
       root.querySelector<HTMLElement>(`[data-unit="${id}"]`)?.focus({ preventScroll: true });
     };
-    const detail = (id: string) => unitDetail(unitById(id), selected.indexOf(id), full, () => toggle(id));
+    const equip = (unitId: string, spellId: string) => {
+      const l = loadouts[unitId];
+      loadouts[unitId] = l.includes(spellId) ? l.filter((x) => x !== spellId) : l.length < LOADOUT_SIZE ? [...l, spellId] : l;
+      deckId = null;
+      inspect = unitId;
+      const y = window.scrollY;
+      render();
+      window.scrollTo(0, y);
+    };
+    const detail = (id: string) => unitDetail(unitById(id), selected.indexOf(id), full, () => toggle(id), loadouts[id], (sp) => equip(id, sp));
     const pickDeck = (d: DeckPreset) => {
       selected = [...d.team];
+      for (const [id, l] of Object.entries(d.loadout)) loadouts[id] = [...l];
       deckId = d.id;
       inspect = selected[0];
       render();
     };
-    const ready = full;
+    const ready = full && selected.every((id) => validLoadout(id, loadouts[id]));
     const peek = (id: string) => {
       if (inspect === id) return;
       inspect = id;
@@ -155,7 +179,7 @@ export function teamScreen(app: App): HTMLElement {
     };
     const start = () => {
       if (!ready) return;
-      app.run = newRun(selected, randomSeed());
+      app.run = newRun(selected, randomSeed(), Object.fromEntries(selected.map((id) => [id, loadouts[id]])));
       app.save();
       app.go('map');
     };
@@ -170,8 +194,8 @@ export function teamScreen(app: App): HTMLElement {
       ),
       h(
         'section',
-        { class: 'deck-strip', 'aria-label': '추천 팀' },
-        h('p', { class: 'deck-strip-head' }, h('span', {}, 'ARCHETYPES'), ' 추천 팀 · 고르면 4명이 한 번에 맞춰집니다'),
+        { class: 'deck-strip', 'aria-label': '추천 덱' },
+        h('p', { class: 'deck-strip-head' }, h('span', {}, 'ARCHETYPES'), ' 추천 덱 · 고르면 팀과 주문서가 한 번에 맞춰집니다'),
         h('div', { class: 'deck-row' }, DECKS.map((d) => deckCard(d, deckId === d.id, () => pickDeck(d)))),
       ),
       h(
@@ -206,7 +230,8 @@ export function teamScreen(app: App): HTMLElement {
               return h('li', { class: 'slot', style: { '--el': elColor(u.element) } }, h('span', { class: 'slot-num' }, NUM[i]), elBadge(u.element, 'sm'), h('span', {}, u.name), button('✕', () => toggle(id), { class: 'btn-icon btn-xs', title: '빼기' }));
             }),
           ),
-          synergyPanel(selected),
+          synergyPanel(selected, loadouts),
+          full && !ready ? h('p', { class: 'team-warn' }, '모든 술사가 주문 5장을 장착해야 출발할 수 있습니다.') : null,
           h('div', { class: 'team-actions' }, button('무작위 편성', randomize), button('여정 시작', start, { variant: 'primary', disabled: !ready })),
         ),
       ),

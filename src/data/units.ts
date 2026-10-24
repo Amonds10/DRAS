@@ -1,6 +1,6 @@
 import type { Role, UnitDef } from '../core/types';
 
-/** 술사 6명. 각자 고정 스킬 4개와 패시브를 가진다. */
+/** 술사 6명. 각자 주문서 9장(그중 5장 장착)과 패시브를 가진다. */
 const list: UnitDef[] = [
   {
     id: 'solea',
@@ -12,7 +12,8 @@ const list: UnitDef[] = [
     maxHp: 80,
     atk: 14,
     def: 5,
-    spells: ['dawn_thrust', 'stellar_core', 'flare_rush', 'supernova_lance'],
+    spells: ['dawn_thrust', 'stellar_core', 'flare_rush', 'supernova_lance', 'solar_cleave'],
+    pool: ['dawn_thrust', 'stellar_core', 'flare_rush', 'supernova_lance', 'solar_cleave', 'sun_kindle', 'sun_oath', 'noon_verdict', 'corona_rite'],
     passive: { name: '태양심장', desc: '화상 걸린 적을 때릴 때마다 태양핵 +1(최대 6). 태양핵은 초신성 창이 모두 태운다.' },
     stack: { id: 'solarCore', max: 6 },
   },
@@ -26,7 +27,8 @@ const list: UnitDef[] = [
     maxHp: 72,
     atk: 11,
     def: 4,
-    spells: ['crescent_edge', 'moon_veil', 'moon_brand', 'crescent_finale'],
+    spells: ['crescent_edge', 'moon_veil', 'moon_brand', 'crescent_finale', 'tidal_song'],
+    pool: ['crescent_edge', 'moon_veil', 'moon_brand', 'crescent_finale', 'tidal_song', 'fullmoon_ward', 'moon_halo_mark', 'lunar_attune', 'eclipse_veil'],
     passive: { name: '밀물', desc: '아군이 회복할 때마다 만조 +1(최대 10). 만조는 그믐의 종장이 모두 푼다.' },
     stack: { id: 'tide', max: 10 },
   },
@@ -40,7 +42,8 @@ const list: UnitDef[] = [
     maxHp: 70,
     atk: 11,
     def: 4,
-    spells: ['nebula_mist', 'star_tithe', 'amplify', 'primal_light'],
+    spells: ['nebula_mist', 'star_tithe', 'amplify', 'primal_light', 'interstellar_echo'],
+    pool: ['nebula_mist', 'star_tithe', 'amplify', 'primal_light', 'interstellar_echo', 'dust_storm', 'dust_brand', 'overflow', 'sunwell'],
     passive: { name: '증폭자', desc: '네비아가 거는 각인은 위력 +1. 공명파동으로 아군의 다음 시전을 강화한다.' },
   },
   {
@@ -53,7 +56,8 @@ const list: UnitDef[] = [
     maxHp: 64,
     atk: 15,
     def: 3,
-    spells: ['meteor_snipe', 'scatter_meteor', 'gatling_comet', 'final_star'],
+    spells: ['meteor_snipe', 'scatter_meteor', 'gatling_comet', 'final_star', 'piercing_shot'],
+    pool: ['meteor_snipe', 'scatter_meteor', 'gatling_comet', 'final_star', 'piercing_shot', 'tail_volley', 'orbital_strike', 'steady_aim', 'sunfire_round'],
     passive: { name: '사냥꾼의 눈', desc: '균열 걸린 적을 맞힐 때마다 조준 +1(최대 6). 조준 1당 벨라의 피해 +6%.' },
     stack: { id: 'aim', max: 6 },
   },
@@ -67,7 +71,8 @@ const list: UnitDef[] = [
     maxHp: 68,
     atk: 12,
     def: 4,
-    spells: ['siphon', 'void_touch', 'rot_seed', 'abyss_feast'],
+    spells: ['siphon', 'void_touch', 'rot_seed', 'abyss_feast', 'collapse'],
+    pool: ['siphon', 'void_touch', 'rot_seed', 'abyss_feast', 'collapse', 'event_horizon', 'retrograde', 'doom_echo', 'void_resonance'],
     passive: { name: '포식', desc: '적이 화상·잠식 피해를 받을 때마다 허기 +1(최대 10). 허기 1당 녹스의 피해 +5%.' },
     stack: { id: 'hunger', max: 10 },
   },
@@ -81,7 +86,8 @@ const list: UnitDef[] = [
     maxHp: 92,
     atk: 10,
     def: 7,
-    spells: ['bulwark_bash', 'constellation_echo', 'star_aegis', 'star_judgement'],
+    spells: ['bulwark_bash', 'constellation_echo', 'star_aegis', 'star_judgement', 'galaxy_ward'],
+    pool: ['bulwark_bash', 'constellation_echo', 'star_aegis', 'star_judgement', 'galaxy_ward', 'taunt_star', 'counter_stance', 'guiding_star', 'constellation_mark'],
     passive: { name: '불굴', desc: '보호막을 얻거나 공격받을 때마다 불굴 +1(최대 8). 반격 피해 +불굴×2.' },
     stack: { id: 'fortitude', max: 8 },
   },

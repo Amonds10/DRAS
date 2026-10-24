@@ -1,39 +1,46 @@
 /* ───────── 토큰 ───────── */
 :root {
-  /* 읽히는 어두운 화면: 거의 검정 바탕, 밝기 단계로만 나뉘는 불투명 판, 흰 글씨. 색은 데이터(성속·체력·링크)에만. */
-  --bg: #0b0b0c;
-  --panel: #141415;
-  --panel-solid: #141415;
-  --panel-2: #1f1f21;
-  --raised: #2a2a2d;
-  --line: rgba(255, 255, 255, 0.1);
-  --line-strong: rgba(255, 255, 255, 0.22);
-  --text: #ffffff;
-  --muted: #c4c4c8;
-  --dim: #9a9aa0;
-  --accent: #f2c14e;
-  --accent-bright: #ffd36b;
-  --accent-ink: #111111;
-  --info: #8cc8ff;
-  --danger: #ff6b6b;
-  --violet: #b9a8ff;
-  --night: #141415;
-  --night-solid: #141415;
-  --gold: #f2c14e;
-  --gold-dim: rgba(242, 193, 78, 0.55);
-  --gold-faint: rgba(242, 193, 78, 0.18);
-  --paper: #1f1f21;
-  --ink: #ffffff;
-  --ink-muted: #c4c4c8;
-  --heal: #7ee08a;
-  --shield: #8cc8ff;
+  /* 밝은 판타지 카드: 양피지 바탕, 크림색 카드, 짙은 갈색 글씨. 성속 색은 카드 띠와 기호에. */
+  --bg: #e9dcc0;
+  --paper-bg: #efe4cb;
+  --panel: #fbf5e6;
+  --panel-solid: #fbf5e6;
+  --panel-2: #f1e5ca;
+  --raised: #e6d6b4;
+  --card: #fffaee;
+  --frame: #cdb684;
+  --frame-strong: #a88a52;
+  --line: rgba(74, 47, 26, 0.16);
+  --line-strong: rgba(74, 47, 26, 0.32);
+  --text: #3a2614;
+  --muted: #6e5538;
+  --dim: #94795a;
+  --accent: #9c6a12;
+  --accent-bright: #e8b443;
+  --accent-ink: #3a2614;
+  --hi-bg: #4a2f1a;
+  --hi-ink: #fff4dc;
+  --info: #2f6aa3;
+  --danger: #b5372c;
+  --violet: #6b4fb8;
+  --night: #fbf5e6;
+  --night-solid: #fbf5e6;
+  --gold: #9c6a12;
+  --gold-fill: #e8b443;
+  --gold-dim: rgba(156, 106, 18, 0.55);
+  --gold-faint: rgba(156, 106, 18, 0.16);
+  --paper: #f1e5ca;
+  --ink: #3a2614;
+  --ink-muted: #6e5538;
+  --heal: #3f9a52;
+  --shield: #3577b3;
   --cut: 0px;
   --radius: 14px;
   --font-ui: 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
-  --font-serif: 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
-  --font-num: 'Inter', 'Noto Sans KR', system-ui, sans-serif;
-  --font-latin: 'Inter', 'Noto Sans KR', system-ui, sans-serif;
-  color-scheme: dark;
+  --font-serif: 'Noto Serif KR', 'Noto Sans KR', serif;
+  --font-num: 'Noto Sans KR', 'Apple SD Gothic Neo', system-ui, sans-serif;
+  --font-latin: 'Noto Serif KR', 'Noto Sans KR', serif;
+  color-scheme: light;
 }
 
 *,
@@ -362,7 +369,7 @@ p {
 
 /* 약화: 붉은 바탕, ▼ */
 .status.debuff {
-  color: #ffd2cc;
+  color: var(--ink);
   background: rgba(200, 50, 44, 0.42);
   border-color: rgba(255, 110, 96, 0.75);
 }
@@ -373,17 +380,17 @@ p {
 
 /* 강화: 초록 바탕, ▲ */
 .status.buff {
-  color: #d9ffe4;
+  color: var(--ink);
   background: rgba(46, 150, 90, 0.42);
   border-color: rgba(127, 230, 160, 0.75);
 }
 
 .status.buff .st-dir {
-  color: #8dffb0;
+  color: var(--ink);
 }
 
 .status.shield-chip {
-  color: #dff2ff;
+  color: var(--ink);
   background: rgba(60, 120, 180, 0.45);
   border-color: rgba(142, 197, 224, 0.8);
 }
@@ -474,7 +481,7 @@ p {
 }
 
 .title-tag {
-  color: #c9cad0;
+  color: var(--muted);
   font-size: 15px;
   padding-left: 12px;
   border-left: 3px solid var(--accent);
@@ -540,7 +547,7 @@ p {
 
 .menu-item-sub b {
   font-size: 14px;
-  color: #c9cad0;
+  color: var(--muted);
 }
 
 .menu-item-sub small {
@@ -608,7 +615,7 @@ p {
   display: grid;
   gap: 3px;
   font-size: 13px;
-  color: #cfd0d5;
+  color: var(--muted);
 }
 
 .help section + section {
@@ -625,7 +632,7 @@ p {
 
 .help p,
 .help li {
-  color: #d3d4d9;
+  color: var(--muted);
   font-size: 14px;
 }
 
@@ -985,7 +992,7 @@ p {
 
 .unit-concept {
   font-size: 13px;
-  color: #bfc1c8;
+  color: var(--muted);
 }
 
 .detail-stats {
@@ -1741,7 +1748,7 @@ button.spell-line.equip:disabled {
 
 .trait {
   font-size: 10px;
-  color: #ffb1a8;
+  color: var(--muted);
   max-width: 220px;
   white-space: normal;
 }
@@ -1870,7 +1877,7 @@ button.spell-line.equip:disabled {
 }
 
 .intent-charge b {
-  color: #ff9a4a;
+  color: var(--muted);
   letter-spacing: 1px;
 }
 
@@ -1925,7 +1932,7 @@ button.spell-line.equip:disabled {
 
 .plaque-sub {
   font-size: 12px;
-  color: #d9dade;
+  color: var(--ink);
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
 }
 
@@ -2983,12 +2990,12 @@ button.spell-line.equip:disabled {
 }
 
 .hp-forecast {
-  color: #ffd0cc;
+  color: var(--ink);
   font-weight: 700;
 }
 
 .ally .hp-forecast {
-  color: #ff9a92;
+  color: var(--muted);
 }
 
 .hp-forecast.kill {
@@ -3167,7 +3174,7 @@ button.spell-line.equip:disabled {
 
 .banner span {
   font-size: 13px;
-  color: #d3d4d9;
+  color: var(--muted);
 }
 
 .reaction-banner b {
@@ -3188,7 +3195,7 @@ button.spell-line.equip:disabled {
 
 .phase-banner b {
   font-size: 30px;
-  color: #ffb1a8;
+  color: var(--muted);
 }
 
 .phase-banner small {
@@ -4242,7 +4249,7 @@ button.spell-line.equip:disabled {
   font-size: clamp(22px, 3.2vw, 32px);
   font-weight: 900;
   line-height: 1.1;
-  color: #fffdf0;
+  color: var(--ink);
   text-shadow: 0 0 16px color-mix(in srgb, var(--el) 70%, transparent);
 }
 
@@ -4368,7 +4375,7 @@ button.spell-line.equip:disabled {
 
 .ar-item.active {
   opacity: 1;
-  color: #fffdf0;
+  color: var(--ink);
   font-weight: 700;
   transform: translateX(10px);
   border-left: 3px solid var(--el);
@@ -4381,7 +4388,7 @@ button.spell-line.equip:disabled {
 }
 
 .ar-item.done .ar-state {
-  color: #8dffb0;
+  color: var(--ink);
 }
 
 .ar-item.fail {
@@ -4441,7 +4448,7 @@ button.spell-line.equip:disabled {
 
 /* 이번 턴 요약 */
 .turn-summary b {
-  color: #fffdf0;
+  color: var(--ink);
 }
 
 .turn-summary small {
@@ -4653,7 +4660,7 @@ button.spell-line.equip:disabled {
   padding: 8px 10px 9px;
   font-size: 12px;
   line-height: 1.55;
-  color: #ece6da;
+  color: var(--ink);
   text-align: left;
   white-space: normal;
   background: rgba(6, 5, 4, 0.9);
@@ -4663,7 +4670,7 @@ button.spell-line.equip:disabled {
 .sd-intro {
   margin: 0 0 4px;
   font-size: 11.5px;
-  color: #b9b1a3;
+  color: var(--muted);
   font-style: italic;
 }
 
@@ -4688,7 +4695,7 @@ button.spell-line.equip:disabled {
   margin-top: 3px;
   padding-top: 4px;
   border-top: 1px dashed rgba(255, 253, 233, 0.14);
-  color: #fffde9;
+  color: var(--ink);
 }
 
 .sd-stages {
@@ -4715,7 +4722,7 @@ button.spell-line.equip:disabled {
   font-family: var(--font-serif);
   font-size: 11px;
   font-weight: 700;
-  color: #fffde9;
+  color: var(--ink);
   border: 1.5px solid rgba(255, 253, 233, 0.75);
   border-radius: 50%;
 }
@@ -4728,22 +4735,22 @@ button.spell-line.equip:disabled {
 
 .sd-pow b {
   font-weight: 700;
-  color: #fffde9;
+  color: var(--ink);
 }
 
 .sd-pow .sd-tag {
   margin-left: 4px;
 }
 
-.hl-num { color: #fffde9; font-weight: 700; }
+.hl-num { color: var(--ink); font-weight: 700; }
 .hl-kw, .hl-stack { font-weight: 700; }
 .hl-burn { color: #ff7d45; }
-.hl-rupture { color: #74dcec; }
-.hl-erosion { color: #b98bff; }
-.hl-tremor { color: #f0cb5c; }
-.hl-moonshade { color: #b3c8ff; }
-.hl-stack { color: #f4cf72; }
-.hl-wave { color: #8fe3d0; }
+.hl-rupture { color: var(--muted); }
+.hl-erosion { color: var(--muted); }
+.hl-tremor { color: var(--muted); }
+.hl-moonshade { color: var(--muted); }
+.hl-stack { color: var(--muted); }
+.hl-wave { color: var(--muted); }
 
 .peek {
   width: 380px;
@@ -4786,7 +4793,7 @@ button.spell-line.equip:disabled {
   font-style: normal;
   font-size: 11px;
   font-weight: 700;
-  color: rgba(255, 253, 233, 0.55);
+  color: var(--muted);
   border: 1.5px solid rgba(255, 253, 233, 0.3);
   border-radius: 50%;
   transition: background 0.15s, color 0.15s, transform 0.15s, border-color 0.15s;
@@ -4802,7 +4809,7 @@ button.spell-line.equip:disabled {
 
 .sp-st.done,
 .sp-st.hit:not(.now) {
-  color: #fffde9;
+  color: var(--ink);
   border-color: var(--el);
   background: color-mix(in srgb, var(--el) 35%, transparent);
 }
@@ -4890,7 +4897,7 @@ button.spell-line.equip:disabled {
   gap: 2px;
   padding: 7px 12px;
   font-size: 12px;
-  color: #ece6da;
+  color: var(--ink);
   background: rgba(6, 5, 4, 0.9);
   border-left: 3px solid var(--el);
   animation: plate-in 0.28s cubic-bezier(0.2, 1, 0.3, 1) both;
@@ -4910,7 +4917,7 @@ button.spell-line.equip:disabled {
   font-size: 14px;
 }
 
-.trigger-card.t-start b { color: #7fd68a; }
+.trigger-card.t-start b { color: var(--muted); }
 .trigger-card.t-kill b { color: #ff6f6a; }
 
 .tc-lines {
@@ -4919,7 +4926,7 @@ button.spell-line.equip:disabled {
 }
 
 .start-banner b {
-  color: #7fd68a;
+  color: var(--muted);
 }
 
 @media (max-width: 600px) {
@@ -5081,7 +5088,7 @@ button.spell-line.equip:disabled {
   font-family: var(--font-num);
   font-size: 10px;
   letter-spacing: 0.2em;
-  color: #ffd27a;
+  color: var(--muted);
 }
 
 .bx-stack {
@@ -5111,7 +5118,7 @@ button.spell-line.equip:disabled {
 }
 
 .bx-stack.ready span:first-child {
-  color: #fff2c2;
+  color: var(--ink);
   font-weight: 700;
 }
 
@@ -5204,7 +5211,7 @@ button.spell-line.equip:disabled {
   display: grid;
   place-items: center;
   font-size: 22px;
-  color: #ff8d7e;
+  color: var(--muted);
 }
 
 .bx-line-face svg {
@@ -5246,7 +5253,7 @@ button.spell-line.equip:disabled {
   display: grid;
   gap: 10px;
   font-size: 12.5px;
-  color: #ece6da;
+  color: var(--ink);
   background: rgba(7, 7, 9, 0.94);
   border-left: 3px solid var(--el);
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6);
@@ -5307,7 +5314,7 @@ button.spell-line.equip:disabled {
 
 .bx-info header p {
   margin: 0;
-  color: #b9b1a3;
+  color: var(--muted);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -5368,20 +5375,20 @@ button.spell-line.equip:disabled {
 }
 
 .bx-status-list li.buff b {
-  color: #9be8a6;
+  color: var(--muted);
 }
 
 .bx-status-list li.debuff b {
-  color: #ff9a92;
+  color: var(--muted);
 }
 
 .bx-status-list small {
-  color: #ece6da;
+  color: var(--ink);
   font-weight: 500;
 }
 
 .bx-status-list span {
-  color: #b9b1a3;
+  color: var(--muted);
   font-size: 11.5px;
 }
 
@@ -5428,11 +5435,11 @@ button.spell-line.equip:disabled {
 .ab-desc {
   margin: 3px 0 0;
   line-height: 1.6;
-  color: #ddd6c9;
+  color: var(--muted);
 }
 
 .ab-desc .hl-num {
-  color: #fff;
+  color: var(--ink);
   font-weight: 700;
 }
 
@@ -5491,7 +5498,7 @@ button.spell-line.equip:disabled {
   font-size: 10px;
   padding: 0 4px;
   background: rgba(0, 0, 0, 0.8);
-  color: #ddd;
+  color: var(--ink);
 }
 
 .bx-ult small {
@@ -5559,7 +5566,7 @@ button.spell-line.equip:disabled {
 .bx-act.idle small {
   justify-self: end;
   font-size: 12px;
-  color: #b9b1a3;
+  color: var(--muted);
 }
 
 .bx-card {
@@ -5590,7 +5597,7 @@ button.spell-line.equip:disabled {
 .bx-card-target {
   margin-left: auto;
   font-size: 12px;
-  color: #ff9a8e;
+  color: var(--muted);
 }
 
 .bx-card .ab-desc {
@@ -5600,7 +5607,7 @@ button.spell-line.equip:disabled {
 .bx-card-err {
   margin: 4px 0 0;
   font-size: 12px;
-  color: #ff8a80;
+  color: var(--muted);
 }
 
 .bx-act-row {
@@ -5620,7 +5627,7 @@ button.spell-line.equip:disabled {
 
 .bx-sp small {
   font-size: 10px;
-  color: #b9b1a3;
+  color: var(--muted);
 }
 
 .bx-sp span {
@@ -5648,7 +5655,7 @@ button.spell-line.equip:disabled {
   display: grid;
   gap: 1px;
   text-align: left;
-  color: #ece6da;
+  color: var(--ink);
   cursor: pointer;
   background: rgba(10, 10, 13, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -5662,7 +5669,7 @@ button.spell-line.equip:disabled {
 
 .bx-slot small {
   font-size: 10.5px;
-  color: #a39b8e;
+  color: var(--muted);
 }
 
 .bx-slot kbd {
@@ -6052,7 +6059,7 @@ button.spell-line.equip:disabled {
   align-items: center;
   padding: 4px 8px 4px 4px;
   text-align: left;
-  color: #ece6da;
+  color: var(--ink);
   cursor: pointer;
   background: rgba(10, 10, 13, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.16);
@@ -6097,7 +6104,7 @@ button.spell-line.equip:disabled {
 
 .ct-text small {
   font-size: 10.5px;
-  color: #a39b8e;
+  color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -6126,7 +6133,7 @@ button.spell-line.equip:disabled {
   align-content: start;
   gap: 3px;
   text-align: left;
-  color: #ece6da;
+  color: var(--ink);
   cursor: pointer;
   background: rgba(10, 10, 13, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.18);
@@ -6218,17 +6225,17 @@ button.spell-line.equip:disabled {
 }
 
 .cs-hint.break {
-  color: #ffb4ad;
+  color: var(--muted);
   border: 1px solid rgba(255, 110, 96, 0.7);
 }
 
 .cs-hint.start {
-  color: #cfc8bb;
+  color: var(--muted);
   border: 1px solid rgba(255, 255, 255, 0.25);
 }
 
 .cs-cd {
-  color: #9fb4d6;
+  color: var(--muted);
   border: 1px dashed rgba(159, 180, 214, 0.6);
 }
 
@@ -6263,7 +6270,7 @@ button.spell-line.equip:disabled {
 
 .cmd-dust small {
   font-size: 10px;
-  color: #a39b8e;
+  color: var(--muted);
 }
 
 .cmd-dust span {
@@ -6326,7 +6333,7 @@ button.spell-line.equip:disabled {
 
 .cmd-cast.pass {
   background: rgba(255, 255, 255, 0.18);
-  color: #ece6da;
+  color: var(--ink);
 }
 
 .cmd-cast.full {

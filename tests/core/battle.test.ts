@@ -13,9 +13,9 @@ function battle(enemies: string[], seed = 1, mods: Partial<BattleMods> = {}, tea
   return createBattle(newRun(team, seed).team, enemies, { ...DEFAULT_MODS, startStardust: 10, ...mods }, seed);
 }
 
-/** 테스트용: 술사의 스킬 4개를 모두 손패로 쥐여 준다 */
+/** 테스트용: 술사의 주문서 9장을 모두 손패로 쥐여 준다 */
 function fullHands(b: BattleState): BattleState {
-  for (const a of b.allies) b.hands[a.uid] = [...unitById(a.defId).spells];
+  for (const a of b.allies) b.hands[a.uid] = [...unitById(a.defId).pool];
   return b;
 }
 
@@ -30,20 +30,23 @@ function dmgAfterCast(events: BattleEvent[], spellId: string): number {
 }
 
 describe('card hands', () => {
-  it('every caster has exactly four skills that all exist', () => {
+  it('every caster has a nine-spell grimoire with five equipped by default', () => {
     for (const u of UNIT_LIST) {
-      expect(u.spells).toHaveLength(4);
-      for (const id of u.spells) expect(SPELLS[id], id).toBeDefined();
+      expect(u.pool).toHaveLength(9);
+      expect(new Set(u.pool).size).toBe(9);
+      expect(u.spells).toHaveLength(5);
+      for (const id of u.spells) expect(u.pool).toContain(id);
+      for (const id of u.pool) expect(SPELLS[id], id).toBeDefined();
     }
   });
 
-  it('draws two of each caster\'s four skills and redraws every round', () => {
+  it('draws two of each caster\'s five equipped spells and redraws every round', () => {
     const b = battle(['fallen_keeper'], 4);
     const seen = new Set<string>();
     for (let r = 0; r < 6 && b.outcome === 'ongoing'; r++) {
       for (const a of b.allies) {
         expect(b.hands[a.uid]).toHaveLength(HAND_SIZE);
-        for (const id of b.hands[a.uid]) expect(unitById(a.defId).spells).toContain(id);
+        for (const id of b.hands[a.uid]) expect(a.spells).toContain(id);
       }
       seen.add(b.hands.a0.join());
       executeRound(b, []);
@@ -178,8 +181,8 @@ describe('skill text', () => {
     }
   });
 
-  it('every skill is used by exactly one caster', () => {
-    const used = UNIT_LIST.flatMap((u) => u.spells);
+  it('every spell is in exactly one caster\'s grimoire', () => {
+    const used = UNIT_LIST.flatMap((u) => u.pool);
     expect(new Set(used).size).toBe(used.length);
     expect(used.sort()).toEqual(Object.keys(SPELLS).sort());
   });

@@ -127,13 +127,13 @@ function withRng<T>(state: BattleState, fn: (rng: Rng) => T): T {
 
 export const HAND_SIZE = 2;
 
-/** 살아 있는 술사마다 스킬 4개 중 2장을 손패로 뽑는다. */
+/** 살아 있는 술사마다 장착한 주문 5장 중 2장을 손패로 뽑는다. */
 export function drawHands(state: BattleState): void {
   withRng(state, (rng) => {
     state.hands = {};
     for (const a of state.allies) {
       if (!isAlive(a)) continue;
-      state.hands[a.uid] = rng.shuffle(unitById(a.defId).spells).slice(0, HAND_SIZE);
+      state.hands[a.uid] = rng.shuffle(a.spells ?? unitById(a.defId).spells).slice(0, HAND_SIZE);
     }
   });
 }

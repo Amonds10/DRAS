@@ -6,7 +6,7 @@ import { Rng } from './rng';
 import { TEAM_SIZE } from './team';
 import type { Ally, BattleMods, BattleState } from './types';
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 export const REVIVE_RATIO = 0.25;
 export const POST_BATTLE_HEAL = 0.1;
 
@@ -26,12 +26,22 @@ export interface RunState {
   stats: { battlesWon: number; maxChain: number; reactions: number; fullChains: number; rounds: number };
 }
 
-export function newRun(unitIds: string[], seed: number): RunState {
+/** 장착 주문 검사: 술사의 주문서 안에서 서로 다른 5장 */
+export const LOADOUT_SIZE = 5;
+
+export function validLoadout(unitId: string, spells: string[]): boolean {
+  const pool = unitById(unitId).pool;
+  return spells.length === LOADOUT_SIZE && new Set(spells).size === LOADOUT_SIZE && spells.every((s) => pool.includes(s));
+}
+
+export function newRun(unitIds: string[], seed: number, loadouts: Record<string, string[]> = {}): RunState {
   if (unitIds.length !== TEAM_SIZE) throw new Error(`팀은 ${TEAM_SIZE}명이어야 합니다.`);
   if (new Set(unitIds).size !== unitIds.length) throw new Error('같은 술사를 두 번 편성할 수 없습니다.');
   const team: Ally[] = unitIds.map((id, i) => {
     const def = unitById(id);
-    return { uid: `a${i}`, defId: id, hp: def.maxHp, maxHp: def.maxHp, atk: def.atk, def: def.def, shield: 0, statuses: [] };
+    const chosen = loadouts[id];
+    if (chosen && !validLoadout(id, chosen)) throw new Error(`${def.name}의 장착 주문이 올바르지 않습니다.`);
+    return { uid: `a${i}`, defId: id, hp: def.maxHp, maxHp: def.maxHp, atk: def.atk, def: def.def, shield: 0, statuses: [], spells: [...(chosen ?? def.spells)] };
   });
   return {
     version: SAVE_VERSION,

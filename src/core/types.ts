@@ -227,8 +227,10 @@ export interface UnitDef {
   maxHp: number;
   atk: number;
   def: number;
-  /** 술사의 스킬 4개. 매 라운드 이 중 2장을 손패로 뽑는다. */
+  /** 기본 장착 주문 5장(매 라운드 이 중 2장을 손패로 뽑는다) */
   spells: string[];
+  /** 주문서 전체 9장(장착 후보). 기본 장착 5장을 포함한다. */
+  pool: string[];
   /** 고유 패시브(전투 중 늘 켜져 있다) */
   passive: { name: string; desc: string };
   /** 이 술사가 쌓는 고유 중첩(게이지로 보여 준다) */
@@ -279,6 +281,8 @@ export interface Ally {
   def: number;
   shield: number;
   statuses: Status[];
+  /** 장착한 주문 5장. 없으면 술사 기본 장착을 쓴다. */
+  spells?: string[];
 }
 
 export interface Enemy {

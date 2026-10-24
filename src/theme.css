@@ -1,7 +1,7 @@
 /*
- * 화면 테마(v5). styles.css 뒤에 불러와 예전 장식(깎인 모서리, 금선, 반투명 판, 자간 넓힌 대문자, 명조)을 걷어낸다.
- * 원칙: 거의 검정 바탕 위 불투명 판을 밝기 단계로만 나눈다. 본문은 흰색, 보조 글은 밝은 회색.
- * 색은 데이터(성속, 체력, 링크)에만 쓰고, 주요 버튼은 흰 바탕에 검정 글씨로 뒤집어 강조한다.
+ * 화면 테마(v6, 밝은 판타지 카드). styles.css 뒤에 불러와 예전 장식(깎인 모서리, 금선, 반투명 판, 자간 넓힌 대문자)을 걷어낸다.
+ * 원칙: 양피지 바탕 위 크림색 카드. 글씨는 짙은 갈색, 이름과 제목은 명조(Noto Serif KR), 본문은 고딕.
+ * 카드는 액자 테두리와 위쪽 성속 띠로 구분하고, 주요 버튼은 짙은 갈색 바탕에 크림 글씨로 강조한다.
  */
 
 /* ── 장식 걷어내기 ── */
@@ -49,31 +49,31 @@ h4 {
   padding: 8px 18px;
   font-size: 14px;
   font-weight: 700;
-  color: #fff;
-  background: #2a2a2d;
+  color: var(--ink);
+  background: var(--raised);
   border: none;
   border-radius: 999px;
 }
 
 .btn:hover:not(:disabled) {
-  color: #fff;
-  background: #38383c;
+  color: var(--ink);
+  background: #ddc9a0;
   border-color: transparent;
 }
 
 .btn-primary {
-  color: #111;
-  background: #fff;
+  color: var(--hi-ink);
+  background: var(--hi-bg);
 }
 
 .btn-primary:hover:not(:disabled) {
-  color: #111;
-  background: #e4e4e7;
+  color: var(--ink);
+  background: #5c3b22;
 }
 
 .btn-danger {
-  color: #fff;
-  background: #5a2224;
+  color: var(--ink);
+  background: var(--danger);
 }
 
 .btn-icon,
@@ -88,24 +88,24 @@ h4 {
   padding: 0 14px;
   font-family: var(--font-ui);
   font-size: 13px;
-  background: #1f1f21;
+  background: var(--panel-2);
 }
 
 :focus-visible {
-  outline: 2px solid #fff;
+  outline: 2px solid var(--ink);
   outline-offset: 2px;
 }
 
 .modal {
-  background: #141415;
+  background: var(--panel);
   border: none;
   border-radius: 18px;
 }
 
 .toast {
   font-size: 14px;
-  color: #111;
-  background: #fff;
+  color: var(--hi-ink);
+  background: var(--hi-bg);
   border: none;
   border-radius: 999px;
 }
@@ -114,7 +114,7 @@ h4 {
 .el-badge {
   border: none !important;
   border-radius: 50%;
-  color: #111 !important;
+  color: var(--ink) !important;
   background: var(--el) !important;
   font-weight: 700;
 }
@@ -132,27 +132,27 @@ h4 {
 .plaque-sub {
   font-size: 13px;
   color: var(--muted);
-  text-shadow: 0 1px 3px #000;
+  text-shadow: none;
 }
 
 .plaque b {
   font-family: var(--font-ui);
   font-size: 20px;
   font-weight: 900;
-  text-shadow: 0 1px 4px #000;
+  text-shadow: none;
 }
 
 .attune-chip {
   border: none !important;
   border-radius: 999px;
-  background: #1f1f21 !important;
+  background: var(--panel-2) !important;
 }
 
 /* 체인 트랙: 위 가운데, 불투명 막대 하나 */
 .hud-slot .chain-track {
   padding: 8px 14px;
   gap: 6px;
-  background: #141415;
+  background: var(--panel);
   border: none;
   border-radius: 999px;
 }
@@ -162,13 +162,13 @@ h4 {
   height: 40px;
   border: none;
   border-radius: 50%;
-  background: #2a2a2d;
+  background: var(--raised);
   transform: none !important;
 }
 
 .chain-track .q-slot.cn:not(.empty) {
   background: var(--el);
-  color: #111;
+  color: var(--ink);
 }
 
 .chain-track .q-slot.empty i {
@@ -179,12 +179,12 @@ h4 {
 }
 
 .chain-track .q-slot.next {
-  outline: 2px dashed #6b6b70;
+  outline: 2px dashed var(--frame-strong);
   outline-offset: -2px;
 }
 
 .chain-track .q-slot.active {
-  outline: 3px solid #fff;
+  outline: 3px solid var(--ink);
 }
 
 .chain-track .cn-glyph {
@@ -195,7 +195,7 @@ h4 {
 
 .chain-track .cn-name {
   font-size: 12px;
-  color: #fff;
+  color: var(--ink);
 }
 
 .chain-track .cn-link {
@@ -203,7 +203,7 @@ h4 {
   height: 4px;
   border: none;
   border-radius: 2px;
-  background: #2a2a2d;
+  background: var(--raised);
 }
 
 .chain-track .cn-link span {
@@ -222,19 +222,19 @@ h4 {
 }
 
 .chain-track .cn-link.react {
-  background: #fff;
+  background: var(--hi-bg);
 }
 
 .chain-track .cn-link.react span {
-  color: #fff;
+  color: var(--ink);
 }
 
 .chain-track .cn-link.broken {
-  background: #6e2a2c;
+  background: #d9a39b;
 }
 
 .chain-track .cn-link.broken span {
-  color: #ff8f8a;
+  color: var(--danger);
 }
 
 .cn-next small {
@@ -247,7 +247,7 @@ h4 {
 .bx-foot {
   padding: 6px 8px 7px;
   gap: 4px;
-  background: #141415;
+  background: var(--panel);
   border: none;
   border-radius: 10px;
   box-shadow: none;
@@ -274,8 +274,8 @@ h4 {
   font-family: var(--font-ui);
   font-size: 11px;
   padding: 0 6px;
-  color: #111;
-  background: #ff6b6b;
+  color: var(--ink);
+  background: var(--danger);
   border-radius: 999px;
 }
 
@@ -283,7 +283,7 @@ h4 {
   height: 6px;
   border: none !important;
   border-radius: 3px;
-  background: #2a2a2d !important;
+  background: var(--raised) !important;
 }
 
 .hp-fill {
@@ -294,7 +294,7 @@ h4 {
 .hp-num {
   font-family: var(--font-num);
   font-size: 12px;
-  color: #fff;
+  color: var(--ink);
 }
 
 .status {
@@ -305,18 +305,18 @@ h4 {
 }
 
 .status.buff {
-  color: #c9f5ce;
-  background: #1d3322;
+  color: #22592f;
+  background: #dcefd6;
 }
 
 .status.debuff {
-  color: #ffd0cc;
-  background: #3a1d1e;
+  color: #8a2a22;
+  background: #f6dad3;
 }
 
 .bx-stack {
   font-size: 11px;
-  color: #fff;
+  color: var(--ink);
 }
 
 .order-tag {
@@ -324,8 +324,8 @@ h4 {
   height: 26px;
   font-family: var(--font-num);
   font-size: 15px;
-  color: #111;
-  background: #fff;
+  color: var(--hi-ink);
+  background: var(--hi-bg);
   border-radius: 50%;
 }
 
@@ -334,18 +334,18 @@ h4 {
 }
 
 .bx .ally.queued .bx-foot {
-  outline: 2px solid #fff;
+  outline: 2px solid var(--ink);
 }
 
 .target-bracket i {
-  border-color: #ff6b6b !important;
+  border-color: var(--danger) !important;
 }
 
 .intent {
   font-family: var(--font-ui);
   border: none !important;
   border-radius: 999px;
-  background: #141415 !important;
+  background: var(--panel) !important;
   padding: 3px 10px !important;
 }
 
@@ -357,7 +357,7 @@ h4 {
 .bx-info {
   border-left: none;
   border-radius: 18px;
-  background: #141415;
+  background: var(--panel);
   box-shadow: none;
 }
 
@@ -368,23 +368,23 @@ h4 {
 
 .bx-stats div {
   border-radius: 8px;
-  background: #1f1f21;
+  background: var(--panel-2);
 }
 
 .bx-status-list li {
   border-left: none;
   border-radius: 8px;
-  background: #1f1f21;
+  background: var(--panel-2);
 }
 
 .bx-ab {
   border-left: none;
   border-radius: 10px;
-  background: #1f1f21;
+  background: var(--panel-2);
 }
 
 .bx-ab.in-hand {
-  background: #2a2a2d;
+  background: var(--raised);
 }
 
 .bx-ab-head small {
@@ -394,7 +394,7 @@ h4 {
 .ab-desc {
   font-size: 14px;
   line-height: 1.65;
-  color: #ececef;
+  color: var(--ink);
 }
 
 /* ── 카드 패(아래) ── */
@@ -425,11 +425,11 @@ h4 {
 }
 
 .desc5 {
-  --el: #fff;
+  --el: var(--frame-strong);
   justify-self: center;
   width: min(820px, 100%);
   padding: 12px 18px;
-  background: #141415;
+  background: var(--panel);
   border-radius: 14px;
 }
 
@@ -474,11 +474,11 @@ h4 {
 }
 
 .hand5 {
-  --el: #fff;
+  --el: var(--frame-strong);
   display: grid;
   gap: 6px;
   padding: 8px;
-  background: #141415;
+  background: var(--panel);
   border-radius: 14px;
 }
 
@@ -520,7 +520,7 @@ h4 {
 }
 
 .card5 {
-  --el: #fff;
+  --el: var(--frame-strong);
   position: relative;
   min-width: 0;
   min-height: 118px;
@@ -529,10 +529,10 @@ h4 {
   align-content: start;
   gap: 4px;
   text-align: left;
-  color: #fff;
+  color: var(--ink);
   font: inherit;
   cursor: pointer;
-  background: #232326;
+  background: var(--card);
   border: none;
   border-top: 4px solid var(--el);
   border-radius: 10px;
@@ -540,13 +540,13 @@ h4 {
 }
 
 .card5:hover:not(:disabled) {
-  background: #2e2e32;
+  background: #fff6df;
   transform: translateY(-4px);
 }
 
 .card5.on {
-  background: #fff;
-  color: #111;
+  background: var(--hi-bg);
+  color: var(--hi-ink);
   transform: translateY(-6px);
 }
 
@@ -569,7 +569,7 @@ h4 {
 }
 
 .card5.on .c5-cost {
-  color: #8a5b00;
+  color: var(--gold);
 }
 
 .c5-top kbd {
@@ -603,7 +603,7 @@ h4 {
 }
 
 .card5.on .c5-tag {
-  color: #444;
+  color: var(--muted);
 }
 
 .c5-hint {
@@ -616,28 +616,28 @@ h4 {
 }
 
 .c5-hint.link {
-  color: #111;
+  color: var(--ink);
   background: var(--gold);
 }
 
 .c5-hint.reaction {
-  color: #111;
-  background: #fff;
+  color: var(--hi-ink);
+  background: var(--hi-bg);
 }
 
 .card5.on .c5-hint.reaction {
-  color: #fff;
-  background: #111;
+  color: var(--ink);
+  background: var(--hi-bg);
 }
 
 .c5-hint.break {
-  color: #ffd0cc;
-  background: #4a1f21;
+  color: #8a2a22;
+  background: #f6dad3;
 }
 
 .c5-hint.start {
-  color: #d6d6da;
-  background: #333337;
+  color: var(--muted);
+  background: var(--raised);
 }
 
 .c5-order {
@@ -651,8 +651,8 @@ h4 {
   font-family: var(--font-num);
   font-size: 14px;
   font-weight: 700;
-  color: #fff;
-  background: #111;
+  color: var(--ink);
+  background: var(--hi-bg);
   border-radius: 50%;
 }
 
@@ -668,7 +668,7 @@ h4 {
   align-items: baseline;
   gap: 4px;
   padding: 8px 12px;
-  background: #141415;
+  background: var(--panel);
   border-radius: 14px;
 }
 
@@ -697,16 +697,16 @@ h4 {
   gap: 2px;
   padding: 10px;
   font: inherit;
-  color: #111;
+  color: var(--hi-ink);
   cursor: pointer;
-  background: #fff;
+  background: var(--hi-bg);
   border: none;
   border-radius: 999px;
   transition: background 0.15s, transform 0.12s;
 }
 
 .cast5:hover:not(:disabled) {
-  background: #e4e4e7;
+  background: #5c3b22;
 }
 
 .cast5:active {
@@ -720,12 +720,12 @@ h4 {
 
 .cast5 small {
   font-size: 12px;
-  color: #444;
+  color: var(--muted);
 }
 
 .cast5.pass {
-  color: #fff;
-  background: #2a2a2d;
+  color: var(--ink);
+  background: var(--raised);
 }
 
 .cast5.pass small {
@@ -738,7 +738,7 @@ h4 {
 
 /* ── 시전 이름표·배너 ── */
 .skill-plate {
-  background: #141415 !important;
+  background: var(--panel) !important;
   border: none !important;
   border-left: 6px solid var(--el) !important;
   border-radius: 14px;
@@ -774,7 +774,7 @@ h4 {
 }
 
 .banner {
-  background: #141415 !important;
+  background: var(--panel) !important;
   border: none !important;
   border-radius: 18px;
   box-shadow: none !important;
@@ -918,14 +918,14 @@ h4 {
 .menu-item {
   min-height: 56px;
   padding: 14px 20px;
-  background: #141415 !important;
+  background: var(--panel) !important;
   border: none !important;
   border-radius: 14px;
   transition: background 0.15s, transform 0.12s;
 }
 
 .menu-item:hover {
-  background: #232326 !important;
+  background: var(--card) !important;
   padding: 14px 20px !important;
 }
 
@@ -940,20 +940,20 @@ h4 {
 }
 
 .menu-item.primary {
-  background: #fff !important;
-  color: #111;
+  background: var(--hi-bg) !important;
+  color: var(--hi-ink);
 }
 
 .menu-item.primary b,
 .menu-item.primary small {
-  color: #111;
+  color: var(--ink);
 }
 
 .title-tag {
   border-left: none !important;
   padding-left: 0 !important;
   font-size: 17px;
-  color: #fff;
+  color: var(--ink);
 }
 
 .title-logo {
@@ -976,23 +976,23 @@ h4 {
 }
 
 .deck-card {
-  background: #141415 !important;
+  background: var(--panel) !important;
   border: none !important;
   border-radius: 14px;
   box-shadow: none !important;
 }
 
 .deck-card:hover {
-  background: #1f1f21 !important;
+  background: var(--panel-2) !important;
 }
 
 .deck-card.on {
-  background: #fff !important;
-  color: #111;
+  background: var(--hi-bg) !important;
+  color: var(--hi-ink);
 }
 
 .deck-card.on .deck-plan {
-  color: #333;
+  color: var(--muted);
 }
 
 .deck-card b {
@@ -1008,7 +1008,7 @@ h4 {
 .deck-units i {
   border: none !important;
   border-radius: 999px;
-  color: #111 !important;
+  color: var(--ink) !important;
   background: var(--el) !important;
   font-style: normal;
   padding: 1px 8px;
@@ -1017,17 +1017,17 @@ h4 {
 .roster-tile {
   border: none !important;
   border-radius: 14px;
-  background: #141415 !important;
+  background: var(--panel) !important;
   box-shadow: none !important;
 }
 
 .roster-tile.selected {
-  outline: 3px solid #fff;
+  outline: 3px solid var(--ink);
   outline-offset: -3px;
 }
 
 .roster-tile.inspecting {
-  background: #232326 !important;
+  background: var(--card) !important;
 }
 
 .tile-role {
@@ -1035,16 +1035,16 @@ h4 {
   font-size: 12px;
   border: none !important;
   border-radius: 999px;
-  background: #2a2a2d !important;
-  color: #fff !important;
+  background: var(--raised) !important;
+  color: var(--ink) !important;
 }
 
 .order-seal {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  color: #111 !important;
-  background: #fff !important;
+  color: var(--hi-ink) !important;
+  background: var(--hi-bg) !important;
   font-family: var(--font-num);
   transform: none !important;
 }
@@ -1055,7 +1055,7 @@ h4 {
 
 .unit-detail,
 .side-panel {
-  background: #141415 !important;
+  background: var(--panel) !important;
   border: none !important;
   border-top: none !important;
   border-radius: 18px;
@@ -1064,7 +1064,7 @@ h4 {
 .unit-passive {
   border-left: none !important;
   border-radius: 10px;
-  background: #1f1f21 !important;
+  background: var(--panel-2) !important;
 }
 
 .unit-passive b {
@@ -1076,7 +1076,7 @@ h4 {
   padding: 10px 12px;
   margin-bottom: 6px;
   border-radius: 12px;
-  background: #1f1f21;
+  background: var(--panel-2);
 }
 
 .spell-name {
@@ -1091,7 +1091,7 @@ h4 {
 .stat-track {
   height: 6px !important;
   border-radius: 3px;
-  background: #2a2a2d !important;
+  background: var(--raised) !important;
 }
 
 .stat-track i {
@@ -1102,18 +1102,18 @@ h4 {
   border: none !important;
   border-left: none !important;
   border-radius: 10px;
-  background: #1f1f21 !important;
+  background: var(--panel-2) !important;
 }
 
 .slot.empty {
-  background: #19191b !important;
+  background: var(--panel-2) !important;
   color: var(--dim);
 }
 
 .syn-stat {
   border: none !important;
   border-radius: 12px;
-  background: #1f1f21 !important;
+  background: var(--panel-2) !important;
 }
 
 .syn-value {
@@ -1132,23 +1132,23 @@ h4 {
 .mod-chip {
   border: none !important;
   border-radius: 999px;
-  background: #2a2a2d !important;
-  color: #fff;
+  background: var(--raised) !important;
+  color: var(--ink);
 }
 
 .squad-bar {
-  background: #141415 !important;
+  background: var(--panel) !important;
   border: none !important;
 }
 
 .squad-dot {
   border: none !important;
   border-radius: 999px;
-  background: #2a2a2d;
+  background: var(--raised);
 }
 
 .squad-dot.on {
-  color: #111;
+  color: var(--ink);
   background: var(--el);
 }
 
@@ -1156,14 +1156,14 @@ h4 {
 .map-side .panel,
 .reward-card,
 .result-card {
-  background: #141415 !important;
+  background: var(--panel) !important;
   border: none !important;
   border-radius: 18px;
   box-shadow: none !important;
 }
 
 .reward-card:hover {
-  background: #232326 !important;
+  background: var(--card) !important;
 }
 
 .map-label,
@@ -1174,7 +1174,7 @@ h4 {
 .party-line {
   border: none !important;
   border-radius: 10px;
-  background: #1f1f21;
+  background: var(--panel-2);
 }
 
 .help h3 {
@@ -1206,7 +1206,7 @@ h4 {
 }
 
 .map-board {
-  background: rgba(20, 20, 21, 0.92) !important;
+  background: var(--panel) !important;
   border: none !important;
   border-radius: 18px;
 }
@@ -1214,4 +1214,647 @@ h4 {
 .map-label b,
 .map-label {
   font-size: 13px;
+}
+
+/* ─────────────────────────────────────────────
+ * v6 밝은 판타지 카드: 위 규칙들 위에 덧씌운다.
+ * ───────────────────────────────────────────── */
+html,
+body {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+/* 메뉴 화면 뒤 3D 무대는 양피지 빛으로 덮어 희미하게만 비친다 */
+#bg::after {
+  background: rgba(236, 224, 196, 0.86) !important;
+}
+
+h1,
+h2,
+h3,
+.title-logo,
+.screen-title h1,
+.c5-name,
+.spell-name,
+.deck-card b,
+.sp-name,
+.banner b,
+.d5-head b,
+.menu-item b,
+.tile-foot b,
+.bx-info h3,
+.outcome-card h2,
+.reward-card b,
+.unit-detail h2 {
+  font-family: var(--font-serif) !important;
+  font-weight: 900;
+  color: var(--ink);
+}
+
+/* 카드 판: 크림색 바탕 + 액자 테두리 + 종이 두께 */
+.panel,
+.modal,
+.unit-detail,
+.side-panel,
+.deck-card,
+.reward-card,
+.result-card,
+.party-status,
+.map-side .panel,
+.map-board,
+.bx-info,
+.desc5,
+.hand5,
+.d5-dust,
+.banner,
+.skill-plate,
+.menu-item,
+.roster-tile,
+.squad-bar {
+  background: var(--panel) !important;
+  border: 2px solid var(--frame) !important;
+  box-shadow: 0 3px 0 rgba(74, 47, 26, 0.18) !important;
+  color: var(--ink);
+}
+
+.skill-plate {
+  border-left: 8px solid var(--el) !important;
+}
+
+.unit-passive,
+.bx-stats div,
+.bx-status-list li,
+.bx-ab,
+.slot,
+.syn-stat,
+.party-line,
+.spell-line {
+  background: var(--panel-2) !important;
+}
+
+.bx-ab.in-hand {
+  background: #fff1c4 !important;
+  box-shadow: inset 4px 0 0 var(--gold-fill);
+}
+
+.slot.empty {
+  background: transparent !important;
+  border: 2px dashed var(--frame) !important;
+}
+
+/* 버튼 */
+.btn {
+  color: var(--ink);
+  background: var(--panel-2);
+  border: 2px solid var(--frame);
+}
+
+.btn:hover:not(:disabled) {
+  color: var(--ink);
+  background: #fff3d2;
+  border-color: var(--frame-strong);
+}
+
+.btn-primary,
+.btn-primary:hover:not(:disabled) {
+  color: var(--hi-ink);
+  background: var(--hi-bg);
+  border-color: var(--hi-bg);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #5f3d22;
+}
+
+.btn-danger {
+  color: #fff4ef;
+  border-color: var(--danger);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+}
+
+.menu-item:hover {
+  background: #fff6dd !important;
+  border-color: var(--frame-strong) !important;
+}
+
+.menu-item.primary {
+  background: var(--hi-bg) !important;
+  border-color: var(--hi-bg) !important;
+}
+
+.menu-item.primary b,
+.menu-item.primary small {
+  color: var(--hi-ink) !important;
+}
+
+.title-tag,
+.title-foot {
+  color: var(--ink);
+}
+
+.title-logo {
+  color: var(--hi-bg);
+}
+
+/* 성속 기호: 색 원 + 갈색 테 */
+.el-badge,
+.flow-node {
+  color: var(--ink) !important;
+  box-shadow: inset 0 0 0 1.5px rgba(58, 38, 20, 0.38);
+}
+
+/* 전투 HUD 위쪽 */
+.plaque {
+  padding: 6px 14px !important;
+  background: var(--panel);
+  border: 2px solid var(--frame);
+  border-radius: 999px;
+}
+
+.plaque b,
+.plaque-sub {
+  color: var(--ink);
+}
+
+.attune-chip {
+  background: var(--panel) !important;
+  border: 2px solid var(--frame) !important;
+  color: var(--ink);
+}
+
+.hud-slot .chain-track {
+  background: var(--panel);
+  border: 2px solid var(--frame);
+  box-shadow: 0 3px 0 rgba(74, 47, 26, 0.18);
+}
+
+.chain-track .q-slot {
+  background: var(--panel-2);
+  box-shadow: inset 0 0 0 2px var(--frame);
+}
+
+.chain-track .q-slot.cn:not(.empty) {
+  box-shadow: inset 0 0 0 2px rgba(58, 38, 20, 0.4);
+}
+
+.chain-track .cn-name {
+  color: var(--ink);
+}
+
+.chain-track .cn-link {
+  background: var(--raised);
+}
+
+.chain-track .cn-link.ok {
+  background: var(--gold-fill);
+}
+
+.chain-track .cn-link.react span {
+  color: var(--hi-bg);
+}
+
+/* 캐릭터 발밑 정보판 */
+.bx-foot {
+  background: var(--panel) !important;
+  border: 2px solid var(--frame) !important;
+  color: var(--ink);
+}
+
+.bx .ally.queued .bx-foot {
+  outline: 3px solid var(--gold-fill);
+}
+
+.hp-track,
+.stat-track {
+  background: var(--raised) !important;
+}
+
+.hp-text,
+.hp-num,
+.bx-stack,
+.bx-name {
+  color: var(--ink);
+}
+
+.plate-target {
+  color: #fff4ef;
+}
+
+.order-tag,
+.order-seal,
+.c5-order {
+  color: var(--hi-ink) !important;
+  background: var(--hi-bg) !important;
+}
+
+.intent {
+  background: var(--panel) !important;
+  border: 2px solid var(--frame) !important;
+  color: var(--ink);
+}
+
+.ab-desc,
+.spell-desc,
+.deck-plan,
+.unit-concept {
+  color: var(--ink);
+}
+
+/* 카드 패: 실제 카드처럼, 위쪽 성속 띠와 성진 동전 */
+.card5 {
+  color: var(--ink);
+  background: var(--card);
+  border: 2px solid var(--frame);
+  border-top: 7px solid var(--el);
+  border-radius: 10px;
+  box-shadow: 0 3px 0 var(--frame);
+}
+
+.card5:hover:not(:disabled) {
+  background: #fffdf6;
+  border-color: var(--frame-strong);
+  border-top-color: var(--el);
+}
+
+.card5.on {
+  color: var(--ink);
+  background: #fff1c4;
+  border-color: var(--frame-strong);
+  border-top-color: var(--el);
+  box-shadow: 0 0 0 3px var(--gold-fill), 0 6px 0 var(--frame-strong);
+  transform: translateY(-8px);
+}
+
+.c5-cost,
+.card5.on .c5-cost {
+  display: inline-grid;
+  place-items: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  color: var(--ink);
+  background: var(--gold-fill);
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 2px rgba(58, 38, 20, 0.28);
+}
+
+.c5-tag,
+.card5.on .c5-tag {
+  color: var(--muted);
+}
+
+.c5-hint.link {
+  color: var(--ink);
+  background: var(--gold-fill);
+}
+
+.c5-hint.reaction,
+.card5.on .c5-hint.reaction {
+  color: var(--hi-ink);
+  background: var(--hi-bg);
+}
+
+.c5-hint.break {
+  color: #8a2a22;
+  background: #f6dad3;
+}
+
+.c5-hint.start {
+  color: var(--muted);
+  background: var(--panel-2);
+}
+
+.d5-dust b {
+  color: var(--gold);
+}
+
+.cast5 {
+  color: var(--hi-ink);
+  background: var(--hi-bg);
+  border: 2px solid var(--hi-bg);
+}
+
+.cast5:hover:not(:disabled) {
+  background: #5f3d22;
+}
+
+.cast5 small {
+  color: #ead7b3;
+}
+
+.cast5.pass {
+  color: var(--ink);
+  background: var(--panel);
+  border-color: var(--frame);
+}
+
+.cast5.pass small {
+  color: var(--muted);
+}
+
+.cast5.full {
+  color: var(--ink);
+  background: var(--gold-fill);
+  border-color: var(--frame-strong);
+}
+
+.cast5.full small {
+  color: var(--ink);
+}
+
+/* 편성 */
+.deck-card.on {
+  background: #fff1c4 !important;
+  border-color: var(--frame-strong) !important;
+  box-shadow: 0 0 0 3px var(--gold-fill) !important;
+  color: var(--ink);
+}
+
+.deck-card.on .deck-plan {
+  color: var(--ink);
+}
+
+.roster-tile.selected {
+  outline: 3px solid var(--gold-fill);
+  outline-offset: -1px;
+}
+
+.roster-tile.inspecting {
+  background: #fff6dd !important;
+  border-color: var(--frame-strong) !important;
+}
+
+.tile-fig {
+  background: var(--panel-2);
+  border-radius: 10px;
+}
+
+.tile-role {
+  color: var(--ink) !important;
+  background: var(--panel-2) !important;
+}
+
+.detail-fig {
+  background: var(--panel-2);
+  border-radius: 14px;
+}
+
+.unit-passive b {
+  color: var(--gold);
+}
+
+.unit-spells-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 8px 0 2px;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.unit-spells-head b {
+  font-family: var(--font-serif);
+  font-size: 16px;
+}
+
+.unit-spells-head small {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.unit-spells-head.warn b {
+  color: var(--danger);
+}
+
+/* 주문서: 9장 중 5장 장착 */
+button.spell-line.equip {
+  display: block;
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 10px 12px 10px 12px;
+  text-align: left;
+  font: inherit;
+  color: var(--ink);
+  background: var(--panel-2) !important;
+  border: 2px solid transparent !important;
+  border-left: 6px solid var(--raised) !important;
+  border-radius: 12px;
+  opacity: 0.72;
+  cursor: pointer;
+  transition: opacity 0.15s, background 0.15s, border-color 0.15s;
+}
+
+button.spell-line.equip:hover:not(:disabled) {
+  opacity: 1;
+  border-color: var(--frame) !important;
+  border-left-color: var(--el) !important;
+}
+
+button.spell-line.equip.on {
+  opacity: 1;
+  background: var(--card) !important;
+  border-color: var(--frame) !important;
+  border-left-color: var(--el) !important;
+  box-shadow: 0 2px 0 var(--frame);
+}
+
+button.spell-line.equip:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.equip-box {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--frame-strong);
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--ink);
+  background: var(--card);
+}
+
+.spell-line.on .equip-box {
+  background: var(--gold-fill);
+  border-color: var(--hi-bg);
+}
+
+.kit-slot {
+  color: var(--ink);
+  background: var(--raised);
+}
+
+.team-warn {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.reaction-chip,
+.profile-chip,
+.mod-chip,
+.squad-dot {
+  color: var(--ink);
+  background: var(--panel-2) !important;
+}
+
+.squad-dot.on {
+  color: var(--ink);
+  background: var(--el) !important;
+}
+
+.reward-card:hover {
+  background: #fff6dd !important;
+  border-color: var(--frame-strong) !important;
+}
+
+.status.buff {
+  color: #22592f;
+  background: #dcefd6;
+}
+
+.status.debuff {
+  color: #8a2a22;
+  background: #f6dad3;
+}
+
+:focus-visible {
+  outline: 3px solid var(--hi-bg);
+}
+
+/* 설명 속 강조: 밝은 바탕에서 읽히는 짙은 색 */
+.hl-num,
+.ab-desc .hl-num {
+  color: var(--hi-bg);
+  font-weight: 900;
+}
+
+.hl-burn { color: #c0461b; }
+.hl-rupture { color: #13788a; }
+.hl-erosion { color: #6a3fb8; }
+.hl-tremor { color: #946a00; }
+.hl-moonshade { color: #3c5aa6; }
+.hl-stack { color: #9c5a12; }
+.hl-wave { color: #1d7d68; }
+
+.title-logo {
+  text-shadow: none !important;
+}
+
+/* 체인 트랙 바깥으로 삐져나오는 이름·링크 표시는 작은 크림 꼬리표로 */
+.chain-track .cn-name,
+.chain-track .cn-link span {
+  padding: 0 7px;
+  background: var(--panel);
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1.5px var(--frame);
+}
+
+.chain-track .cn-link.broken span {
+  color: #8a2a22;
+  background: #f6dad3;
+}
+
+.chain-track .cn-link.ok span {
+  color: var(--ink);
+  background: var(--gold-fill);
+}
+
+.map-label {
+  text-shadow: none !important;
+  color: var(--ink);
+}
+
+.map-label small {
+  color: var(--muted);
+}
+
+@media (max-width: 760px) {
+  .hud-slot .chain-track {
+    top: 54px;
+    max-width: calc(100vw - 16px);
+    padding: 4px 10px;
+  }
+
+  .chain-track .q-slot {
+    width: 30px;
+    height: 30px;
+  }
+
+  .chain-track .cn-link {
+    min-width: 22px;
+  }
+
+  .chain-track .cn-next {
+    display: none;
+  }
+
+  .hud .attune-row {
+    top: 104px;
+  }
+
+  .plaque {
+    padding: 4px 10px !important;
+  }
+}
+
+/* 어두운 화면용으로 밝게 칠해 둔 색 강조를 밝은 바탕용으로 */
+.trait,
+.hp-forecast,
+.ally .hp-forecast,
+.phase-banner b,
+.bx-status-list li.debuff b,
+.bx-card-target,
+.bx-card-err,
+.cs-hint.break,
+.bx-line-face {
+  color: var(--danger);
+}
+
+.intent-charge b {
+  color: #b5561b;
+}
+
+.status.buff .st-dir,
+.ar-item.done .ar-state,
+.trigger-card.t-start b,
+.start-banner b,
+.bx-status-list li.buff b {
+  color: var(--heal);
+}
+
+.status.shield-chip,
+.cs-cd {
+  color: var(--shield);
+}
+
+.bx-tough b {
+  color: var(--gold);
+}
+
+.seal-banner {
+  color: #8a2a22;
+  background: #f6dad3 !important;
+  border: 2px solid #d9a39b !important;
+  border-radius: 999px;
+}
+
+.help li,
+.help p,
+.log-list,
+.log-list li {
+  color: var(--ink);
+}
+
+.help b {
+  color: var(--hi-bg);
+}
+
+.modal-head,
+.modal header {
+  border-color: var(--frame) !important;
 }
