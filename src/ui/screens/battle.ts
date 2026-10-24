@@ -3,11 +3,11 @@ import { sound } from '../../audio/sound';
 import { MAX_ATTUNE, cloneBattle, currentPattern, executeRound, getFocus, isAlive, planCost, setFocus, statusStacks } from '../../core/battle';
 import { previewChain } from '../../core/link';
 import { finishBattle } from '../../core/run';
-import type { Ally, BattleEvent, BattleState, Element, Enemy, PlannedCast, SkillTag, Stack, Status } from '../../core/types';
-import { ELEMENTS, STATUS_META, reactionById } from '../../data/elements';
+import type { Ally, BattleEvent, BattleState, Element, Enemy, PlannedCast, SkillTag, Stack, Status, StatusId } from '../../core/types';
+import { ELEMENTS, STATUS_COLOR, STATUS_META, reactionById } from '../../data/elements';
 import { FLOORS } from '../../data/encounters';
 import { TRAIT_DESC, enemyById, moveText } from '../../data/enemies';
-import { TAG_EN, TAG_NAMES, spellById } from '../../data/spells';
+import { spellById } from '../../data/spells';
 import { ROLE_NAMES, unitById } from '../../data/units';
 import { characterBust, characterSvg } from '../../render/characters';
 import { characterMotion } from '../../render/rig';
@@ -18,7 +18,7 @@ import { h, sleep } from '../dom';
 import { glyph } from '../glyphs';
 import { cycleGraphics, graphicsLabel } from '../graphics';
 import { showHelp } from '../help';
-import { NUM, allyName, button, elBadge, elColor, highlight, hpBar, intentView, modal, spellFlow, statusRow, updateHpBar } from '../widgets';
+import { NUM, allyName, button, elBadge, elColor, highlight, hpBar, intentView, modal, spellFlow, statusRow, tagChip, tagGroup, updateHpBar } from '../widgets';
 
 /*
  * 전투 화면 v4: 라운드 계획 + 링크.
@@ -367,7 +367,7 @@ export function battleScreen(app: App): HTMLElement {
           statuses.map((st) => {
             const meta = STATUS_META[st.id];
             const amount = meta.keyword ? `위력 ${st.value ?? 0} · 횟수 ${st.turns}` : st.turns >= 90 ? (st.value ? `${st.value}` : '지속') : `${st.value ? `${st.value} · ` : ''}${st.turns}턴`;
-            return h('li', { class: meta.debuff ? 'debuff' : 'buff' }, h('b', {}, `${meta.debuff ? '▼' : '▲'} ${meta.glyph} ${meta.name}`, h('small', {}, ` ${amount}`)), h('span', {}, meta.desc));
+            return h('li', { class: `${meta.debuff ? 'debuff' : 'buff'} st-${st.id}` }, h('b', {}, `${meta.debuff ? '▼' : '▲'} ${meta.glyph} ${meta.name}`, h('small', {}, ` ${amount}`)), h('span', {}, meta.desc));
           }),
         )
       : h('p', { class: 'bx-empty' }, '걸린 효과 없음');
@@ -409,7 +409,7 @@ export function battleScreen(app: App): HTMLElement {
             return h(
               'div',
               { class: `bx-ab ${inHand ? 'in-hand' : ''}` },
-              h('div', { class: 'bx-ab-head' }, h('small', {}, inHand ? '이번 손패' : TAG_NAMES[sp.tag]), h('b', {}, sp.name), spellFlow(sp), h('span', {}, `성진 ${sp.cost}`)),
+              h('div', { class: 'bx-ab-head' }, inHand ? h('small', {}, '이번 손패') : tagChip(sp.tag, 'tag-chip'), h('b', {}, sp.name), spellFlow(sp), h('span', {}, `성진 ${sp.cost}`)),
               h('p', { class: 'ab-desc' }, highlight(sp.desc)),
             );
           }),
@@ -468,7 +468,7 @@ export function battleScreen(app: App): HTMLElement {
       'button',
       {
         type: 'button',
-        class: `card5 ${chosen ? 'on' : ''} hint-${hint.kind}`,
+        class: `card5 ${chosen ? 'on' : ''} hint-${hint.kind} tg-${tagGroup(sp.tag)}`,
         style: { '--el': elColor(unit.element) },
         disabled: busy || tooCostly,
         'data-sfx': 'none',
@@ -480,7 +480,7 @@ export function battleScreen(app: App): HTMLElement {
       h('span', { class: 'c5-top' }, h('span', { class: 'c5-cost', title: `성진 ${sp.cost}` }, `✦${sp.cost}`), h('kbd', {}, String(n))),
       h('span', { class: 'c5-flow' }, spellFlow(sp)),
       h('b', { class: 'c5-name' }, sp.name),
-      h('span', { class: 'c5-tag' }, TAG_NAMES[sp.tag]),
+      tagChip(sp.tag, 'c5-tag'),
       h('span', { class: `c5-hint ${hint.kind}` }, hint.text),
       chosen ? h('span', { class: 'c5-order' }, NUM[idx]) : null,
     );
@@ -501,7 +501,7 @@ export function battleScreen(app: App): HTMLElement {
     return h(
       'div',
       { class: 'desc5', style: { '--el': elColor(unit.element) } },
-      h('div', { class: 'd5-head' }, h('b', {}, sp.name), spellFlow(sp), h('span', {}, `${unit.name} · ${TAG_NAMES[sp.tag]} · 성진 ${sp.cost}`)),
+      h('div', { class: 'd5-head' }, tagChip(sp.tag), h('b', {}, sp.name), spellFlow(sp), h('span', {}, `${unit.name} · 성진 ${sp.cost}`)),
       h('p', { class: 'ab-desc' }, highlight(sp.desc)),
     );
   };
@@ -709,8 +709,8 @@ export function battleScreen(app: App): HTMLElement {
     let heal = 0;
     let shield = 0;
     let reaction: string | null = null;
-    const buffs = new Set<string>();
-    const debuffs = new Set<string>();
+    const buffs = new Set<StatusId>();
+    const debuffs = new Set<StatusId>();
     for (let i = from + 1; i < events.length; i++) {
       const ev = events[i];
       if (ev.type === 'cast' || ev.type === 'enemyAct' || ev.type === 'enemyStunned' || ev.type === 'round') break;
@@ -720,15 +720,15 @@ export function battleScreen(app: App): HTMLElement {
       } else if (ev.type === 'heal') heal += ev.amount;
       else if (ev.type === 'shield' && !ev.targetUid.startsWith('e')) shield += ev.amount;
       else if (ev.type === 'reaction') reaction = reactionById(ev.reactionId).name;
-      else if (ev.type === 'status') (STATUS_META[ev.status].debuff ? debuffs : buffs).add(STATUS_META[ev.status].name);
+      else if (ev.type === 'status') (STATUS_META[ev.status].debuff ? debuffs : buffs).add(ev.status);
     }
     const chips: HTMLElement[] = [];
     if (dmg) chips.push(h('span', { class: 'rc dmg' }, `피해 ${dmg}`, hits > 1 ? h('small', {}, ` ${hits}타`) : null));
     if (reaction) chips.push(h('span', { class: 'rc react' }, `반응 ${reaction}`));
     if (heal) chips.push(h('span', { class: 'rc heal' }, `회복 ${heal}`));
     if (shield) chips.push(h('span', { class: 'rc shield' }, `⛨ ${shield}`));
-    for (const b of buffs) chips.push(h('span', { class: 'rc buff' }, `▲ ${b}`));
-    for (const d of debuffs) chips.push(h('span', { class: 'rc debuff' }, `▼ ${d}`));
+    for (const b of buffs) chips.push(h('span', { class: `rc buff st-${b}` }, `▲ ${STATUS_META[b].glyph} ${STATUS_META[b].name}`));
+    for (const d of debuffs) chips.push(h('span', { class: `rc debuff st-${d}` }, `▼ ${STATUS_META[d].glyph} ${STATUS_META[d].name}`));
     return chips;
   };
 
@@ -748,7 +748,7 @@ export function battleScreen(app: App): HTMLElement {
           { class: 'sp-body' },
           h('small', { class: 'sp-who' }, `${step} · ${unit.name} `, h('span', {}, unit.code)),
           h('b', { class: 'sp-name' }, glyph(sp.tag, 'sp-glyph'), sp.name),
-          h('div', { class: 'sp-meta' }, h('span', { class: 'sp-tag' }, `${TAG_NAMES[sp.tag]} · ${TAG_EN[sp.tag]}`), h('span', { class: `sp-link ${linked ? 'on' : ''}` }, chainText)),
+          h('div', { class: 'sp-meta' }, tagChip(sp.tag, 'sp-tag'), h('span', { class: `sp-link ${linked ? 'on' : ''}` }, chainText)),
           chips.length ? h('div', { class: 'sp-result' }, chips) : null,
         ),
       ),
@@ -1055,7 +1055,7 @@ export function battleScreen(app: App): HTMLElement {
             stats.dmg += ev.amount;
           }
           sound.hit(crit ? 'crit' : ev.amount === 0 && ev.absorbed ? 'blocked' : ev.source === 'ally' ? (characterMotion(allyOf(lastCaster)?.defId ?? '') === 'slash' ? 'slash' : 'ally') : ev.source === 'erosion' ? 'burn' : ev.source === 'burst' ? 'doom' : ev.source);
-          floatText(ev.targetUid, ev.amount > 0 ? `${ev.amount}` : `⛨${ev.absorbed}`, ev.source === 'enemy' ? 'dmg-ally' : ev.source === 'burn' || ev.source === 'erosion' ? 'dmg-burn' : crit ? 'dmg-crit' : ev.source === 'chain' || ev.source === 'doom' ? 'dmg-big' : 'dmg');
+          floatText(ev.targetUid, ev.amount > 0 ? `${ev.amount}` : `⛨${ev.absorbed}`, ev.source === 'enemy' ? 'dmg-ally' : ev.source === 'burn' ? 'dmg-burn' : ev.source === 'erosion' ? 'dmg-erosion' : ev.source === 'counter' ? 'dmg-counter' : ev.source === 'burst' ? 'dmg-burst' : ev.source === 'doom' ? 'dmg-doom' : crit ? 'dmg-crit' : ev.source === 'chain' ? 'dmg-big' : 'dmg');
           await wait(finale ? 480 : crit ? 560 : lastTag === 'multi' ? 190 : 250);
           break;
         }
@@ -1080,7 +1080,7 @@ export function battleScreen(app: App): HTMLElement {
           const meta = STATUS_META[ev.status];
           const isEnemy = ev.targetUid.startsWith('e');
           if (isEnemy && meta.debuff && ev.status !== 'doom') {
-            stage.fx?.debuff(chest(ev.targetUid), lastColor);
+            stage.fx?.debuff(chest(ev.targetUid), STATUS_COLOR[ev.status] ?? lastColor);
             sound.debuff();
           }
           const ally = allyOf(ev.targetUid);
@@ -1094,7 +1094,7 @@ export function battleScreen(app: App): HTMLElement {
             floatText(ev.targetUid, `${meta.name} ${meta.glyph}${n}`, n >= Math.ceil(sig.max / 2) ? 'kindle ready' : 'kindle');
           } else {
             const label = meta.keyword ? `${meta.name} ${ev.stacks ?? ''}·${ev.turns}` : ev.stacks ? `${meta.name} ${ev.stacks}` : meta.name;
-            floatText(ev.targetUid, `${meta.debuff ? '▼' : '▲'} ${label}`, meta.debuff ? 'debuff' : 'buff');
+            floatText(ev.targetUid, `${meta.debuff ? '▼' : '▲'} ${meta.glyph} ${label}`, `${meta.debuff ? 'debuff' : 'buff'} st-${ev.status}`);
           }
           refreshFoot(ev.targetUid);
           await wait(110);

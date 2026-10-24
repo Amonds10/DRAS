@@ -16,7 +16,7 @@ const COMMON = /* glsl */ `
   varying vec2 vUv;
   const vec3 INK = vec3(0.03, 0.02, 0.05);
   // 핵은 흰색이 아니라 성속 색을 밝힌 색: 화면이 하얗게 날아가지 않고 무엇이 터졌는지 보이게
-  #define HOT mix(uA, vec3(0.9), 0.4)
+  #define HOT mix(uA, vec3(0.95), 0.22)
   float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
   float noise(vec2 p) {
     vec2 i = floor(p), f = fract(p);

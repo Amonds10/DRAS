@@ -4,13 +4,13 @@ import { TEAM_SIZE, analyzeTeam } from '../../core/team';
 import type { UnitDef } from '../../core/types';
 import { DECKS, type DeckPreset } from '../../data/decks';
 import { ELEMENTS } from '../../data/elements';
-import { TAG_NAMES, spellById } from '../../data/spells';
+import { spellById } from '../../data/spells';
 import { ROLE_NAMES, UNIT_LIST, unitById } from '../../data/units';
 import { characterSvg } from '../../render/characters';
 import type { App } from '../app';
 import { h } from '../dom';
 import { showHelp } from '../help';
-import { NUM, button, costPips, elBadge, elColor, highlight, reactionChip, spellFlow, spellText } from '../widgets';
+import { NUM, button, costPips, elBadge, elColor, highlight, reactionChip, spellFlow, spellText, tagChip } from '../widgets';
 
 /** 주문서 한 장: 유형, 이름, 받는→넘기는 성속, 성진, 설명. 누르면 장착하거나 뺀다. */
 function spellLine(spellId: string, equipped: boolean, locked: boolean, onToggle: () => void): HTMLElement {
@@ -25,7 +25,7 @@ function spellLine(spellId: string, equipped: boolean, locked: boolean, onToggle
       disabled: !equipped && locked,
       onclick: onToggle,
     },
-    h('div', { class: 'spell-line-head' }, h('span', { class: 'equip-box', 'aria-hidden': 'true' }, equipped ? '✓' : ''), h('span', { class: 'kit-slot' }, TAG_NAMES[sp.tag]), h('span', { class: 'spell-name' }, sp.name), spellFlow(sp), costPips(sp.cost)),
+    h('div', { class: 'spell-line-head' }, h('span', { class: 'equip-box', 'aria-hidden': 'true' }, equipped ? '✓' : ''), tagChip(sp.tag, 'kit-slot'), h('span', { class: 'spell-name' }, sp.name), spellFlow(sp), costPips(sp.cost)),
     spellText(sp),
   );
 }

@@ -1,5 +1,5 @@
 import { enemyHitAmount } from '../core/battle';
-import type { Ally, Element, Enemy, Intent, SpellDef, SpellInput, SpellOutput, Status } from '../core/types';
+import type { Ally, Element, Enemy, Intent, SkillTag, SpellDef, SpellInput, SpellOutput, Status } from '../core/types';
 import { ELEMENTS, STATUS_META, reactionById } from '../data/elements';
 import { moveText } from '../data/enemies';
 import { TAG_NAMES } from '../data/spells';
@@ -146,10 +146,10 @@ export function intentView(intent: Intent | null, enemy: Enemy, allies: Ally[]):
   }
   // [표시, 종류]: 술사에게 남는 해로운 효과는 붉게, 적 자신이 얻는 것은 차분하게
   const riders = [
-    intent.shatter ? ['보호막 파괴', 'bad'] : null,
-    intent.burn ? [`화상 ${intent.burn[0]}·${intent.burn[1]}`, 'bad'] : null,
-    intent.weaken ? ['약화', 'bad'] : null,
-    intent.expose ? ['노출', 'bad'] : null,
+    intent.shatter ? ['⛨ 파괴', 'st-shatter'] : null,
+    intent.burn ? [`♨ 화상 ${intent.burn[0]}·${intent.burn[1]}`, 'st-burn'] : null,
+    intent.weaken ? ['↓ 약화', 'st-weaken'] : null,
+    intent.expose ? ['◎ 노출', 'st-expose'] : null,
     intent.shield && !['defend', 'guard'].includes(intent.kind) ? [`⛨${intent.shield}`, 'self'] : null,
     intent.atk && intent.kind !== 'buff' ? [`공격↑${intent.atk}`, 'self'] : null,
   ].filter((x): x is [string, string] => !!x);
@@ -238,4 +238,18 @@ export function highlight(text: string): (string | HTMLElement)[] {
 /** 스킬 설명(문장형) */
 export function spellText(spell: SpellDef): HTMLElement {
   return h('p', { class: 'ab-desc' }, highlight(spell.desc));
+}
+
+/** 주문 유형의 큰 갈래: 카드·주문서의 유형 칩 색을 나눈다 */
+export function tagGroup(tag: SkillTag): 'atk' | 'hex' | 'heal' | 'ward' | 'boon' {
+  if (['strike', 'multi', 'aoe', 'pierce', 'execute', 'finisher'].includes(tag)) return 'atk';
+  if (['dot', 'debuff', 'mark', 'delayed'].includes(tag)) return 'hex';
+  if (['heal', 'drain'].includes(tag)) return 'heal';
+  if (tag === 'shield') return 'ward';
+  return 'boon';
+}
+
+/** 유형 칩(색은 갈래별) */
+export function tagChip(tag: SkillTag, cls = 'tag-chip', text: string = TAG_NAMES[tag]): HTMLElement {
+  return h('span', { class: `${cls} tg-${tagGroup(tag)}` }, text);
 }

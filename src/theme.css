@@ -1733,11 +1733,11 @@ button.spell-line.equip:disabled {
   font-weight: 900;
 }
 
-.hl-burn { color: #c0461b; }
-.hl-rupture { color: #13788a; }
-.hl-erosion { color: #6a3fb8; }
-.hl-tremor { color: #946a00; }
-.hl-moonshade { color: #3c5aa6; }
+.hl-burn { color: #b8400f; }
+.hl-rupture { color: #0d6c7c; }
+.hl-erosion { color: #5b2f9e; }
+.hl-tremor { color: #7a5a00; }
+.hl-moonshade { color: #2f4f9e; }
 .hl-stack { color: #9c5a12; }
 .hl-wave { color: #1d7d68; }
 
@@ -2095,4 +2095,147 @@ button.spell-line.equip:disabled {
 .intent-riders i.self {
   color: var(--shield);
   background: #dce9f5;
+}
+
+/* ─────────────────────────────────────────────
+ * 효과별 색: --st(판 위 글씨), --st-bg(판 위 바탕), --st-hi(무대 위 떠오르는 글씨)
+ * 상태 칩·상세 목록·시전 이름표·적 예고 꼬리표·떠오르는 글씨가 모두 같은 색을 쓴다.
+ * ───────────────────────────────────────────── */
+.st-burn { --st: #b8400f; --st-bg: #fde0cf; --st-hi: #ff8a4a; }
+.st-rupture { --st: #0d6c7c; --st-bg: #d3eef2; --st-hi: #5fd6e8; }
+.st-erosion { --st: #5b2f9e; --st-bg: #e6dcf6; --st-hi: #b48cff; }
+.st-tremor { --st: #7a5a00; --st-bg: #f8eab8; --st-hi: #ffd34d; }
+.st-moonshade { --st: #2f4f9e; --st-bg: #dbe3f6; --st-hi: #9fb8ff; }
+.st-stun { --st: #fff4dc; --st-bg: #4a2f1a; --st-hi: #ffffff; }
+.st-weaken { --st: #5e4a6b; --st-bg: #e9e0ee; --st-hi: #c9a7d6; }
+.st-expose { --st: #a3271c; --st-bg: #f9d9d3; --st-hi: #ff6b5a; }
+.st-doom { --st: #8a1f3d; --st-bg: #f5d6df; --st-hi: #ff5c8a; }
+.st-shatter { --st: #fff4ef; --st-bg: #a3271c; --st-hi: #ff6b5a; }
+.st-atkUp { --st: #a33a12; --st-bg: #fbe3c8; --st-hi: #ffb067; }
+.st-taunt { --st: #2d5a8a; --st-bg: #d9e6f3; --st-hi: #8cc8ff; }
+.st-counter { --st: #7a3b12; --st-bg: #f3dfc9; --st-hi: #ffb88a; }
+.st-steady { --st: #565048; --st-bg: #e6e1d6; --st-hi: #e6e1d6; }
+.st-seal { --st: #5a3fa8; --st-bg: #e3dcf5; --st-hi: #b9a8ff; }
+.st-solarCore { --st: #9c5a12; --st-bg: #fbe7c0; --st-hi: #ffd27a; }
+.st-aim { --st: #1f6f52; --st-bg: #d6efe4; --st-hi: #7fe0b5; }
+.st-tide { --st: #2f5f9e; --st-bg: #dbe6f5; --st-hi: #a9c8f0; }
+.st-hunger { --st: #6e2f6e; --st-bg: #f0dcef; --st-hi: #e09be0; }
+.st-fortitude { --st: #4a5560; --st-bg: #e1e5ea; --st-hi: #d0dae4; }
+.st-wave { --st: #1d7d68; --st-bg: #d4efe8; --st-hi: #8fe3d0; }
+
+/* 발밑 상태 칩 */
+.status[class*='st-'] {
+  color: var(--st) !important;
+  background: var(--st-bg) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--st) 30%, transparent);
+}
+
+.status[class*='st-'] .st-dir {
+  color: var(--st) !important;
+  opacity: 0.75;
+}
+
+/* 상세 정보의 상태 목록 */
+.bx-status-list li[class*='st-'] {
+  background: var(--st-bg) !important;
+  box-shadow: inset 4px 0 0 var(--st);
+}
+
+.bx-status-list li[class*='st-'] b {
+  color: var(--st) !important;
+}
+
+.bx-status-list li.st-stun b,
+.bx-status-list li.st-stun span {
+  color: var(--st) !important;
+}
+
+/* 시전 이름표 칩 */
+.rc {
+  border-radius: 999px !important;
+  border: none !important;
+}
+
+.rc.dmg { color: var(--hi-ink) !important; background: var(--hi-bg) !important; }
+.rc.heal { color: #fff !important; background: var(--heal) !important; }
+.rc.shield { color: #fff !important; background: var(--shield) !important; }
+
+.rc[class*='st-'] {
+  color: var(--st) !important;
+  background: var(--st-bg) !important;
+}
+
+/* 적 예고 꼬리표 */
+.intent-riders i[class*='st-'] {
+  color: var(--st);
+  background: var(--st-bg);
+}
+
+/* 무대 위로 떠오르는 글씨: 어두운 무대에서 읽히는 밝은 색 + 짙은 테 */
+.float.dmg-ally { color: #ff6b5a; }
+.float.heal { color: #7ee08a; }
+.float.shield { color: #8cc8ff; }
+.float.dmg-big { color: #ffd36b; }
+.float.dmg-burn { color: #ff8a4a; font-size: 24px; }
+.float.dmg-erosion { color: #b48cff; font-size: 24px; }
+.float.dmg-burst { color: #ff7ad1; font-size: 32px; }
+.float.dmg-doom { color: #ff5c8a; font-size: 36px; }
+.float.dmg-counter { color: #8cc8ff; font-size: 26px; }
+
+.float[class*='st-'] {
+  color: var(--st-hi) !important;
+  -webkit-text-stroke: 3px rgba(20, 12, 6, 0.85);
+  paint-order: stroke fill;
+}
+
+/* 주문 유형 칩: 공격(붉은 갈색)·약화/각인(보라)·치유(초록)·보호(파랑)·강화/축적(금색) */
+.tg-atk { --tg: #a3271c; --tg-bg: #f9dcd5; }
+.tg-hex { --tg: #5b2f9e; --tg-bg: #e6dcf6; }
+.tg-heal { --tg: #22592f; --tg-bg: #dcefd6; }
+.tg-ward { --tg: #2d5a8a; --tg-bg: #d9e6f3; }
+.tg-boon { --tg: #7a5200; --tg-bg: #f8eab8; }
+
+.tag-chip,
+.c5-tag[class*='tg-'],
+.kit-slot[class*='tg-'],
+.sp-tag[class*='tg-'] {
+  justify-self: start;
+  display: inline-block;
+  padding: 1px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: var(--tg) !important;
+  background: var(--tg-bg) !important;
+  border-radius: 999px;
+}
+
+.card5.on .c5-tag[class*='tg-'] {
+  color: var(--tg) !important;
+}
+
+.d5-head .tag-chip {
+  font-size: 13px;
+}
+
+.bx-ab-head .tag-chip {
+  font-size: 11px;
+}
+
+/* 카드 바탕도 유형 갈래 색으로 살짝 물들인다(공격은 따뜻하게, 치유는 푸르게…) */
+.card5[class*='tg-'] {
+  background: color-mix(in srgb, var(--tg-bg) 55%, var(--card));
+}
+
+.card5[class*='tg-']:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--tg-bg) 35%, #fffdf6);
+}
+
+.card5.on[class*='tg-'] {
+  background: #fff1c4;
+}
+
+/* 주문서 줄도 같은 갈래 색 */
+button.spell-line.equip.on .kit-slot {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tg) 35%, transparent);
 }

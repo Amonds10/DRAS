@@ -1,4 +1,4 @@
-import type { Element, ReactionDef } from '../core/types';
+import type { Element, ReactionDef, StatusId } from '../core/types';
 
 export interface ElementMeta {
   name: string;
@@ -126,4 +126,18 @@ export const STATUS_META: Record<string, { name: string; glyph: string; debuff: 
   hunger: { name: '허기', glyph: '◉', debuff: false, desc: '녹스: 1당 피해 +5%, 심연의 만찬이 모두 써서 1당 +10%' },
   fortitude: { name: '불굴', glyph: '⛉', debuff: false, desc: '아스트라: 반격 +2씩, 방패 강타가 모두 써서 1당 +12%' },
   wave: { name: '공명파동', glyph: '∿', debuff: false, desc: '다음 시전의 피해·회복·보호막 +20%(중첩당), 시전하면 사라진다' },
+};
+
+/** 효과마다 고유 색(무대 이펙트·떠오르는 글씨용 밝은 색). 화면 판 위 색은 theme.css의 st-* 변수가 같은 계열로 맞춘다. */
+export const STATUS_COLOR: Partial<Record<StatusId, string>> = {
+  burn: '#ff8a4a',
+  rupture: '#5fd6e8',
+  erosion: '#b48cff',
+  tremor: '#ffd34d',
+  moonshade: '#9fb8ff',
+  stun: '#ffffff',
+  weaken: '#c9a7d6',
+  expose: '#ff6b5a',
+  doom: '#ff5c8a',
+  atkUp: '#ffb067',
 };
