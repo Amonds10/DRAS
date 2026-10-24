@@ -13,7 +13,7 @@ import { ROLE_NAMES, unitById } from '../../data/units';
 import { characterBust, characterSvg } from '../../render/characters';
 import { characterMotion } from '../../render/rig';
 import { floorPreset } from '../../render/three/environment';
-import { getStage, type ActorAnim } from '../../render/three/stage';
+import { getStage, type ActorAnim, type FrameShot } from '../../render/three/stage';
 import type { App } from '../app';
 import { h, sleep } from '../dom';
 import { glyph } from '../glyphs';
@@ -879,50 +879,75 @@ export function battleScreen(app: App): HTMLElement {
    */
   /** 컷 번호: 늦게 도착한 '카메라 원위치'가 다음 스킬의 컷을 지우지 않게 한다 */
   let shotSeq = 0;
-  const castShot = (caster: string, style: AtkStyle | null, tag: SkillTag, targets: string[]) => {
-    const c = chest(caster);
-    const t = targets[0] ? chest(targets[0]) : enemyCenter();
-    const mid = c.clone().lerp(t, 0.5);
-    const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
-    let shot: { pos: THREE.Vector3; look: THREE.Vector3; fov: number; roll?: number } | null = null;
-    switch (style) {
-      case 'combo':
-      case 'rush':
-      case 'barrage':
-      case 'beam':
-      case 'orbs':
-        shot = { pos: mid.clone().add(V(0, 1.1, 8.2)), look: mid.clone().add(V(0, 0.1, 0)), fov: 30, roll: style === 'rush' ? 0.03 : 0 };
-        break;
-      case 'leap':
-      case 'uppercut':
-      case 'pillar':
-        shot = { pos: new THREE.Vector3(t.x - 3.4, 0.35, t.z + 6.4), look: t.clone().add(V(-0.6, 1.4, 0)), fov: 34, roll: -0.04 };
-        break;
-      case 'spin':
-      case 'rain':
-      case 'eruption': {
-        const e = enemyCenter();
-        shot = { pos: e.clone().add(V(-3.2, 5.2, 10.5)), look: e.clone().add(V(-0.8, -0.4, 0)), fov: 34 };
-        break;
-      }
-      case 'lunge':
-      case 'snipe':
-        shot = { pos: c.clone().add(V(-2.6, 0.9, 3.8)), look: t.clone(), fov: style === 'snipe' ? 20 : 30, roll: 0.03 };
-        break;
-      default: {
-        // 보조 주문: 치유는 정면 가까이, 방어는 낮은 정면, 강화는 올려다보기, 저주는 대상을 넘겨다보기
-        const pose = supportPose(tag);
-        const ft = feet(caster);
-        if (pose === 'heal') shot = { pos: c.clone().add(V(1.6, 0.5, 5.2)), look: c.clone().add(V(0.1, 0.6, 0)), fov: 26 };
-        else if (pose === 'guard') shot = { pos: ft.clone().add(V(2.6, 0.4, 4.8)), look: c.clone().add(V(0.2, 0.3, 0)), fov: 28, roll: 0.04 };
-        else if (pose === 'hex') shot = { pos: c.clone().add(V(-2.2, 1.2, 4.2)), look: t.clone(), fov: 28 };
-        else shot = { pos: ft.clone().add(V(2.2, 0.3, 5)), look: c.clone().add(V(0, 0.9, 0)), fov: 26, roll: -0.05 };
+  /** 몇 번째 컷인가: 같은 스킬이라도 라운드·순서마다 다른 각도를 고른다 */
+  let shotCount = 0;
+  /**
+   * 투샷 각도 모음. 모두 시전자와 대상을 한 화면에 담고 그 가운데를 화면 중앙에 둔다.
+   * yaw +는 적 쪽에서 아군 얼굴을, -는 아군 어깨 뒤에서 적을 본다. orbit은 컷 동안 도는 양, push는 다가가는 정도.
+   */
+  const ANGLES: Record<string, Omit<FrameShot, 'uids'>> = {
+    side: { yaw: 0.05, pitch: 0.1, fov: 30, push0: 1.08, push1: 0.96, orbit: 0.12 },
+    sideLow: { yaw: -0.12, pitch: 0.02, fov: 32, push0: 1.05, push1: 0.94, orbit: 0.16, lift: 0.3 },
+    shoulder: { yaw: -0.55, pitch: 0.14, fov: 30, push0: 1.1, push1: 0.95, orbit: 0.14 },
+    reverse: { yaw: 0.5, pitch: 0.12, fov: 30, push0: 1.08, push1: 0.97, orbit: -0.14 },
+    low: { yaw: -0.3, pitch: -0.02, fov: 36, push0: 1, push1: 0.9, orbit: 0.2, lift: 0.6, roll: -0.035 },
+    high: { yaw: 0.18, pitch: 0.55, fov: 34, push0: 1.05, push1: 0.98, orbit: -0.18 },
+    dutch: { yaw: 0.28, pitch: 0.08, fov: 30, push0: 1.06, push1: 0.94, orbit: 0.1, roll: 0.06 },
+    sweep: { yaw: -0.45, pitch: 0.2, fov: 32, push0: 1.02, push1: 1, orbit: 0.7, dur: 1.6 },
+    tele: { yaw: -0.62, pitch: 0.08, fov: 22, push0: 1.04, push1: 0.98, orbit: 0.05 },
+  };
+  /** 스타일마다 어울리는 각도 후보 */
+  const STYLE_ANGLES: Record<AtkStyle, string[]> = {
+    combo: ['side', 'shoulder', 'reverse'],
+    rush: ['dutch', 'sideLow', 'sweep'],
+    spin: ['high', 'sweep', 'side'],
+    uppercut: ['low', 'sideLow'],
+    leap: ['low', 'high', 'dutch'],
+    lunge: ['shoulder', 'sideLow', 'reverse'],
+    barrage: ['shoulder', 'side', 'sweep'],
+    snipe: ['tele', 'shoulder'],
+    rain: ['high', 'sweep'],
+    pillar: ['low', 'reverse', 'side'],
+    eruption: ['high', 'low'],
+    beam: ['side', 'shoulder', 'dutch'],
+    orbs: ['reverse', 'side', 'sweep'],
+  };
+  /** 마무리 타격은 다른 각도로 끊어 한 번 더 조인다 */
+  const FINISH_ANGLES = ['low', 'reverse', 'dutch', 'shoulder'];
+
+  const pickAngle = (opts: string[], seed: number) => ANGLES[opts[seed % opts.length]];
+  const castShot = (caster: string, style: AtkStyle | null, tag: SkillTag, targets: string[], seed: number) => {
+    const uniq = [...new Set(targets)];
+    shotCount++;
+    shotSeq++;
+    let uids = [caster, ...uniq];
+    let angle: Omit<FrameShot, 'uids'>;
+    if (style) angle = pickAngle(STYLE_ANGLES[style], seed + shotCount);
+    else {
+      // 보조 주문: 치유·방어는 아군 줄 전체, 저주는 대상까지, 강화는 시전자와 가장 가까운 적
+      const pose = supportPose(tag);
+      const allies = battle.allies.filter(isAlive).map((a) => a.uid);
+      const focus = getFocus(battle)?.uid;
+      if (pose === 'heal' || pose === 'guard') {
+        uids = allies;
+        angle = pose === 'heal' ? { yaw: 0.35, pitch: 0.16, fov: 30, push0: 1.08, push1: 0.95, orbit: -0.15 } : { yaw: 0.45, pitch: 0.04, fov: 32, push0: 1.04, push1: 0.94, orbit: -0.1, lift: 0.3 };
+      } else if (pose === 'hex') {
+        uids = focus ? [caster, focus] : [caster];
+        angle = pickAngle(['shoulder', 'reverse'], seed + shotCount);
+      } else {
+        uids = focus ? [caster, focus] : [caster];
+        angle = { ...ANGLES.low, yaw: 0.3 };
       }
     }
-    stage.cinematic({ ...shot, smooth: 0.2 });
-    shotSeq++;
+    stage.frameShot({ uids, ...angle });
+    stage.cinematic(null);
     // 컷 안에는 시전자와 대상만 또렷하게: 앞줄 아군이 화면을 가리지 않는다
-    stage.spotlight(style ? [caster, ...targets] : SUPPORT_SPOT.has(supportPose(tag)) ? battle.allies.map((a) => a.uid) : [caster, ...targets]);
+    stage.spotlight(style ? [caster, ...uniq] : SUPPORT_SPOT.has(supportPose(tag)) ? battle.allies.map((a) => a.uid) : [caster, ...uniq]);
+  };
+  /** 마무리 일격 컷: 같은 두 사람을 다른 각도에서 더 가깝게 */
+  const finishShot = (c: Choreo, aims: string[]) => {
+    const a = FINISH_ANGLES[(shotCount + c.idx) % FINISH_ANGLES.length];
+    stage.frameShot({ uids: [c.caster, ...new Set(aims)], ...ANGLES[a], push0: 0.98, push1: 0.86, dur: 0.8, smooth: 0.12 });
   };
 
   /** 한 타격 단계: 스타일마다 동작·투사체·기다림이 다르다 */
@@ -931,6 +956,7 @@ export function battleScreen(app: App): HTMLElement {
     const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
     const from = chest(c.caster).add(V(0.8, 0.15, 0.1));
     const finish = last && total > 1;
+    if (finish && !c.ult && aims.length) finishShot(c, aims);
     switch (c.style) {
       case 'combo':
       case 'rush': {
@@ -1272,7 +1298,7 @@ export function battleScreen(app: App): HTMLElement {
    * 일식은 해를 달이 가리고, 월몰은 달이 가라앉고, 블랙홀은 적진을 빨아들이고, 유성우는 별똥이 쏟아지고,
    * 초신성은 별이 터지고, 홍염은 불꽃 고리가 휘감고, 조수는 물결이 아군을 쓸고 지나간다.
    */
-  async function playReaction(id: string, target: string | null) {
+  async function playReaction(id: string, target: string | null, caster: string) {
     const r = reactionById(id);
     const a = elColor(r.from);
     const b = elColor(r.to);
@@ -1306,13 +1332,15 @@ export function battleScreen(app: App): HTMLElement {
     sound.duck(1.6);
     stage.setBackdrop(b, 0.85);
     stage.slowMo(0.45, 0.5);
-    const wide = { pos: ec.clone().add(V(-3.6, 4.4, 11.5)), look: ec.clone().add(V(-0.6, -0.2, 0)), fov: 36, smooth: 0.22 };
-    const low = { pos: tf.clone().add(V(-3.2, 0.5, 7)), look: t.clone().add(V(-0.4, 1.2, 0)), fov: 34, roll: -0.03, smooth: 0.22 };
+    // 반응 컷도 투샷: 반응을 일으킨 술사와 대상(넓은 반응은 적 줄 전체)을 함께 담는다
+    const one = target ? [caster, target] : [caster, ...living];
+    const lowShot = () => stage.frameShot({ uids: one, ...ANGLES.low, push0: 1.04, push1: 0.86, dur: 1.6, lift: 0.9 });
+    const wideShot = () => stage.frameShot({ uids: [caster, ...living], ...ANGLES.high, orbit: 0.32, dur: 1.8, lift: 1.2 });
     switch (id) {
       case 'eclipse': {
         // 일식: 대상 머리 위 해를 검은 달이 덮고, 가장자리로 코로나가 번진다
-        stage.cinematic(low);
-        stage.spotlight(target ? [target] : living);
+        lowShot();
+        stage.spotlight(one);
         stage.setBackdrop('#1a1420', 0.95);
         const sky = t.clone().add(V(0.3, 2.3, -0.4));
         fx?.sprite({ tex: 'soft', color: a, pos: sky, size: 2.2, to: 3.4, life: 1.6, curve: 'pulse', alpha: 0.9 });
@@ -1331,8 +1359,8 @@ export function battleScreen(app: App): HTMLElement {
       }
       case 'moonset': {
         // 월몰: 커다란 초승달이 대상 위로 내려와 땅속 공허로 가라앉는다
-        stage.cinematic(low);
-        stage.spotlight(target ? [target] : living);
+        lowShot();
+        stage.spotlight(one);
         const top = t.clone().add(V(0.4, 4.6, 0.1));
         fx?.sprite({ tex: 'crescent', color: a, pos: top, size: 2.6, to: 2.2, life: 1.2, rot: -0.4, curve: 'pulse', path: (k) => top.clone().lerp(tf.clone().add(V(0.2, 0.2, 0.1)), k * k) });
         fx?.vortex(tf.clone().add(V(0, 0.05, 0)), b, 5, 1.3, true);
@@ -1347,8 +1375,8 @@ export function battleScreen(app: App): HTMLElement {
       }
       case 'blackhole': {
         // 블랙홀: 적진 가운데 검은 핵이 열리고 사방의 빛을 빨아들인 뒤 터진다
-        stage.cinematic(wide);
-        stage.spotlight(living);
+        wideShot();
+        stage.spotlight([caster, ...living]);
         const core = ec.clone().add(V(0, 0.6, 0.2));
         fx?.sprite({ tex: 'soft', color: '#000000', pos: core, size: 0.3, to: 2.4, life: 1.1, additive: false, alpha: 0.95, curve: 'pulse' });
         fx?.vortex(core, b, 6, 1.1);
@@ -1366,8 +1394,8 @@ export function battleScreen(app: App): HTMLElement {
       }
       case 'meteor': {
         // 유성우: 하늘 가득 별똥이 비스듬히 쏟아진다(실제 피해 세 발은 이어서 크게 떨어진다)
-        stage.cinematic(wide);
-        stage.spotlight(living);
+        wideShot();
+        stage.spotlight([caster, ...living]);
         stage.setBackdrop('#0f1830', 0.9);
         for (let i = 0; i < 16; i++) {
           const land = new THREE.Vector3(ec.x + (Math.random() - 0.5) * 7, 0.3, (Math.random() - 0.5) * 2);
@@ -1385,8 +1413,8 @@ export function battleScreen(app: App): HTMLElement {
       }
       case 'supernova': {
         // 초신성: 대상 가슴에서 별이 부풀었다가 금빛으로 폭발한다
-        stage.cinematic({ ...low, fov: 38 });
-        stage.spotlight(target ? [target] : living);
+        stage.frameShot({ uids: one, ...ANGLES.reverse, push0: 1.02, push1: 0.84, dur: 1.4, lift: 0.4 });
+        stage.spotlight(one);
         fx?.sprite({ tex: 'flare4', color: a, pos: t, size: 3.6, to: 0.4, life: 0.5, curve: 'grow' });
         fx?.gather(t, b, 36, 0.5);
         await wait(520);
@@ -1402,8 +1430,8 @@ export function battleScreen(app: App): HTMLElement {
       }
       case 'flare': {
         // 홍염: 해의 불꽃 고리가 하늘에서 휘어져 대상을 감싸고 불태운다
-        stage.cinematic(low);
-        stage.spotlight(target ? [target] : living);
+        lowShot();
+        stage.spotlight(one);
         for (let k = 0; k < 3; k++) {
           const s0 = t.clone().add(V(-3 + k, 5, 0.2));
           const mid = t.clone().add(V(-1 + k * 1.2, 6.5, 0.4));
@@ -1421,7 +1449,7 @@ export function battleScreen(app: App): HTMLElement {
       case 'tide': {
         // 조수: 달빛 물결이 아군 줄을 쓸고 지나가며 상처를 씻는다
         const ac = allies.map((u) => chest(u)).reduce((sum, p) => sum.add(p), new THREE.Vector3()).multiplyScalar(1 / Math.max(1, allies.length));
-        stage.cinematic({ pos: ac.clone().add(V(1.6, 2.6, 10.5)), look: ac.clone().add(V(0.4, -0.3, 0)), fov: 36, smooth: 0.22 });
+        stage.frameShot({ uids: allies, ...ANGLES.reverse, pitch: 0.24, orbit: -0.25, dur: 1.6, lift: 1 });
         stage.spotlight(allies);
         fx?.sprite({ tex: 'crescent', color: a, pos: ac.clone().add(V(0, 4, -0.4)), size: 1, to: 3, life: 1.3, rot: -0.6, curve: 'pulse', behind: true });
         for (let i = 0; i < 2; i++) setTimeout(() => fx?.sweep(new THREE.Vector3(ac.x, 0.6 + i * 0.5, ac.z), i % 2 ? a : b, 7), (i * 140) / app.speed);
@@ -1437,6 +1465,7 @@ export function battleScreen(app: App): HTMLElement {
     cut.classList.add('out');
     setTimeout(() => cut.remove(), 450);
     endCinema();
+    stage.frameShot(null);
     stage.spotlight(null);
     stage.setBackdrop(null);
   }
@@ -1466,8 +1495,8 @@ export function battleScreen(app: App): HTMLElement {
     await wait(500);
     await finisherCutIn(uid, spellName, un, color, target);
     if (target) {
-      const tc = chest(target);
-      stage.cinematic({ pos: ch.clone().add(new THREE.Vector3(-2.8, 1.1, 4.4)), look: tc.clone().lerp(ch, 0.2), fov: 28, roll: 0.04, smooth: 0.16 });
+      stage.cinematic(null);
+      stage.frameShot({ uids: [uid, target], ...ANGLES.shoulder, push0: 1, push1: 0.88, dur: 0.6, smooth: 0.14 });
       await wait(420);
     }
     stage.cinematic(null);
@@ -1524,6 +1553,7 @@ export function battleScreen(app: App): HTMLElement {
     let choreo: Choreo | null = null;
     /** 방금 터진 반응: 그 반응이 내는 타격을 반응 모양으로 그린다 */
     let reactFx: string | null = null;
+    let enemyShots = 0;
     const trackSlots = () => hudSlot.querySelectorAll('.q-slot');
     const stageTargets = (from: number): string[] => {
       const out: string[] = [];
@@ -1560,6 +1590,7 @@ export function battleScreen(app: App): HTMLElement {
       stage.anim(c.caster, 'recover');
       stage.setBackdrop(null);
       stage.spotlight(null);
+      stage.frameShot(null);
       shotSeq++;
       if (c.ult) endCinema();
       else stage.cinematic(null);
@@ -1625,8 +1656,12 @@ export function battleScreen(app: App): HTMLElement {
           await wait(420);
           const style = styleFor(sp, motion);
           choreo = { caster: ev.allyUid, color, motion, melee, dashed: false, hits: targets.length, idx: 0, tag: sp.tag, pending: false, firstHit: false, last: false, big: sp.cost >= 2, ult, style, element: unit.element };
-          if (!ult) castShot(ev.allyUid, staged ? style : null, sp.tag, targets);
-          else stage.spotlight([ev.allyUid, ...targets]);
+          if (!ult) castShot(ev.allyUid, staged ? style : null, sp.tag, targets, hashId(sp.id) + battle.round);
+          else {
+            // 궁극기 본 공격: 아래에서 올려다보며 시전자와 대상을 함께 담고 천천히 돌며 다가간다
+            stage.spotlight([ev.allyUid, ...targets]);
+            stage.frameShot({ uids: [ev.allyUid, ...new Set(targets)], ...ANGLES.low, push0: 1.12, push1: 0.86, orbit: 0.35, dur: 2.2, smooth: 0.18 });
+          }
           if (melee && targets[0]) {
             // 스타일마다 다가서는 법이 다르다: 회전 베기는 적진 가운데로, 관통은 멀리서 노린다
             const gap = style === 'spin' ? 2.2 : style === 'lunge' ? 4.2 : style === 'rush' ? 1.6 : MELEE_GAP;
@@ -1719,7 +1754,7 @@ export function battleScreen(app: App): HTMLElement {
           await endCast();
           const r = reactionById(ev.reactionId);
           stats.reactions++;
-          await playReaction(r.id, getFocus(battle)?.uid ?? null);
+          await playReaction(r.id, getFocus(battle)?.uid ?? null, ev.allyUid);
           reactFx = r.id;
           break;
         }
@@ -1950,14 +1985,21 @@ export function battleScreen(app: App): HTMLElement {
             await wait(360);
             break;
           }
-          stage.focus(chest(ev.enemyUid), 0.35);
+          {
+            // 적의 공격도 투샷: 공격하는 적과 맞는 술사(전체 공격이면 아군 줄)를 한 화면에, 번갈아 다른 각도로
+            const it = ev.intent;
+            const hitsAll = it.kind === 'attackAll' || it.kind === 'curse' || (it.kind === 'steal' && !!it.power);
+            const victims = hitsAll ? battle.allies.filter(isAlive).map((a) => a.uid) : it.targetId ? [it.targetId] : [];
+            enemyShots++;
+            if (victims.length) stage.frameShot({ uids: [ev.enemyUid, ...victims], ...(hitsAll ? ANGLES.high : enemyShots % 2 ? ANGLES.reverse : ANGLES.sideLow), push0: 1.06, push1: 0.95, dur: 1.1 });
+            else stage.frameShot({ uids: [ev.enemyUid], ...ANGLES.low, pad: 2.4, yaw: 0.25 });
+          }
           showEnemyPlate(ev.enemyUid, `「${ev.intent.name}」 ${moveText(ev.intent)}${ev.intent.targetId ? ` → ${unitLabel(battle, ev.intent.targetId)}` : ''}`);
           stage.fx?.gather(chest(ev.enemyUid), '#ff5a4a', 16, 0.36);
           await wait(320);
           stage.anim(ev.enemyUid, 'act');
           sound.enemyAct();
           await wait(360);
-          stage.focus(null);
           break;
         }
         case 'death':
@@ -1991,6 +2033,7 @@ export function battleScreen(app: App): HTMLElement {
       }
     }
     await endCast();
+    stage.frameShot(null);
     if (!enemyPhase) await turnSummary();
     stage.fx?.fadeArcs();
     stage.focus(null);

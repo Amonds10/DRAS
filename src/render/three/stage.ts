@@ -14,6 +14,24 @@ import { fxTexture, svgTexture } from './textures';
 import { Backdrop, ToonFx } from './toonfx';
 
 export type Framing = 'menu' | 'battle';
+
+/** 투샷 카메라 설정(stage.frameShot) */
+export interface FrameShot {
+  uids: string[];
+  yaw?: number;
+  pitch?: number;
+  fov?: number;
+  roll?: number;
+  orbit?: number;
+  push0?: number;
+  push1?: number;
+  dur?: number;
+  smooth?: number;
+  /** 바라보는 높이를 올리거나 내린다 */
+  lift?: number;
+  /** 가장자리 여유 배율 */
+  pad?: number;
+}
 export type ActorPart = 'feet' | 'chest' | 'head' | 'top';
 export type ActorAnim = 'cast' | 'channel' | 'charge' | 'act' | 'hit' | 'die' | 'dash' | 'combo1' | 'combo2' | 'combo3' | 'finish' | 'fire' | 'cast1' | 'cast2' | 'recover' | 'heal' | 'guard' | 'empower' | 'hex' | 'spin1' | 'spin2' | 'slam' | 'uppercut' | 'lunge' | 'rapid' | 'aim' | 'skyshot';
 
@@ -337,6 +355,8 @@ export class Stage {
   private focusCur = new THREE.Vector3();
   private focusVel = new THREE.Vector3();
   private cine: { pos: THREE.Vector3; look: THREE.Vector3; fov: number; roll: number; smooth: number } | null = null;
+  /** 투샷: 고른 유닛들을 매 프레임 한 화면에 담아 가운데 둔다(시전자와 대상이 같이 나온다) */
+  private shot: (Required<Omit<FrameShot, 'uids'>> & { uids: string[]; t: number }) | null = null;
   private cineRoll = 0;
   private cineRollV = 0;
   private focusK = 0;
@@ -598,7 +618,58 @@ export class Stage {
 
   /** 이 유닛이 지금 연출 컷 안에 있는가(컷이 없으면 모두 안) */
   inShot(uid: string): boolean {
-    return !this.cine || !this.spotSet || this.spotSet.has(uid);
+    return (!this.cine && !this.shot) || !this.spotSet || this.spotSet.has(uid);
+  }
+
+  /**
+   * 투샷 카메라: uids를 모두 담도록 거리를 맞추고, 그 가운데를 화면 중앙에 둔다.
+   * yaw는 옆에서 돌아간 각도(+면 적 쪽에서, -면 아군 쪽에서), pitch는 내려다보는 각도.
+   * 컷 동안 orbit만큼 돌고, push0 → push1로 다가가거나 물러난다. 유닛이 돌진하면 화면이 함께 따라간다.
+   */
+  frameShot(o: FrameShot | null): void {
+    if (!o) {
+      this.shot = null;
+      return;
+    }
+    this.shot = { uids: o.uids, yaw: o.yaw ?? 0, pitch: o.pitch ?? 0.12, fov: o.fov ?? 30, roll: o.roll ?? 0, orbit: o.orbit ?? 0, push0: o.push0 ?? 1, push1: o.push1 ?? 1, dur: o.dur ?? 1.2, smooth: o.smooth ?? 0.22, lift: o.lift ?? 0, pad: o.pad ?? 1, t: 0 };
+  }
+
+  /** 투샷이 바라볼 자리와 카메라 위치 */
+  private shotPose(dt: number): { pos: THREE.Vector3; look: THREE.Vector3; fov: number } | null {
+    const sh = this.shot;
+    if (!sh) return null;
+    const list = sh.uids.map((u) => this.actors.get(u)).filter((a): a is Actor => !!a);
+    if (!list.length) return null;
+    sh.t += dt;
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, top = 0;
+    for (const a of list) {
+      const x = a.base.x + a.offset.x + a.travelX + (a.puppet ? a.puppet.reach : 0);
+      minX = Math.min(minX, x - a.width / 2);
+      maxX = Math.max(maxX, x + a.width / 2);
+      minZ = Math.min(minZ, a.base.z);
+      maxZ = Math.max(maxZ, a.base.z);
+      top = Math.max(top, a.hover + a.height);
+    }
+    const k = Math.min(1, sh.t / sh.dur);
+    const e = k * k * (3 - 2 * k);
+    const cam = this.camera;
+    const portrait = cam.aspect < 1;
+    const fov = portrait ? Math.min(56, sh.fov * 1.45) : sh.fov;
+    // 세로 화면은 옆으로 나란히 담으면 너무 멀어진다: 각도를 어깨 너머 쪽으로 돌려 둘 사이를 깊이로 접는다
+    const base = portrait ? Math.sign(sh.yaw || -1) * Math.max(0.8, Math.abs(sh.yaw)) : sh.yaw;
+    const yaw = base + sh.orbit * e * (portrait ? 0.5 : 1);
+    const pitch = portrait ? Math.min(sh.pitch, 0.3) : sh.pitch;
+    const center = new THREE.Vector3((minX + maxX) / 2, top * 0.48 + sh.lift, (minZ + maxZ) / 2);
+    // 화면에 들어가야 할 반너비·반높이(여유를 둔다)
+    const halfW = (((maxX - minX) / 2) * Math.abs(Math.cos(yaw)) + ((maxZ - minZ) / 2) * Math.abs(Math.sin(yaw))) * (portrait ? 0.85 : 1) + (portrait ? 0.7 : 1.25) * sh.pad;
+    const halfH = top * 0.55 + 0.5 * sh.pad;
+    const vt = Math.tan(THREE.MathUtils.degToRad(fov / 2));
+    const ht = vt * cam.aspect;
+    const dist = Math.max(halfW / ht, halfH / vt, 5) * (sh.push0 + (sh.push1 - sh.push0) * e);
+    const dir = new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
+    const pos = center.clone().addScaledVector(dir, dist);
+    pos.y = Math.max(0.25, pos.y);
+    return { pos, look: center, fov };
   }
 
   /** 연출 조명: 고른 유닛만 또렷하게 두고 나머지는 흐리게 물린다(null이면 모두 원래대로) */
@@ -656,6 +727,7 @@ export class Stage {
     this.lastSpecs = specs;
     this.clearActors();
     this.spotSet = null;
+    this.shot = null;
     const allies = specs.filter((s) => s.side === 'ally');
     const enemies = specs.filter((s) => s.side === 'enemy');
     const eSlots = enemySlots(enemies);
@@ -1004,8 +1076,17 @@ export class Stage {
       look = this.cine.look.clone();
       cam.fov = cam.aspect < 1 ? Math.min(62, this.cine.fov * 1.8) : this.cine.fov;
       follow = this.cine.smooth;
+    } else if (this.shot && this.framing === 'battle') {
+      const sp = this.shotPose(dt);
+      if (sp) {
+        pos = sp.pos;
+        look = sp.look;
+        cam.fov = sp.fov;
+        follow = this.shot.smooth;
+      }
     }
-    [this.cineRoll, this.cineRollV] = smoothDamp(this.cineRoll, this.cine?.roll ?? 0, this.cineRollV, 0.3, dt);
+    const roll = this.cine ? this.cine.roll : (this.shot?.roll ?? 0);
+    [this.cineRoll, this.cineRollV] = smoothDamp(this.cineRoll, roll, this.cineRollV, 0.3, dt);
     cam.updateProjectionMatrix();
     // 마지막으로 카메라 자체도 한 번 더 부드럽게 따라가게 한다(첫 화면이나 화면 전환 때는 바로 맞춘다)
     if (!this.camInit || this.camFraming !== this.framing) {
@@ -1118,7 +1199,7 @@ export class Stage {
       }
       const yaw = Math.atan2(this.camera.position.x - a.base.x, this.camera.position.z - a.base.z);
       a.flash = Math.max(0, a.flash - dt * 4);
-      const spotGoal = !this.spotSet || this.spotSet.has(a.spec.uid) ? 1 : 0.16;
+      const spotGoal = !this.spotSet || this.spotSet.has(a.spec.uid) ? 1 : 0.09;
       a.spot += (spotGoal - a.spot) * Math.min(1, dt * 9);
       const tone = (a.dead && isAlly ? 0.45 : 1) * (0.55 + 0.45 * a.spot);
       const alpha = a.alpha * a.spot;
