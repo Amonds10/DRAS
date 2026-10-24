@@ -2239,3 +2239,164 @@ button.spell-line.equip:disabled {
 button.spell-line.equip.on .kit-slot {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tg) 35%, transparent);
 }
+
+/* ─────────────────────────────────────────────
+ * 컷인(극딜·큰 주문): 줄무늬 띠 대신 빛. 성속 색 빛살이 퍼지고, 띠 위로 빛이 한 번 쓸고 지나간다.
+ * ───────────────────────────────────────────── */
+.cutin {
+  background: radial-gradient(ellipse at 35% 55%, color-mix(in srgb, var(--el) 22%, transparent) 0%, rgba(8, 6, 12, 0.82) 62%) !important;
+  animation: ci-in 0.22s ease-out both;
+}
+
+@keyframes ci-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.cutin .ci-band {
+  top: 30% !important;
+  height: 40% !important;
+  transform: skewY(-7deg);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--el) 55%, #120c08) 14%, color-mix(in srgb, var(--el) 30%, #120c08) 72%, transparent) !important;
+  border-block: 3px solid color-mix(in srgb, var(--el) 80%, #fff) !important;
+  box-shadow: 0 0 60px color-mix(in srgb, var(--el) 55%, transparent), inset 0 0 40px color-mix(in srgb, var(--el) 30%, transparent) !important;
+}
+
+/* 빛살: 인물 뒤에서 천천히 도는 부드러운 광선 */
+.ci-rays {
+  position: absolute;
+  left: 24%;
+  top: 52%;
+  width: 170vmax;
+  height: 170vmax;
+  translate: -50% -50%;
+  background: repeating-conic-gradient(from 0deg, color-mix(in srgb, var(--el) 26%, transparent) 0deg 4deg, transparent 4deg 14deg);
+  mask-image: radial-gradient(circle, #000 8%, transparent 46%);
+  -webkit-mask-image: radial-gradient(circle, #000 8%, transparent 46%);
+  filter: blur(3px);
+  animation: ci-rays 1.6s linear both;
+}
+
+@keyframes ci-rays {
+  from { opacity: 0; rotate: -8deg; scale: 0.7; }
+  20% { opacity: 1; }
+  to { opacity: 0.85; rotate: 10deg; scale: 1.05; }
+}
+
+/* 띠 위를 한 번 쓸고 지나가는 빛 */
+.ci-sweep {
+  position: absolute;
+  left: -30%;
+  top: 30%;
+  width: 30%;
+  height: 40%;
+  transform: skewY(-7deg) skewX(-24deg);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--el) 40%, #fff) 50%, transparent);
+  opacity: 0.7;
+  filter: blur(6px);
+  animation: ci-sweep 0.7s 0.15s cubic-bezier(0.3, 0.6, 0.2, 1) both;
+}
+
+@keyframes ci-sweep {
+  from { left: -30%; }
+  to { left: 120%; }
+}
+
+.cutin .ci-fig {
+  height: 120% !important;
+  bottom: -18% !important;
+  left: 4% !important;
+  filter: drop-shadow(0 0 30px var(--el)) drop-shadow(0 0 3px #fff) !important;
+  animation: ci-fig-big 1.4s cubic-bezier(0.15, 1, 0.3, 1) both !important;
+}
+
+@keyframes ci-fig-big {
+  0% { opacity: 0; transform: translateX(-40%) scale(1.25); }
+  25% { opacity: 1; transform: translateX(0) scale(1.05); }
+  100% { opacity: 1; transform: translateX(4%) scale(1); }
+}
+
+.cutin .ci-text {
+  left: 42% !important;
+  top: 36% !important;
+}
+
+.cutin .ci-text b {
+  font-size: clamp(40px, 7.5vw, 96px) !important;
+  color: #fffaf0 !important;
+  text-shadow: 0 0 30px var(--el), 0 0 4px var(--el), 0 4px 14px #000 !important;
+  animation: ci-name 1.4s cubic-bezier(0.15, 1, 0.3, 1) both;
+}
+
+@keyframes ci-name {
+  0% { opacity: 0; letter-spacing: 0.4em; filter: blur(8px); }
+  30% { opacity: 1; letter-spacing: 0.02em; filter: blur(0); }
+  100% { opacity: 1; letter-spacing: 0.06em; }
+}
+
+.cutin .ci-text small {
+  font-family: var(--font-serif) !important;
+  font-size: 18px !important;
+  color: color-mix(in srgb, var(--el) 60%, #fff) !important;
+}
+
+/* 큰 주문용 짧은 컷: 더 얇은 띠, 인물은 상반신만 */
+.cutin.mini {
+  background: linear-gradient(180deg, transparent 20%, rgba(8, 6, 12, 0.55) 50%, transparent 80%) !important;
+}
+
+.cutin.mini .ci-band {
+  top: 38% !important;
+  height: 24% !important;
+}
+
+.cutin.mini .ci-sweep {
+  top: 38%;
+  height: 24%;
+  animation-duration: 0.5s;
+  animation-delay: 0.05s;
+}
+
+.cutin.mini .ci-fig {
+  height: 70% !important;
+  bottom: 22% !important;
+  left: 10% !important;
+  clip-path: inset(0 0 38% 0) !important;
+  animation-duration: 0.7s !important;
+}
+
+.cutin.mini .ci-text {
+  top: 41% !important;
+  left: 36% !important;
+}
+
+.cutin.mini .ci-text b {
+  font-size: clamp(30px, 5vw, 60px) !important;
+  animation-duration: 0.7s;
+}
+
+@media (max-width: 760px) {
+  .cutin .ci-fig {
+    left: -18% !important;
+    height: 80% !important;
+    bottom: 6% !important;
+  }
+
+  .cutin .ci-text,
+  .cutin.mini .ci-text {
+    left: 30% !important;
+  }
+
+  .cutin.mini .ci-fig {
+    left: -10% !important;
+    height: 50% !important;
+    bottom: 30% !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ci-rays,
+  .ci-sweep {
+    display: none;
+  }
+}

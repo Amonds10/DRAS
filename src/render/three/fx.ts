@@ -270,21 +270,34 @@ export class FxSystem {
     this.light(pos, color, 1.5, 0.6);
   }
 
+  /** 치유: 발밑 마법진과 물결, 나선으로 피어오르는 빛 알갱이, 몸을 감싸는 온기, 위로 떠오르는 빛 십자 */
   heal(pos: THREE.Vector3, feet: THREE.Vector3, color: THREE.ColorRepresentation): void {
-    this.ring(feet, color, 0.5, 2.4, 0.7, 'circle_02');
-    for (let i = 0; i < 10; i++) {
-      const p = feet.clone().add(new THREE.Vector3((Math.random() - 0.5) * 1.2, Math.random() * 0.6, (Math.random() - 0.5) * 0.4));
-      this.sprite({ tex: 'soft', color, pos: p, size: 0.3, to: 0.12, life: 0.9, delay: i * 0.04, vel: new THREE.Vector3(0, 2.2, 0), curve: 'pulse' });
+    this.magicCircle(feet, color, 2.4, 1.1, 'magic_01');
+    this.ring(feet, color, 0.4, 2.8, 0.8, 'circle_02');
+    for (let i = 0; i < 22; i++) {
+      const a0 = (i / 22) * Math.PI * 4;
+      const r0 = 0.55 + (i % 3) * 0.12;
+      const base = feet.clone();
+      const rise = 2.6 + Math.random() * 0.8;
+      // 몸 둘레를 돌며 올라가는 나선
+      this.sprite({ tex: 'soft', color, pos: base, size: 0.24, to: 0.06, life: 1.1, delay: i * 0.03, curve: 'pulse', path: (k) => base.clone().add(new THREE.Vector3(Math.cos(a0 + k * 5) * r0 * (1 - k * 0.4), k * rise, Math.sin(a0 + k * 5) * r0 * 0.4)) });
     }
-    this.sprite({ tex: 'soft', color, pos, size: 1.2, to: 2, life: 0.5, alpha: 0.6 });
-    this.light(feet, color, 1.6, 0.6);
+    this.sprite({ tex: 'soft', color, pos, size: 1.2, to: 2.2, life: 0.7, alpha: 0.22, curve: 'flash' });
+    this.sprite({ tex: 'light_01', color, pos, size: 0.6, to: 1.6, life: 0.5, curve: 'flash', alpha: 0.2 });
+    // 머리 위로 떠오르는 빛 십자(부드러운 두 줄기)
+    const top = pos.clone().add(new THREE.Vector3(0, 1.1, 0.1));
+    const drift = (k: number) => top.clone().add(new THREE.Vector3(0, k * 0.9, 0));
+    this.sprite({ tex: 'trace_06', color: 0xffffff, pos: top, size: [0.14, 0.8], to: [0.1, 0.6], life: 0.9, delay: 0.15, curve: 'pulse', path: drift, alpha: 0.8 });
+    this.sprite({ tex: 'trace_06', color: 0xffffff, pos: top, size: [0.14, 0.56], to: [0.1, 0.42], life: 0.9, delay: 0.15, curve: 'pulse', path: drift, rot: Math.PI / 2, alpha: 0.8 });
+    this.sprite({ tex: 'soft', color, pos: top, size: 0.9, to: 0.5, life: 0.9, delay: 0.15, curve: 'pulse', path: drift, alpha: 0.6 });
+    this.light(feet, color, 1.6, 0.9);
   }
 
   shield(pos: THREE.Vector3, color: THREE.ColorRepresentation, size = 2.6): void {
     // 굵은 고리 대신 옅은 빛의 막: 은은한 구체 + 가는 테가 잠깐 스친다
-    this.sprite({ tex: 'soft', color, pos, size: size * 0.7, to: size * 1.1, life: 0.6, curve: 'flash', alpha: 0.32 });
-    this.sprite({ tex: 'circle_05', color, pos, size: size * 0.85, to: size * 1.05, life: 0.45, curve: 'flash', alpha: 0.3 });
-    this.sprite({ tex: 'light_02', color, pos, size: size * 0.6, to: size * 0.95, life: 0.5, curve: 'flash', alpha: 0.35 });
+    this.sprite({ tex: 'soft', color, pos, size: size * 0.7, to: size * 1.05, life: 0.55, curve: 'flash', alpha: 0.16 });
+    this.sprite({ tex: 'circle_05', color, pos, size: size * 0.85, to: size * 1.05, life: 0.4, curve: 'flash', alpha: 0.2 });
+    this.sprite({ tex: 'light_02', color, pos, size: size * 0.6, to: size * 0.9, life: 0.45, curve: 'flash', alpha: 0.16 });
   }
 
   buff(pos: THREE.Vector3, feet: THREE.Vector3, color: THREE.ColorRepresentation): void {
@@ -344,7 +357,7 @@ export class FxSystem {
     obj.renderOrder = 30;
     this.group.add(obj);
     const s = new THREE.Vector2(size[0], size[1]);
-    this.parts.push({ obj, mat, age: 0, life, delay, vel: new THREE.Vector3(-1.2, 0, 0), gravity: 0, drag: 2, s0: s, s1: s.clone().multiplyScalar(1.04), spin: 0, alpha: 0.55, curve: 'fade' });
+    this.parts.push({ obj, mat, age: 0, life, delay, vel: new THREE.Vector3(-1.2, 0, 0), gravity: 0, drag: 2, s0: s, s1: s.clone().multiplyScalar(1.04), spin: 0, alpha: 0.1, curve: 'fade' });
   }
 
   /**

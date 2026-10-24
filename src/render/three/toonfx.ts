@@ -117,6 +117,32 @@ const BODIES = {
     float glow = gauss(v, w * 1.4) * flow;
     vec3 col = HOT * core * 1.3 + uA * glow * 0.85;
     float a = 1.0 - smoothstep(0.55, 1.0, uT);`,
+  // 검기: 초승달 모양의 빛 칼날이 통째로 날아간다(앞쪽 테가 가장 밝다)
+  wave: /* glsl */ `
+    vec2 p = vUv * 2.0 - 1.0;
+    float r = length(p);
+    float ang = atan(p.y, p.x);
+    float sweep = 2.2;
+    float s = (ang + sweep * 0.5) / sweep;
+    float inArc = step(0.0, s) * step(s, 1.0);
+    float w = 0.11 * sin(3.14159 * clamp(s, 0.0, 1.0)) + 0.01;
+    float d = r - 0.7;
+    float front = gauss(max(d, 0.0), w * 0.35) * step(-w * 2.5, d);
+    float back = gauss(min(d, 0.0), w * 1.6);
+    float flick = 0.8 + 0.2 * noise(vec2(s * 30.0 + uT * 25.0, uSeed));
+    vec3 col = HOT * front * 1.2 + uA * back * flick;
+    float a = inArc * (1.0 - smoothstep(0.75, 1.0, uT)) * smoothstep(0.0, 0.08, uT);`,
+  // 빛기둥: 위에서 내려와 발밑을 적시는 기둥. 빛 알갱이 무늬가 위로 흐른다(치유·축복)
+  pillar: /* glsl */ `
+    float x = abs(vUv.x - 0.5) * 2.0;
+    float grow = smoothstep(0.0, 0.25, uT);
+    float w = 0.22 + 0.25 * (1.0 - uT);
+    float flow = 0.6 + 0.4 * noise(vec2(vUv.x * 9.0, vUv.y * 7.0 - uT * 6.0 + uSeed));
+    float core = gauss(x, w * 0.3);
+    float glow = gauss(x, w) * flow;
+    float ground = smoothstep(0.0, 0.12, vUv.y);
+    vec3 col = HOT * core * 0.9 + uA * glow * 0.8;
+    float a = (1.0 - smoothstep(0.6, 1.0, uT)) * ground * (0.35 + 0.65 * smoothstep(1.0, 0.2, vUv.y)) * grow;`,
   // 전투 연출 배경: 장면을 어둡게 덮고 성속 색의 옅은 안개를 깐다(보통 혼합)
   backdrop: /* glsl */ `
     vec2 p = vUv * 2.0 - 1.0;
@@ -131,7 +157,7 @@ const BODIES = {
 export type ToonKind = keyof typeof BODIES;
 
 /** 효과별 밝기. 폭발은 넓게 퍼지므로 가장 낮게 둔다. */
-const GAIN: Record<ToonKind, number> = { slash: 0.8, ring: 0.5, star: 0.45, blast: 0.24, burst: 0.65, beam: 0.4, backdrop: 1 };
+const GAIN: Record<ToonKind, number> = { slash: 0.8, ring: 0.5, star: 0.45, blast: 0.24, burst: 0.65, beam: 0.4, wave: 0.55, pillar: 0.32, backdrop: 1 };
 
 function material(kind: ToonKind): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
@@ -227,6 +253,32 @@ export class ToonFx {
     const path = (k: number) => from.clone().lerp(to, 1 - Math.pow(1 - k, 2));
     this.spawn('star', { pos: from, size: 1.1, color, life: travel, path, delay });
     this.beam(from, to, color, 0.18, travel * 1.4, delay);
+  }
+
+  /** 검기 투사체: 초승달 빛 칼날이 from에서 to로 날아가며, 꼬리에 잔광이 남는다 */
+  wave(from: THREE.Vector3, to: THREE.Vector3, color: THREE.ColorRepresentation, size = 2.6, travel = 0.16, delay = 0, tilt = 0): void {
+    const path = (k: number) => from.clone().lerp(to, 1 - Math.pow(1 - k, 1.6));
+    // 칼날은 날아가는 방향을 향해 열린다(화면에서 from→to 각도)
+    const a = from.clone().project(this.camera);
+    const b = to.clone().project(this.camera);
+    const aspect = (this.camera as THREE.PerspectiveCamera).aspect ?? 1;
+    const dir = Math.atan2(b.y - a.y, (b.x - a.x) * aspect);
+    this.spawn('wave', { pos: from, size, color, life: travel * 1.6, path: (k) => path(Math.min(1, k * 1.6)), roll: dir + tilt, delay });
+    for (let i = 1; i <= 2; i++) this.spawn('wave', { pos: from, size: size * (1 - i * 0.15), color, life: travel * 1.6, path: (k) => path(Math.max(0, Math.min(1, k * 1.6 - i * 0.14))), roll: dir + tilt, delay: delay + i * 0.02 });
+  }
+
+  /** 빛기둥(치유·축복): 대상 발밑에서 위로 솟는 기둥 */
+  pillar(feet: THREE.Vector3, color: THREE.ColorRepresentation, height = 5, width = 1.6, life = 0.9, delay = 0): void {
+    this.spawn('pillar', { pos: feet.clone().add(new THREE.Vector3(0, height / 2, 0)), size: [width, height], color, life, delay });
+  }
+
+  /** 마법 폭발: 빛 덩어리가 부풀고, 충격파 두 겹과 불티, 섬광 */
+  magicBlast(pos: THREE.Vector3, color: THREE.ColorRepresentation, scale = 1, delay = 0): void {
+    this.spawn('blast', { pos, size: 3 * scale, color, life: 0.7, delay });
+    this.spawn('ring', { pos, size: 4.6 * scale, color, life: 0.55, delay });
+    this.spawn('ring', { pos, size: 3 * scale, color, life: 0.4, delay: delay + 0.08 });
+    this.spawn('burst', { pos, size: 4.4 * scale, color, life: 0.45, roll: Math.random() * 3, delay });
+    this.spawn('star', { pos, size: 3.2 * scale, color, life: 0.3, delay });
   }
 
   /** 광선: from에서 to까지 늘인 판 */

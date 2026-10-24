@@ -7,7 +7,7 @@ import type { Ally, BattleEvent, BattleState, Element, Enemy, PlannedCast, Skill
 import { ELEMENTS, STATUS_COLOR, STATUS_META, reactionById } from '../../data/elements';
 import { FLOORS } from '../../data/encounters';
 import { TRAIT_DESC, enemyById, moveText } from '../../data/enemies';
-import { spellById } from '../../data/spells';
+import { TAG_NAMES, spellById } from '../../data/spells';
 import { ROLE_NAMES, unitById } from '../../data/units';
 import { characterBust, characterSvg } from '../../render/characters';
 import { characterMotion } from '../../render/rig';
@@ -78,6 +78,9 @@ function eventText(state: BattleState, ev: BattleEvent): string | null {
 }
 
 const SUPPORT_TAGS = new Set<SkillTag>(['heal', 'shield', 'buff', 'utility', 'charge']);
+/** 근접 술사가 돌진해 멈추는 거리: 검기가 날아갈 틈을 남긴다 */
+const MELEE_GAP = 2.7;
+const HEAL_COLOR = '#56c97f';
 const STACKS: Stack[] = ['solarCore', 'aim', 'tide', 'hunger', 'fortitude', 'wave'];
 
 type Hint = { kind: 'link' | 'reaction' | 'break' | 'start'; text: string };
@@ -754,6 +757,47 @@ export function battleScreen(app: App): HTMLElement {
     plateSlot.replaceChildren(h('div', { class: 'skill-plate enemy' }, h('div', { class: 'sp-body' }, h('small', { class: 'sp-who' }, 'ENEMY'), h('b', { class: 'sp-name' }, def.name), h('div', { class: 'sp-meta' }, h('span', { class: 'sp-tag' }, text)))));
   };
 
+  /** 근접 투사체: 단검은 초승달 검기, 창은 꿰뚫는 창기, 방패는 땅을 타고 가는 충격파 */
+  const meleeProjectile = (motion: string, from: THREE.Vector3, to: THREE.Vector3, col: string, pose: string, delay: number) => {
+    const fin = pose === 'finish';
+    if (motion === 'slash') {
+      const tilt = pose === 'combo2' ? 0.55 : -0.45;
+      stage.toon.wave(from, to, col, fin ? 3.6 : 2.6, 0.12, delay, tilt);
+      if (fin || pose === 'combo3') stage.toon.wave(from, to, col, fin ? 3 : 2.2, 0.12, delay + 0.06, -tilt);
+    } else if (motion === 'thrust') {
+      stage.toon.wave(from, to, col, fin ? 2.6 : 1.8, 0.1, delay, 0);
+      stage.fx?.comet(from, to, col, 0.1, delay);
+      if (fin) stage.toon.beam(from, to, col, 0.5, 0.32, delay);
+    } else {
+      const f = new THREE.Vector3(from.x, 0.6, from.z);
+      const t = new THREE.Vector3(to.x, 0.6, to.z);
+      stage.toon.wave(f, t, col, fin ? 3.4 : 2.6, 0.14, delay, 0);
+      stage.fx?.ring(new THREE.Vector3(from.x, 0, from.z), col, 0.4, fin ? 4 : 2.8, 0.5);
+    }
+  };
+
+  /** 큰 주문(성진 2 이상) 컷: 화면을 가로지르는 띠와 술사 상반신, 주문 이름. 극딜보다 짧다. */
+  async function skillCutIn(uid: string, spellName: string, tag: SkillTag, color: string) {
+    const ally = allyOf(uid)!;
+    const unit = unitById(ally.defId);
+    const fig = h('div', { class: 'ci-fig' });
+    fig.innerHTML = characterSvg(ally.defId);
+    const el = h(
+      'div',
+      { class: 'cutin mini', style: { '--el': color } },
+      h('div', { class: 'ci-band' }),
+      h('div', { class: 'ci-sweep' }),
+      fig,
+      h('div', { class: 'ci-text' }, h('small', {}, `${unit.name} · ${TAG_NAMES[tag]}`), h('b', {}, spellName)),
+    );
+    scene.append(el);
+    stage.slowMo(0.5, 0.4);
+    sound.duck(1);
+    await wait(640);
+    el.classList.add('out');
+    setTimeout(() => el.remove(), 400);
+  }
+
   /** 극딜 컷인 */
   async function finisherCutIn(uid: string, spellName: string, un: { stack: Stack; stacks: number; mult: number } | null, color: string, target: string | null) {
     const ally = allyOf(uid)!;
@@ -763,7 +807,9 @@ export function battleScreen(app: App): HTMLElement {
     const el = h(
       'div',
       { class: 'cutin', style: { '--el': color } },
+      h('div', { class: 'ci-rays' }),
       h('div', { class: 'ci-band' }),
+      h('div', { class: 'ci-sweep' }),
       fig,
       h(
         'div',
@@ -778,8 +824,9 @@ export function battleScreen(app: App): HTMLElement {
     sound.unleash(un?.stacks ?? 0);
     sound.duck(2);
     if (target) stage.punch(chest(target), 1.1);
-    stage.slowMo(0.35, 0.5);
-    await wait(un ? 1050 : 700);
+    stage.slowMo(0.3, 0.9);
+    stage.shake(0.3);
+    await wait(un ? 1450 : 1150);
     el.classList.add('out');
     setTimeout(() => el.remove(), 400);
   }
@@ -881,8 +928,9 @@ export function battleScreen(app: App): HTMLElement {
           const unleash = slice.find((x): x is Extract<BattleEvent, { type: 'unleash' }> => x.type === 'unleash') ?? null;
           const targets = slice.filter((x): x is Extract<BattleEvent, { type: 'damage' }> => x.type === 'damage' && x.source === 'ally').map((x) => x.targetUid);
           if (sp.tag === 'finisher' || unleash) await finisherCutIn(ev.allyUid, sp.name, unleash, color, targets[0] ?? null);
-          stage.focus(chest(ev.allyUid), 0.7);
-          stage.fx?.castCircle(chest(ev.allyUid), color, sp.cost >= 2 ? 3.8 : 3);
+          else if (sp.cost >= 2) await skillCutIn(ev.allyUid, sp.name, sp.tag, color);
+          stage.focus(chest(ev.allyUid), sp.cost >= 2 ? 0.9 : 0.75);
+          stage.fx?.castCircle(chest(ev.allyUid), color, sp.cost >= 2 ? 4.6 : 3.4);
           stage.fx?.gather(chest(ev.allyUid).add(new THREE.Vector3(0.7, 0.1, 0)), color, sp.cost >= 2 ? 26 : 16, 0.42);
           const motion = characterMotion(unit.id);
           const staged = slice.some((x) => x.type === 'stage');
@@ -893,8 +941,8 @@ export function battleScreen(app: App): HTMLElement {
           choreo = { caster: ev.allyUid, color, motion, melee, dashed: false, hits: targets.length, idx: 0, tag: sp.tag, pending: false, firstHit: false, last: false, big: sp.cost >= 2 };
           if (melee && targets[0]) {
             stage.anim(ev.allyUid, 'dash');
-            stage.dash(ev.allyUid, targets[0], 0.16);
-            stage.afterimage(ev.allyUid, color, 4);
+            stage.dash(ev.allyUid, targets[0], 0.16, MELEE_GAP);
+            stage.afterimage(ev.allyUid, color, 2);
             sound.whoosh('sweep');
             choreo.dashed = true;
           } else stage.anim(ev.allyUid, sp.tag === 'charge' ? 'charge' : SUPPORT_TAGS.has(sp.tag) ? 'channel' : staged ? (motion === 'shoot' ? 'fire' : 'cast1') : 'cast');
@@ -907,6 +955,8 @@ export function battleScreen(app: App): HTMLElement {
           if (!staged) {
             stage.fx?.flare(chest(ev.allyUid), color, 1.4, 0.35);
             stage.fx?.ring(feet(ev.allyUid), color, 0.4, 4.2, 0.6);
+            stage.toon.pillar(feet(ev.allyUid), color, 6, 2, 1.1);
+            stage.toon.spawn('ring', { pos: chest(ev.allyUid), size: 4.5, color, life: 0.6 });
             stage.focus(null);
           } else if (targets[0]) stage.focus(new Set(targets).size > 1 ? enemyCenter() : chest(targets[0]), 0.55);
           await wait(staged ? 140 : 420);
@@ -934,26 +984,47 @@ export function battleScreen(app: App): HTMLElement {
           const p = tgt ? chest(tgt) : enemyCenter();
           if (c.melee) {
             const pose = last && ev.total > 1 ? 'finish' : (['combo1', 'combo2', 'combo3'] as const)[ev.index % 3];
-            if (tgt && c.tag !== 'aoe') stage.dash(c.caster, tgt, 0.1);
+            if (tgt && c.tag !== 'aoe') stage.dash(c.caster, tgt, 0.1, MELEE_GAP);
             stage.anim(c.caster, pose);
             sound.whoosh('sweep');
             await wait(pose === 'finish' ? 300 : 150);
+            // 휘두른 무기에서 검기·창기·충격파가 날아가 꽂힌다
+            const from = chest(c.caster).add(new THREE.Vector3(0.9, pose === 'finish' ? 0.5 : 0.15, 0.1));
+            const aims = here.length ? [...new Set(here)] : tgt ? [tgt] : [];
+            aims.forEach((t, j) => meleeProjectile(c.motion, from, chest(t), col, pose, j * 0.04));
+            stage.kick(pose === 'finish' ? 0.05 : 0.03, pose === 'finish' ? 0.9 : 0.5);
+            await wait(pose === 'finish' ? 170 : 120);
             const roll = { combo1: -0.9, combo2: 2.3, combo3: 0.1, finish: -1.35 }[pose];
             stage.toon.slash(p, col, pose === 'finish' ? 4.6 : 3.4, roll);
             if (ev.index % 3 === 1) stage.toon.slash(p, col, 3.1, roll + 1.7, 0.06);
-            if (pose === 'finish') stage.toon.slash(p, '#ffffff', 4, roll + 0.5, 0.04);
-            stage.afterimage(c.caster, col, last ? 4 : 2);
+            if (pose === 'finish') stage.toon.slash(p, col, 4, roll + 0.5, 0.04);
+            if (last) stage.afterimage(c.caster, col, 2);
           } else {
             stage.anim(c.caster, c.motion === 'shoot' ? 'fire' : ev.index % 2 ? 'cast2' : 'cast1');
             const from = chest(c.caster).add(new THREE.Vector3(0.7, 0.15, 0));
             const aims = here.length ? [...new Set(here)] : tgt ? [tgt] : [];
+            const magic = c.motion !== 'shoot';
             aims.forEach((t, j) => {
-              if (last && ev.total > 1 && c.big) stage.toon.beam(from, chest(t), col, 0.4, 0.28, j * 0.04);
-              else stage.toon.shot(from, chest(t), col, 0.15, j * 0.05);
+              const to = chest(t);
+              if (last && ev.total > 1 && c.big) {
+                // 큰 주문의 마지막 일격: 굵은 광선 + 큰 마법 구체
+                stage.toon.beam(from, to, col, 0.7, 0.4, j * 0.04);
+                if (magic) stage.fx?.projectile(from, to, col, 0.2, 0.3, j * 0.05);
+                else stage.fx?.comet(from, to, col, 0.14, j * 0.04);
+              } else if (magic) {
+                // 지팡이·구슬: 빛 구체가 호를 그리며 날아간다
+                stage.fx?.projectile(from, to, col, 0.26, 0.9 + j * 0.2, j * 0.06);
+                stage.toon.spawn('star', { pos: from, size: 1.2, color: col, life: 0.26, delay: j * 0.06, path: (k) => from.clone().lerp(to, k).add(new THREE.Vector3(0, Math.sin(k * Math.PI) * (0.9 + j * 0.2), 0)) });
+              } else {
+                // 총: 혜성 꼬리를 끄는 탄 + 예광
+                stage.fx?.comet(from, to, col, 0.13, j * 0.05);
+                stage.toon.shot(from, to, col, 0.13, j * 0.05);
+              }
             });
+            if (magic) stage.fx?.magicCircle(chest(c.caster).add(new THREE.Vector3(0.6, 0.2, 0.2)), col, 1.6, 0.5, 'magic_02');
             if (c.tag === 'aoe' && last) stage.fx?.sweep(enemyCenter(), col, 6.5);
             sound.whoosh(c.motion === 'shoot' ? 'projectile' : 'mark');
-            await wait(last && ev.total > 1 ? 240 : 170);
+            await wait(magic ? (last && ev.total > 1 ? 280 : 260) : last && ev.total > 1 ? 240 : 170);
           }
           break;
         }
@@ -1007,6 +1078,12 @@ export function battleScreen(app: App): HTMLElement {
             c.firstHit = false;
             finale = c.last && first && (c.hits > 1 || ev.amount >= 12 || crit);
             stage.toon.hit(p, c.color, c.last ? 1.3 : first ? 1 : 0.8);
+            // 마법과 사격은 맞은 자리에서 터진다(마법이 더 크게)
+            if (first && !c.melee) {
+              stage.toon.magicBlast(p, c.color, c.motion === 'shoot' ? (c.last ? 0.75 : 0.45) : c.last ? 1.2 : 0.8);
+              stage.fx?.sparks(p, c.color, c.last ? 18 : 10, 7, 0.22);
+              stage.shake(c.last ? 0.3 : 0.15);
+            }
             if (first) {
               stage.kick((c.idx % 2 ? 1 : -1) * (0.025 + 0.01 * Math.min(c.idx, 3)), c.last ? 1.1 : 0.55);
               stage.hitStop(c.last ? 0.1 : 0.05);
@@ -1054,7 +1131,15 @@ export function battleScreen(app: App): HTMLElement {
           const unit = allyOf(ev.targetUid) ?? enemyOf(ev.targetUid);
           const el = actorEls.get(ev.targetUid);
           if (unit && el) updateHpBar(el, ev.hpAfter, unit.maxHp, unit.shield);
-          stage.fx?.heal(chest(ev.targetUid), feet(ev.targetUid), ev.targetUid.startsWith('e') ? '#e0685a' : '#8fe0a5');
+          const isEnemy = ev.targetUid.startsWith('e');
+          const healCol = isEnemy ? '#e0685a' : HEAL_COLOR;
+          const healer = choreo?.caster;
+          if (!isEnemy && healer && healer !== ev.targetUid && !enemyPhase) {
+            stage.fx?.projectile(chest(healer), chest(ev.targetUid), healCol, 0.24, 1.3);
+            await wait(150);
+          }
+          stage.toon.pillar(feet(ev.targetUid), healCol, 5.5, 1.7, 1);
+          stage.fx?.heal(chest(ev.targetUid), feet(ev.targetUid), healCol);
           sound.heal();
           floatText(ev.targetUid, `+${ev.amount}`, 'heal');
           await wait(130);

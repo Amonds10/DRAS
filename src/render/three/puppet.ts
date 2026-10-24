@@ -123,46 +123,46 @@ function clip(times: number[], poses: Pose[], hold = false): Clip {
 
 const Z: Pose = {};
 
-/** 무기별 공격 동작. 회전은 라디안(+는 반시계: 몸은 뒤로 젖힘, 팔은 앞·위로 듦), 이동은 viewBox 단위. */
+/** 무기별 공격 동작(크게, 화면 너머까지 읽히게). 회전은 라디안(+는 반시계: 몸은 뒤로 젖힘, 팔은 앞·위로 듦), 이동은 viewBox 단위. */
 const ATTACK: Record<Motion, Clip> = {
   // 창: 웅크려 뒤로 당겼다가(예비 동작) 앞으로 튀어 나가 찌르고, 살짝 지나쳤다 돌아온다(여운)
-  thrust: clip([0, 0.17, 0.24, 0.3, 0.44, 0.8], [Z, { body: 0.14, armF: 0.45, armB: -0.2, x: -10, y: -5, sq: -0.07 }, { body: -0.22, armF: -0.35, armB: 0.35, x: 78, tail: 0.25, sq: 0.08 }, { body: -0.16, armF: -0.28, x: 84, sq: 0.02 }, { body: -0.1, armF: -0.15, x: 62 }, Z]),
+  thrust: clip([0, 0.17, 0.24, 0.3, 0.44, 0.8], [Z, { body: 0.18, armF: 0.52, armB: -0.24, x: -12.5, y: -7.0, sq: -0.09 }, { body: -0.29, armF: -0.4, armB: 0.42, x: 97.5, tail: 0.35, sq: 0.1 }, { body: -0.21, armF: -0.32, x: 105.0, sq: 0.03 }, { body: -0.13, armF: -0.17, x: 77.5 }, Z]),
   // 지팡이·구슬: 들어 올려 빛을 모았다가 앞으로 내민다
-  raise: clip([0, 0.22, 0.3, 0.38, 0.62, 0.95], [Z, { armF: 0.8, head: 0.16, body: 0.06, y: 8, tail: -0.15, hair: -0.12, sq: 0.05 }, { armF: 0.5, head: 0.04, body: -0.1, y: 10, x: 8, sq: -0.03 }, { armF: 0.55, body: -0.06, y: 9, x: 6 }, { armF: 0.3, y: 4 }, Z]),
+  raise: clip([0, 0.22, 0.3, 0.38, 0.62, 0.95], [Z, { armF: 0.92, head: 0.19, body: 0.08, y: 11.2, tail: -0.21, hair: -0.17, sq: 0.07 }, { armF: 0.57, head: 0.05, body: -0.13, y: 14.0, x: 10.0, sq: -0.04 }, { armF: 0.63, body: -0.08, y: 12.6, x: 7.5 }, { armF: 0.34, y: 5.6 }, Z]),
   // 총: 겨누고, 반동에 몸이 뒤로 튄다
-  shoot: clip([0, 0.16, 0.2, 0.3, 0.42, 0.72], [Z, { armF: 0.06, body: -0.05, head: -0.04, sq: -0.03 }, { armF: 0.36, body: 0.12, head: 0.08, x: -18, tail: 0.14, sq: 0.04 }, { armF: 0.22, body: 0.08, x: -14 }, { armF: 0.06, body: 0.02, x: -5 }, Z]),
+  shoot: clip([0, 0.16, 0.2, 0.3, 0.42, 0.72], [Z, { armF: 0.07, body: -0.07, head: -0.05, sq: -0.04 }, { armF: 0.41, body: 0.16, head: 0.1, x: -22.5, tail: 0.2, sq: 0.05 }, { armF: 0.25, body: 0.1, x: -17.5 }, { armF: 0.07, body: 0.03, x: -6.25 }, Z]),
   // 단검: 높이 들었다가 뛰어들며 내리긋는다
-  slash: clip([0, 0.16, 0.23, 0.3, 0.46, 0.82], [Z, { armF: 1.5, body: 0.12, head: 0.06, x: -8, sq: 0.06 }, { armF: -0.65, body: -0.24, x: 88, tail: 0.3, y: -6, sq: -0.06 }, { armF: -0.72, body: -0.2, x: 92, y: -5 }, { armF: -0.4, body: -0.12, x: 68 }, Z]),
+  slash: clip([0, 0.16, 0.23, 0.3, 0.46, 0.82], [Z, { armF: 1.72, body: 0.16, head: 0.07, x: -10.0, sq: 0.08 }, { armF: -0.75, body: -0.31, x: 110.0, tail: 0.42, y: -8.4, sq: -0.08 }, { armF: -0.83, body: -0.26, x: 115.0, y: -7.0 }, { armF: -0.46, body: -0.16, x: 85.0 }, Z]),
   // 방패: 웅크렸다가 몸으로 들이받는다
-  bash: clip([0, 0.2, 0.28, 0.34, 0.5, 0.85], [Z, { body: 0.12, armF: 0.22, x: -12, y: -8, sq: -0.08 }, { body: -0.18, armF: -0.14, x: 70, tail: 0.2, sq: 0.07 }, { body: -0.14, x: 74 }, { body: -0.1, x: 56 }, Z]),
+  bash: clip([0, 0.2, 0.28, 0.34, 0.5, 0.85], [Z, { body: 0.16, armF: 0.25, x: -15.0, y: -11.2, sq: -0.1 }, { body: -0.23, armF: -0.16, x: 87.5, tail: 0.28, sq: 0.09 }, { body: -0.18, x: 92.5 }, { body: -0.13, x: 70.0 }, Z]),
 };
 
 const CLIPS = {
   // 보조 주문: 가볍게 손을 들어 올린다
-  channel: clip([0, 0.25, 0.55, 0.9], [Z, { armF: 0.5, head: 0.12, y: 6, tail: -0.1, sq: 0.03 }, { armF: 0.38, y: 4 }, Z]),
+  channel: clip([0, 0.25, 0.55, 0.9], [Z, { armF: 0.62, head: 0.16, y: 9.6, tail: -0.16, sq: 0.04 }, { armF: 0.47, y: 6.4 }, Z]),
   // 예열: 웅크려 힘을 모았다가 솟구친다
-  charge: clip([0, 0.22, 0.5, 0.62, 0.75, 1.05], [Z, { y: -10, body: -0.12, head: -0.14, armF: -0.28, armB: 0.28, tail: 0.12, sq: -0.08 }, { y: -11, body: -0.14, head: -0.16, armF: -0.32, armB: 0.32, sq: -0.09 }, { y: 12, body: 0.08, head: 0.12, armF: 0.4, tail: -0.25, hair: -0.2, sq: 0.08 }, { y: 6, body: 0.04, armF: 0.25, sq: 0.02 }, Z]),
+  charge: clip([0, 0.22, 0.5, 0.62, 0.75, 1.05], [Z, { y: -16.0, body: -0.19, head: -0.18, armF: -0.35, armB: 0.36, tail: 0.19, sq: -0.12 }, { y: -17.6, body: -0.22, head: -0.21, armF: -0.4, armB: 0.42, sq: -0.14 }, { y: 19.2, body: 0.13, head: 0.16, armF: 0.5, tail: -0.4, hair: -0.32, sq: 0.12 }, { y: 9.6, body: 0.06, armF: 0.31, sq: 0.03 }, Z]),
   hit: clip([0, 0.05, 0.16, 0.45], [Z, { body: 0.2, head: 0.16, x: -20, armF: 0.14, tail: -0.2, sq: -0.06 }, { body: 0.12, head: 0.08, x: -14 }, Z]),
   die: clip([0, 0.25, 0.6], [Z, { body: 0.2, head: 0.2, x: -10 }, { body: -0.3, head: -0.35, armF: -0.4, armB: 0.3, y: -36, x: -6 }], true),
   victory: clip([0, 0.3, 1.2], [Z, { armF: 1.1, head: 0.12, y: 4 }, { armF: 1.0, head: 0.1, y: 3 }], true),
 
   // ── 연속기(타격마다 자세가 바뀐다). 끝 자세를 유지하고, 다음 동작이 그 자세에서 이어 받는다 ──
   // 돌진: 몸을 앞으로 숙이고 망토가 뒤로 날린다
-  dash: clip([0, 0.1], [Z, { body: -0.28, armF: -0.35, armB: 0.45, tail: 0.4, hair: 0.25, x: 8, sq: -0.04 }], true),
+  dash: clip([0, 0.1], [Z, { body: -0.45, armF: -0.44, armB: 0.59, tail: 0.64, hair: 0.4, x: 13.6, sq: -0.06 }], true),
   // 내려베기
-  combo1: clip([0, 0.06, 0.13, 0.26], [Z, { armF: 1.35, body: 0.1, x: -4, sq: 0.05 }, { armF: -0.75, body: -0.22, x: 16, tail: 0.25, sq: -0.06 }, { armF: -0.6, body: -0.16, x: 12 }], true),
+  combo1: clip([0, 0.06, 0.13, 0.26], [Z, { armF: 1.69, body: 0.16, x: -6.8, sq: 0.08 }, { armF: -0.94, body: -0.35, x: 27.2, tail: 0.4, sq: -0.09 }, { armF: -0.75, body: -0.26, x: 20.4 }], true),
   // 올려베기(반대 방향)
-  combo2: clip([0, 0.06, 0.13, 0.26], [{ armF: -0.6, body: -0.16 }, { armF: -0.9, body: 0.08, x: 4, sq: -0.05 }, { armF: 1.4, body: -0.18, x: 18, y: 6, tail: -0.2, sq: 0.06 }, { armF: 1.2, body: -0.1, x: 14, y: 4 }], true),
+  combo2: clip([0, 0.06, 0.13, 0.26], [{ armF: -0.75, body: -0.26 }, { armF: -1.12, body: 0.13, x: 6.8, sq: -0.08 }, { armF: 1.75, body: -0.29, x: 30.6, y: 9.6, tail: -0.32, sq: 0.09 }, { armF: 1.5, body: -0.16, x: 23.8, y: 6.4 }], true),
   // 찌르기
-  combo3: clip([0, 0.07, 0.13, 0.26], [Z, { armF: 0.3, body: 0.14, x: -10, sq: -0.06 }, { armF: -0.25, body: -0.26, x: 34, tail: 0.3, sq: 0.07 }, { armF: -0.2, body: -0.2, x: 28 }], true),
+  combo3: clip([0, 0.07, 0.13, 0.26], [Z, { armF: 0.38, body: 0.22, x: -17.0, sq: -0.09 }, { armF: -0.31, body: -0.42, x: 57.8, tail: 0.48, sq: 0.11 }, { armF: -0.25, body: -0.32, x: 47.6 }], true),
   // 마무리: 뛰어올라 내리꽂는다
-  finish: clip([0, 0.1, 0.18, 0.26, 0.42], [Z, { y: 34, armF: 1.6, body: 0.16, x: 6, sq: 0.08, tail: -0.3, hair: -0.3 }, { y: 30, armF: 1.7, body: 0.2, x: 10 }, { y: -10, armF: -0.9, body: -0.32, x: 26, sq: -0.1, tail: 0.35 }, { y: -6, armF: -0.75, body: -0.26, x: 22 }], true),
+  finish: clip([0, 0.1, 0.18, 0.26, 0.42], [Z, { y: 54.4, armF: 2.0, body: 0.26, x: 10.2, sq: 0.12, tail: -0.48, hair: -0.48 }, { y: 48.0, armF: 2.12, body: 0.32, x: 17.0 }, { y: -16.0, armF: -1.12, body: -0.51, x: 44.2, sq: -0.15, tail: 0.56 }, { y: -9.6, armF: -0.94, body: -0.42, x: 37.4 }], true),
   // 원거리 한 발: 짧은 반동
-  fire: clip([0, 0.04, 0.16], [{ armF: 0.05 }, { armF: 0.38, body: 0.12, x: -12, head: 0.08, sq: 0.04 }, { armF: 0.1, body: 0.03, x: -3 }], true),
+  fire: clip([0, 0.04, 0.16], [{ armF: 0.06 }, { armF: 0.47, body: 0.19, x: -20.4, head: 0.1, sq: 0.06 }, { armF: 0.12, body: 0.05, x: -5.1 }], true),
   // 주문 내밀기
-  cast1: clip([0, 0.07, 0.2], [Z, { armF: 0.7, body: -0.12, x: 10, y: 4, sq: 0.04, tail: -0.15 }, { armF: 0.55, body: -0.08, x: 8, y: 3 }], true),
+  cast1: clip([0, 0.07, 0.2], [Z, { armF: 0.88, body: -0.19, x: 17.0, y: 6.4, sq: 0.06, tail: -0.24 }, { armF: 0.69, body: -0.13, x: 13.6, y: 4.8 }], true),
   // 주문 높이 들기
-  cast2: clip([0, 0.07, 0.2], [Z, { armF: 1.3, head: 0.18, body: 0.08, y: 10, sq: 0.06, hair: -0.2 }, { armF: 1.1, head: 0.12, y: 8 }], true),
+  cast2: clip([0, 0.07, 0.2], [Z, { armF: 1.62, head: 0.23, body: 0.13, y: 16.0, sq: 0.09, hair: -0.32 }, { armF: 1.38, head: 0.16, y: 12.8 }], true),
   // 제자리로(유지하던 자세를 풀고 대기로)
   recover: clip([0, 0.3], [Z, Z]),
 };
